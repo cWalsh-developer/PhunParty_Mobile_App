@@ -1,5 +1,5 @@
 //Imports
-import { getToken } from '../authentication-storage/authStorage';
+import { getToken } from "../authentication-storage/authStorage";
 
 // Define API result shape
 interface APIResponse<T = any> {
@@ -11,10 +11,20 @@ interface APIResponse<T = any> {
 type DataObject = Record<string, any>;
 
 const API = {
-  get: <T = any>(endpoint: string) => callFetch<T>(endpoint, 'GET'),
-  post: <T = any>(endpoint: string, data?: DataObject) => callFetch<T>(endpoint, 'POST', data),
-  put: <T = any>(endpoint: string, data?: DataObject) => callFetch<T>(endpoint, 'PUT', data),
-  delete: <T = any>(endpoint: string) => callFetch<T>(endpoint, 'DELETE'),
+  get: <T = any>(endpoint: string, withAuth: boolean = true) =>
+    callFetch<T>(endpoint, "GET", null, withAuth),
+  post: <T = any>(
+    endpoint: string,
+    data?: DataObject,
+    withAuth: boolean = true
+  ) => callFetch<T>(endpoint, "POST", data, withAuth),
+  put: <T = any>(
+    endpoint: string,
+    data?: DataObject,
+    withAuth: boolean = true
+  ) => callFetch<T>(endpoint, "PUT", data, withAuth),
+  delete: <T = any>(endpoint: string, withAuth: boolean = true) =>
+    callFetch<T>(endpoint, "DELETE", null, withAuth),
 };
 
 export default API;
@@ -22,17 +32,20 @@ export default API;
 // Core fetch function
 const callFetch = async <T = any>(
   endpoint: string,
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-  dataObj: DataObject | null = null
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  dataObj: DataObject | null = null,
+  withAuth: boolean = true
 ): Promise<APIResponse<T>> => {
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   };
 
-// Add Authorization header if token exists
-  const token = await getToken();
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  // Add Authorization header if token exists
+  if (withAuth) {
+    const token = await getToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
   }
 
   const requestObj: RequestInit = {
@@ -47,7 +60,10 @@ const callFetch = async <T = any>(
 
     return response.ok
       ? { isSuccess: true, result }
-      : { isSuccess: false, message: result?.message || 'Unknown error' };
+      : {
+          isSuccess: false,
+          message: result?.detail || result?.message || JSON || "Unknown error",
+        };
   } catch (error: any) {
     return { isSuccess: false, message: error.message };
   }

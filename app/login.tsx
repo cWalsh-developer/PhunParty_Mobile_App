@@ -1,13 +1,55 @@
-import { useState } from "react";
+import {
+  login,
+  signUp,
+} from "@/assets/authentication-storage/authenticationLogic";
+import { getToken } from "@/assets/authentication-storage/authStorage";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { Button, Text, TextInput } from "react-native-paper";
 
+//Initialisation----------------------------------------------------------------------------------
+//State--------------------------------------------------------------------------------------------
 export default function Login() {
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [name, setName] = useState<string>("");
+  const [mobile, setMobile] = useState<string>("");
+  const router = useRouter();
+  useEffect(() => {
+    const redirectIfAuthenticated = async () => {
+      const token = await getToken();
+      if (token) {
+        router.replace("/(tabs)");
+      }
+    };
+    redirectIfAuthenticated();
+  }, []);
   const [isSignUp, setIsSignUp] = useState<boolean>(false);
 
   const toggleForm = () => {
     setIsSignUp((prev) => !prev);
   };
+
+  //Handlers-----------------------------------------------------------------------------------------
+
+  const handleLogin = async () => {
+    const result = await login({ email, password });
+    if (result) {
+      router.replace("/(tabs)");
+    } else {
+      alert("Login failed. Please check your credentials.");
+    }
+  };
+  const handleSignUp = async () => {
+    const result = await signUp({ name, email, password, mobile });
+    if (result) {
+      toggleForm();
+    } else {
+      alert("Sign up failed. Please check your details.");
+    }
+  };
+  //View---------------------------------------------------------------------------------------------
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -19,19 +61,52 @@ export default function Login() {
         </Text>
         <TextInput
           label="Email"
+          value={email}
+          onChangeText={setEmail}
           placeholder="example@gmail.com"
           autoCapitalize="none"
           keyboardType="email-address"
           mode="outlined"
           style={styles.input}
         />
+        {isSignUp && (
+          <>
+            <TextInput
+              label="Name"
+              value={name}
+              onChangeText={setName}
+              placeholder="John Doe"
+              autoCapitalize="words"
+              keyboardType="default"
+              mode="outlined"
+              style={styles.input}
+            />
+            <TextInput
+              label="Mobile"
+              value={mobile}
+              onChangeText={setMobile}
+              placeholder="07712345678"
+              autoCapitalize="none"
+              keyboardType="phone-pad"
+              mode="outlined"
+              style={styles.input}
+            />
+          </>
+        )}
         <TextInput
           label="Password"
+          value={password}
+          onChangeText={setPassword}
+          autoCapitalize="none"
           secureTextEntry={true}
           mode="outlined"
           style={styles.input}
         />
-        <Button mode="contained" style={styles.button}>
+        <Button
+          mode="contained"
+          style={styles.button}
+          onPress={isSignUp ? handleSignUp : handleLogin}
+        >
           {isSignUp ? "Sign Up" : "Login"}
         </Button>
         <Button
@@ -54,12 +129,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: { flex: 1, justifyContent: "center", padding: 16 },
-
   title: { textAlign: "center", marginBottom: 16 },
-
   input: { marginBottom: 16 },
-
   button: { marginTop: 8, backgroundColor: "#201e23ff" },
-
   toggleButton: { marginTop: 16, alignSelf: "center" },
 });

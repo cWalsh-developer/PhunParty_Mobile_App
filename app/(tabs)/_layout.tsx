@@ -1,10 +1,10 @@
 import { Tabs } from "expo-router";
 
 export default function TabsLayout() {
+  console.log("TabsLayout rendered");
   return (
-    <Tabs>
+    <Tabs initialRouteName="index">
       <Tabs.Screen name="index" options={{ headerShown: false }} />
-      <Tabs.Screen name="login" options={{ title: "Login" }} />
     </Tabs>
   );
 }
