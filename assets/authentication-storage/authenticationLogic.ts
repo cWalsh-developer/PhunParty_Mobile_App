@@ -56,7 +56,7 @@ export const signUp = async ({
   if (result.isSuccess) {
     return true;
   } else {
-    console.warn("Sign up failed:", result.message);
+    console.warn("Sign up failed: " + result.message);
     return false;
   }
 };

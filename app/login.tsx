@@ -47,6 +47,7 @@ export default function Login() {
       toggleForm();
     } else {
       alert("Sign up failed. Please check your details.");
+      return false;
     }
   };
   //View---------------------------------------------------------------------------------------------
