@@ -62,7 +62,11 @@ const callFetch = async <T = any>(
       ? { isSuccess: true, result }
       : {
           isSuccess: false,
-          message: result?.message || JSON.stringify(result) || "Unknown error",
+          message:
+            result?.detail ||
+            result?.message ||
+            JSON.stringify(result) ||
+            "Unknown error",
         };
   } catch (error: any) {
     return { isSuccess: false, message: error.message };

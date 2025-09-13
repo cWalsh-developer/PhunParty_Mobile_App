@@ -25,12 +25,11 @@ export const login = async ({
     },
     false
   );
-  console.log(AuthenticationEndpoint);
   if (result.isSuccess && result.result?.access_token) {
     await SecureStore.setItemAsync("jwt", result.result.access_token);
     return true;
   } else {
-    console.warn("Login failed:", result.message);
+    alert("Login failed: " + result.message);
     return false;
   }
 };
@@ -51,12 +50,10 @@ export const signUp = async ({
     },
     false
   );
-  console.log(SignUpEndpoint);
-  console.log(result);
   if (result.isSuccess) {
     return true;
   } else {
-    console.warn("Sign up failed: " + result.message);
+    alert("Sign up failed: " + result.message);
     return false;
   }
 };

@@ -37,17 +37,12 @@ export default function Login() {
     const result = await login({ email, password });
     if (result) {
       router.replace("/(tabs)");
-    } else {
-      alert("Login failed. Please check your credentials.");
     }
   };
   const handleSignUp = async () => {
     const result = await signUp({ name, email, password, mobile });
     if (result) {
       toggleForm();
-    } else {
-      alert("Sign up failed. Please check your details.");
-      return false;
     }
   };
   //View---------------------------------------------------------------------------------------------
