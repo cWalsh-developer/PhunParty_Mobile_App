@@ -45,6 +45,10 @@ export default function Login() {
       toggleForm();
     }
   };
+
+  const handleReset = () => {
+    router.push("/resetPassword");
+  };
   //View---------------------------------------------------------------------------------------------
   return (
     <KeyboardAvoidingView
@@ -63,6 +67,7 @@ export default function Login() {
           autoCapitalize="none"
           keyboardType="email-address"
           mode="outlined"
+          outlineColor="#201e23ff"
           style={styles.input}
         />
         {isSignUp && (
@@ -75,6 +80,7 @@ export default function Login() {
               autoCapitalize="words"
               keyboardType="default"
               mode="outlined"
+              outlineColor="#201e23ff"
               style={styles.input}
             />
             <TextInput
@@ -85,6 +91,7 @@ export default function Login() {
               autoCapitalize="none"
               keyboardType="phone-pad"
               mode="outlined"
+              outlineColor="#201e23ff"
               style={styles.input}
             />
           </>
@@ -96,6 +103,7 @@ export default function Login() {
           autoCapitalize="none"
           secureTextEntry={true}
           mode="outlined"
+          outlineColor="#201e23ff"
           style={styles.input}
         />
         <Button
@@ -114,6 +122,13 @@ export default function Login() {
           {isSignUp
             ? "Already have an account? Sign In"
             : "Don't have an account? Sign Up"}
+        </Button>
+        <Button
+          mode="text"
+          onPress={handleReset}
+          theme={{ colors: { primary: "#201e23ff" } }}
+        >
+          Forgot Password
         </Button>
       </View>
     </KeyboardAvoidingView>

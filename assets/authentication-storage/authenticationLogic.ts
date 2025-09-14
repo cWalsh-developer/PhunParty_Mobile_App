@@ -1,4 +1,9 @@
-import { AuthenticationEndpoint, SignUpEndpoint } from "@env";
+import {
+  AuthenticationEndpoint,
+  PasswordResetEndpoint,
+  PasswordResetVerificationEndpoint,
+  SignUpEndpoint,
+} from "@env";
 import * as SecureStore from "expo-secure-store";
 import API from "../api/API";
 
@@ -54,6 +59,42 @@ export const signUp = async ({
     return true;
   } else {
     alert("Sign up failed: " + result.message);
+    return false;
+  }
+};
+
+export const resetPassword = async (phone: string) => {
+  const result = await API.post(
+    PasswordResetEndpoint,
+    {
+      phone_number: phone,
+    },
+    false
+  );
+  if (result.isSuccess) {
+    return true;
+  } else {
+    alert("Password reset failed: " + result.message);
+    console.log(result);
+    console.log(phone);
+    console.log(PasswordResetEndpoint);
+    return false;
+  }
+};
+
+export const verifyResetCode = async (phone: string, code: string) => {
+  const result = await API.post(
+    PasswordResetVerificationEndpoint,
+    {
+      phone_number: phone,
+      otp: code,
+    },
+    false
+  );
+  if (result.isSuccess) {
+    return true;
+  } else {
+    alert("Reset code verification failed: " + result.message);
     return false;
   }
 };
