@@ -1,6 +1,13 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from "expo-secure-store";
+import { jwtDecode } from "jwt-decode";
+const TOKEN_KEY = "jwt";
 
-const TOKEN_KEY = 'jwt';
+export interface DecodedToken {
+  sub: string; // Subject (user ID)
+  exp: number; // Expiration time as a Unix timestamp
+  iat: number; // Issued at time as a Unix timestamp
+  [key: string]: any; // Any other custom claims
+}
 
 export const getToken = async (): Promise<string | null> => {
   try {
@@ -24,4 +31,8 @@ export const removeToken = async (): Promise<void> => {
   } catch (err) {
     console.error("Failed to remove token:", err);
   }
+};
+
+export const decodeToken = (token: string): DecodedToken | null => {
+  return jwtDecode<DecodedToken>(token);
 };
