@@ -2,6 +2,7 @@ import {
   AuthenticationEndpoint,
   PasswordResetEndpoint,
   PasswordResetVerificationEndpoint,
+  PasswordUpdateEndpoint,
   SignUpEndpoint,
 } from "@env";
 import * as SecureStore from "expo-secure-store";
@@ -75,9 +76,6 @@ export const resetPassword = async (phone: string) => {
     return true;
   } else {
     alert("Password reset failed: " + result.message);
-    console.log(result);
-    console.log(phone);
-    console.log(PasswordResetEndpoint);
     return false;
   }
 };
@@ -95,6 +93,24 @@ export const verifyResetCode = async (phone: string, code: string) => {
     return true;
   } else {
     alert("Reset code verification failed: " + result.message);
+    return false;
+  }
+};
+
+export const updatePassword = async (newPassword: string, number: string) => {
+  const result = await API.put(
+    PasswordUpdateEndpoint,
+    {
+      phone_number: number,
+      new_password: newPassword,
+    },
+    false
+  );
+  if (result.isSuccess) {
+    await SecureStore.setItemAsync("jwt", result.result.access_token);
+    return true;
+  } else {
+    alert("Password update failed: " + result.message);
     return false;
   }
 };

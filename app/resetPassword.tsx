@@ -26,12 +26,11 @@ export default function ResetPassword() {
 
   const handleReset = async () => {
     // Implement password reset logic here
-    setIsPressed(true);
     if (!isPressed) {
       // Send reset code to the phone number
       const result = await resetPassword(phone);
       if (result) {
-        alert("Reset code sent to " + phone);
+        setIsPressed(true);
       }
     }
   };
@@ -45,7 +44,7 @@ export default function ResetPassword() {
 
   useEffect(() => {
     if (isSuccess) {
-      router.replace("/(tabs)");
+      router.replace({ pathname: "/newPassword", params: { phone } });
     }
   }, [isSuccess]);
 
@@ -107,6 +106,7 @@ export default function ResetPassword() {
                   handleCodeChange(text.replace(/[^0-9]/g, "").slice(0, 6))
                 }
                 keyboardType="number-pad"
+                textContentType="oneTimeCode"
                 maxLength={6}
                 style={{
                   position: "absolute",

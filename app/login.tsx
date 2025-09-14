@@ -20,7 +20,7 @@ export default function Login() {
     const redirectIfAuthenticated = async () => {
       const token = await getToken();
       if (token) {
-        router.replace("/(tabs)");
+        router.replace("/(tabs)/scanQR");
       }
     };
     redirectIfAuthenticated();
@@ -36,7 +36,7 @@ export default function Login() {
   const handleLogin = async () => {
     const result = await login({ email, password });
     if (result) {
-      router.replace("/(tabs)");
+      router.replace("/(tabs)/scanQR");
     }
   };
   const handleSignUp = async () => {

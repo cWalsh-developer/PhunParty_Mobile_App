@@ -3,4 +3,5 @@ declare module "@env" {
   export const SignUpEndpoint: string;
   export const PasswordResetEndpoint: string;
   export const PasswordResetVerificationEndpoint: string;
+  export const PasswordUpdateEndpoint: string;
 }
