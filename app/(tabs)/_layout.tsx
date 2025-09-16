@@ -27,7 +27,7 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="index"
+        name="profileTab"
         options={{
           title: "Profile",
           headerShown: false,
