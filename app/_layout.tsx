@@ -1,4 +1,4 @@
-import { AuthProvider } from "@/assets/authentication-storage/authContext";
+import { UserProvider } from "@/assets/authentication-storage/authContext";
 import { getToken } from "@/assets/authentication-storage/authStorage";
 import { Stack } from "expo-router";
 import { useEffect, useState } from "react";
@@ -24,13 +24,13 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
+    <UserProvider>
       <Stack>
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="resetPassword" options={{ headerShown: false }} />
         <Stack.Screen name="newPassword" options={{ headerShown: false }} />
       </Stack>
-    </AuthProvider>
+    </UserProvider>
   );
 }

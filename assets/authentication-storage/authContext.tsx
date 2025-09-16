@@ -1,46 +1,38 @@
-// auth/AuthContext.tsx
-import * as SecureStore from "expo-secure-store";
-import { createContext, useContext, useEffect, useState } from "react";
-import { DecodedToken, decodeToken } from "./authStorage";
+import React, {
+  createContext,
+  Dispatch,
+  ReactNode,
+  SetStateAction,
+  useState,
+} from "react";
 
-interface AuthContextType {
-  user: DecodedToken | null;
-  token: string | null;
-  logout: () => Promise<void>;
+interface UserType {
+  UserID: number | null;
+  UserName: string | null;
+  UserPhone: string | null;
+  UserEmail: string | null;
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  token: null,
-  logout: async () => {},
-});
+interface UserContextType {
+  user: UserType;
+  setUser: Dispatch<SetStateAction<UserType>>;
+}
 
-export const useAuth = () => useContext(AuthContext);
+export const UserContext = createContext<UserContextType | undefined>(
+  undefined
+);
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<DecodedToken | null>(null);
-
-  useEffect(() => {
-    const loadToken = async () => {
-      const savedToken = await SecureStore.getItemAsync("jwt");
-      if (savedToken) {
-        setToken(savedToken);
-        setUser(decodeToken(savedToken));
-      }
-    };
-    loadToken();
-  }, []);
-
-  const logout = async () => {
-    await SecureStore.deleteItemAsync("jwt");
-    setToken(null);
-    setUser(null);
-  };
+export const UserProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<UserType>({
+    UserID: null,
+    UserName: null,
+    UserPhone: null,
+    UserEmail: null,
+  });
 
   return (
-    <AuthContext.Provider value={{ user, token, logout }}>
+    <UserContext.Provider value={{ user, setUser }}>
       {children}
-    </AuthContext.Provider>
+    </UserContext.Provider>
   );
 };
