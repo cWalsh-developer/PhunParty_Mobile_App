@@ -2,6 +2,7 @@ import { UserContext } from "@/assets/authentication-storage/authContext";
 import { removeToken } from "@/assets/authentication-storage/authStorage";
 import { useRouter } from "expo-router";
 import React, { useContext } from "react";
+import { Alert } from "react-native";
 import ProfileScreen from "../components/profile";
 
 export default function ProfileTab() {
@@ -13,14 +14,25 @@ export default function ProfileTab() {
   };
 
   const handleLogout = async () => {
-    await removeToken();
-    setUser({
-      UserID: null,
-      UserName: null,
-      UserPhone: null,
-      UserEmail: null,
-    });
-    router.replace("/login");
+    Alert.alert("Confirm Logout", "Are you sure you want to logout?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Logout",
+        onPress: async () => {
+          await removeToken();
+          setUser({
+            UserID: null,
+            UserName: null,
+            UserPhone: null,
+            UserEmail: null,
+          });
+          router.replace("/login");
+        },
+      },
+    ]);
   };
 
   return (

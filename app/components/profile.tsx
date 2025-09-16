@@ -41,7 +41,7 @@ export default function ProfileScreen({
         Edit Profile
       </Button>
       <Button mode="outlined" style={styles.logoutButton} onPress={onLogout}>
-        Logout
+        <Text style={{ color: "#020202ff" }}>Logout</Text>
       </Button>
     </View>
   );
