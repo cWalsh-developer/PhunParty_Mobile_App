@@ -8,4 +8,9 @@ const dataAccess = {
   },
 };
 
+const updatePlayer = async (playerId: string, data: any) => {
+  const response = await API.put(`${RetrievePlayerEndpoint}/${playerId}`, data);
+  return response.isSuccess;
+};
+
 export default dataAccess;

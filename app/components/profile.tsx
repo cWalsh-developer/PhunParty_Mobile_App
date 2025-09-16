@@ -3,6 +3,7 @@ import React, { useContext } from "react";
 import { StyleSheet, View } from "react-native";
 import { Card, Text } from "react-native-paper";
 import AppButton from "./AppButton";
+import Selector from "./Selector";
 
 interface ProfileScreenProps {
   onEditProfile: () => void;
@@ -34,16 +35,24 @@ export default function ProfileScreen({
           <Text style={styles.value}>{user.UserPhone || "-"}</Text>
         </View>
       </Card>
-      <AppButton
-        mode="contained"
-        style={styles.editButton}
-        onPress={onEditProfile}
-      >
-        Edit Profile
-      </AppButton>
-      <AppButton mode="outlined" style={styles.logoutButton} onPress={onLogout}>
-        <Text style={{ color: "#020202ff" }}>Logout</Text>
-      </AppButton>
+      <Selector label="Edit" onPress={onEditProfile}>
+        <AppButton
+          mode="contained"
+          style={styles.editButton}
+          onPress={() => {}}
+        >
+          Edit Profile
+        </AppButton>
+      </Selector>
+      <Selector label="Logout" onPress={onLogout}>
+        <AppButton
+          mode="outlined"
+          style={styles.logoutButton}
+          onPress={() => {}}
+        >
+          <Text style={{ color: "#020202ff" }}>Logout</Text>
+        </AppButton>
+      </Selector>
     </View>
   );
 }

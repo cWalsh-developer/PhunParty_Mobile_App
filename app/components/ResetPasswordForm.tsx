@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { Text, TextInput } from "react-native-paper";
 import AppButton from "./AppButton";
+import Selector from "./Selector";
 
 interface ResetPasswordFormProps {
   phone: string;
@@ -113,24 +114,26 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({
         </View>
       )}
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <AppButton
-        onPress={isPressed ? onVerify : onReset}
-        disabled={
-          loading ||
-          (!isPressed && phone.length === 0) ||
-          (isPressed && code.length === 0)
-        }
-      >
-        <Text style={{ color: "#fff" }}>
-          {loading
-            ? isPressed
-              ? "Verifying..."
-              : "Sending..."
-            : isPressed
-            ? "Verify Reset Code"
-            : "Send Reset Code"}
-        </Text>
-      </AppButton>
+      <Selector onPress={isPressed ? onVerify : onReset}>
+        <AppButton
+          onPress={() => {}}
+          disabled={
+            loading ||
+            (!isPressed && phone.length === 0) ||
+            (isPressed && code.length === 0)
+          }
+        >
+          <Text style={{ color: "#fff" }}>
+            {loading
+              ? isPressed
+                ? "Verifying..."
+                : "Sending..."
+              : isPressed
+              ? "Verify Reset Code"
+              : "Send Reset Code"}
+          </Text>
+        </AppButton>
+      </Selector>
     </View>
   );
 };

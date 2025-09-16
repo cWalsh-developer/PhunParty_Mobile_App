@@ -3,6 +3,7 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { IconButton, Text } from "react-native-paper";
 import AppButton from "./AppButton";
+import Selector from "./Selector";
 
 interface QRScannerProps {
   userName: string;
@@ -39,9 +40,11 @@ export default function QRScanner({
             <Text style={{ marginBottom: 20, textAlign: "center" }}>
               Press "Join Game" below to scan the QR code and enter the game
             </Text>
-            <AppButton onPress={() => setShowCamera(true)} mode="contained">
-              Join Game
-            </AppButton>
+            <Selector onPress={() => setShowCamera(true)}>
+              <AppButton onPress={() => {}} mode="contained">
+                Join Game
+              </AppButton>
+            </Selector>
           </View>
         </>
       ) : (

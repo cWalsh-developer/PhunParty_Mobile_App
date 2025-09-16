@@ -2,6 +2,7 @@ import React from "react";
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { Text, TextInput } from "react-native-paper";
 import AppButton from "./AppButton";
+import Selector from "./Selector";
 
 interface LoginFormProps {
   email: string;
@@ -90,21 +91,23 @@ export default function LoginForm({
           outlineColor="#201e23ff"
           style={styles.input}
         />
-        <AppButton
-          mode="contained"
-          style={styles.button}
-          onPress={isSignUp ? handleSignUp : handleLogin}
-        >
-          {isSignUp ? "Sign Up" : "Login"}
-        </AppButton>
-        <AppButton mode="text" onPress={toggleForm} style={styles.toggleButton}>
-          {isSignUp
-            ? "Already have an account? Sign In"
-            : "Don't have an account? Sign Up"}
-        </AppButton>
-        <AppButton mode="text" onPress={handleReset} noMargin={true}>
-          Forgot Password
-        </AppButton>
+        <Selector onPress={isSignUp ? handleSignUp : handleLogin}>
+          <AppButton mode="contained" style={styles.button} onPress={() => {}}>
+            {isSignUp ? "Sign Up" : "Login"}
+          </AppButton>
+        </Selector>
+        <Selector onPress={toggleForm}>
+          <AppButton mode="text" style={styles.toggleButton} onPress={() => {}}>
+            {isSignUp
+              ? "Already have an account? Sign In"
+              : "Don't have an account? Sign Up"}
+          </AppButton>
+        </Selector>
+        <Selector onPress={handleReset}>
+          <AppButton mode="text" onPress={() => {}} noMargin={true}>
+            Forgot Password
+          </AppButton>
+        </Selector>
       </View>
     </KeyboardAvoidingView>
   );
