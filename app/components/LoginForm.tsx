@@ -1,6 +1,7 @@
 import React from "react";
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
-import { Button, Text, TextInput } from "react-native-paper";
+import { Text, TextInput } from "react-native-paper";
+import AppButton from "./AppButton";
 
 interface LoginFormProps {
   email: string;
@@ -89,30 +90,21 @@ export default function LoginForm({
           outlineColor="#201e23ff"
           style={styles.input}
         />
-        <Button
+        <AppButton
           mode="contained"
           style={styles.button}
           onPress={isSignUp ? handleSignUp : handleLogin}
         >
           {isSignUp ? "Sign Up" : "Login"}
-        </Button>
-        <Button
-          mode="text"
-          onPress={toggleForm}
-          style={styles.toggleButton}
-          theme={{ colors: { primary: "#201e23ff" } }}
-        >
+        </AppButton>
+        <AppButton mode="text" onPress={toggleForm} style={styles.toggleButton}>
           {isSignUp
             ? "Already have an account? Sign In"
             : "Don't have an account? Sign Up"}
-        </Button>
-        <Button
-          mode="text"
-          onPress={handleReset}
-          theme={{ colors: { primary: "#201e23ff" } }}
-        >
+        </AppButton>
+        <AppButton mode="text" onPress={handleReset} noMargin={true}>
           Forgot Password
-        </Button>
+        </AppButton>
       </View>
     </KeyboardAvoidingView>
   );
@@ -127,4 +119,5 @@ const styles = StyleSheet.create({
   input: { marginBottom: 16 },
   button: { marginTop: 8, backgroundColor: "#201e23ff" },
   toggleButton: { marginTop: 16, alignSelf: "center" },
+  forgotButton: { marginTop: 4, alignSelf: "center" },
 });

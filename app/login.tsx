@@ -7,10 +7,10 @@ import {
   decodeToken,
   getToken,
 } from "@/assets/authentication-storage/authStorage";
+import dataAccess from "@/databaseAccess/dataAccess";
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useState } from "react";
 import LoginForm from "./components/LoginForm";
-import { getPlayerById } from "./databaseAccess/dataAccess";
 
 export default function Login() {
   //Initialisation----------------------------------------------------------------------------------
@@ -29,7 +29,7 @@ export default function Login() {
       const token = await getToken();
       if (!token) return;
       const decodedToken = decodeToken(token);
-      const currentUser = await getPlayerById(decodedToken?.sub);
+      const currentUser = await dataAccess.getPlayerById(decodedToken?.sub);
       setUser({
         UserID: currentUser.player_id,
         UserName: currentUser.player_name,

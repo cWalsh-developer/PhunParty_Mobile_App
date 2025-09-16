@@ -1,7 +1,8 @@
 import { CameraView } from "expo-camera";
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { Button, IconButton, Text } from "react-native-paper";
+import { IconButton, Text } from "react-native-paper";
+import AppButton from "./AppButton";
 
 interface QRScannerProps {
   userName: string;
@@ -38,13 +39,9 @@ export default function QRScanner({
             <Text style={{ marginBottom: 20, textAlign: "center" }}>
               Press "Join Game" below to scan the QR code and enter the game
             </Text>
-            <Button
-              onPress={() => setShowCamera(true)}
-              mode="contained"
-              theme={{ colors: { primary: "#201e23ff" } }}
-            >
+            <AppButton onPress={() => setShowCamera(true)} mode="contained">
               Join Game
-            </Button>
+            </AppButton>
           </View>
         </>
       ) : (

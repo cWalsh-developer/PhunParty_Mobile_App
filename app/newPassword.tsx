@@ -1,8 +1,8 @@
 import { updatePassword } from "@/assets/authentication-storage/authenticationLogic";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
-import { Button, Text, TextInput } from "react-native-paper";
+import { StyleSheet } from "react-native";
+import NewPasswordForm from "./components/NewPasswordForm";
 //State--------------------------------------------------------------------------------------------
 export default function NewPassword() {
   //Initialisation----------------------------------------------------------------------------------
@@ -11,13 +11,9 @@ export default function NewPassword() {
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const { phone } = useLocalSearchParams();
   const router = useRouter();
-  const handlePasswordChange = (text: string) => {
-    setPassword(text);
-  };
-
-  const handleConfirmPasswordChange = (text: string) => {
+  const handlePasswordChange = (text: string) => setPassword(text);
+  const handleConfirmPasswordChange = (text: string) =>
     setConfirmPassword(text);
-  };
   const handleSetNewPassword = async () => {
     if (password !== confirmPassword) {
       alert("Passwords do not match");
@@ -27,9 +23,7 @@ export default function NewPassword() {
       return;
     } else {
       const result = await updatePassword(password, phone as string);
-      if (result) {
-        setIsSuccess(true);
-      }
+      if (result) setIsSuccess(true);
     }
   };
   useEffect(() => {
@@ -39,43 +33,13 @@ export default function NewPassword() {
   }, [isSuccess]);
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
-    >
-      <View style={styles.content}>
-        <Text style={styles.title} variant="headlineMedium">
-          Set New Password
-        </Text>
-        <TextInput
-          label="New Password"
-          value={password}
-          onChangeText={handlePasswordChange}
-          outlineColor="#201e23ff"
-          activeOutlineColor="#201e23ff"
-          mode="outlined"
-          secureTextEntry
-          style={styles.input}
-        />
-        <TextInput
-          label="Confirm Password"
-          value={confirmPassword}
-          onChangeText={handleConfirmPasswordChange}
-          outlineColor="#201e23ff"
-          activeOutlineColor="#201e23ff"
-          mode="outlined"
-          secureTextEntry
-          style={styles.input}
-        />
-        <Button
-          mode="contained"
-          onPress={handleSetNewPassword}
-          style={styles.button}
-        >
-          Set New Password
-        </Button>
-      </View>
-    </KeyboardAvoidingView>
+    <NewPasswordForm
+      password={password}
+      confirmPassword={confirmPassword}
+      onPasswordChange={handlePasswordChange}
+      onConfirmPasswordChange={handleConfirmPasswordChange}
+      onSubmit={handleSetNewPassword}
+    />
   );
 }
 

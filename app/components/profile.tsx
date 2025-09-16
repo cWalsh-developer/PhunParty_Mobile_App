@@ -1,7 +1,8 @@
 import { UserContext } from "@/assets/authentication-storage/authContext";
 import React, { useContext } from "react";
 import { StyleSheet, View } from "react-native";
-import { Button, Card, Text } from "react-native-paper";
+import { Card, Text } from "react-native-paper";
+import AppButton from "./AppButton";
 
 interface ProfileScreenProps {
   onEditProfile: () => void;
@@ -33,16 +34,16 @@ export default function ProfileScreen({
           <Text style={styles.value}>{user.UserPhone || "-"}</Text>
         </View>
       </Card>
-      <Button
+      <AppButton
         mode="contained"
         style={styles.editButton}
         onPress={onEditProfile}
       >
         Edit Profile
-      </Button>
-      <Button mode="outlined" style={styles.logoutButton} onPress={onLogout}>
+      </AppButton>
+      <AppButton mode="outlined" style={styles.logoutButton} onPress={onLogout}>
         <Text style={{ color: "#020202ff" }}>Logout</Text>
-      </Button>
+      </AppButton>
     </View>
   );
 }
