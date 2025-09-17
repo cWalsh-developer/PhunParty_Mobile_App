@@ -1,4 +1,5 @@
 // ...existing code...
+import { router } from "expo-router";
 import React, { useRef } from "react";
 import {
   Pressable,
@@ -34,6 +35,9 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({
   error,
 }) => {
   const codeInputRef = useRef<any>(null);
+  const handleBackToLogin = () => {
+    router.replace("/login");
+  };
   const handlePhoneChange = (text: string) => setPhone(text);
   const handleCodeChange = (text: string) =>
     setCode(text.replace(/[^0-9]/g, "").slice(0, 6));
@@ -131,6 +135,13 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({
               : isPressed
               ? "Verify Reset Code"
               : "Send Reset Code"}
+          </Text>
+        </AppButton>
+      </Selector>
+      <Selector onPress={handleBackToLogin}>
+        <AppButton onPress={() => {}} mode="text" style={{ marginTop: 16 }}>
+          <Text style={{ color: "#201e23ff", fontSize: 16, fontWeight: "500" }}>
+            Back To Login
           </Text>
         </AppButton>
       </Selector>

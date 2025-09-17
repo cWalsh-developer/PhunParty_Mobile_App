@@ -53,7 +53,8 @@ export default function LoginForm({
           autoCapitalize="none"
           keyboardType="email-address"
           mode="outlined"
-          outlineColor="#201e23ff"
+          outlineColor="#424242ff"
+          activeOutlineColor="#201e23ff"
           style={styles.input}
         />
         {isSignUp && (
@@ -66,7 +67,8 @@ export default function LoginForm({
               autoCapitalize="words"
               keyboardType="default"
               mode="outlined"
-              outlineColor="#201e23ff"
+              outlineColor="#424242ff"
+              activeOutlineColor="#201e23ff"
               style={styles.input}
             />
             <TextInput
@@ -77,7 +79,8 @@ export default function LoginForm({
               autoCapitalize="none"
               keyboardType="phone-pad"
               mode="outlined"
-              outlineColor="#201e23ff"
+              outlineColor="#424242ff"
+              activeOutlineColor="#201e23ff"
               style={styles.input}
             />
           </>
@@ -89,7 +92,8 @@ export default function LoginForm({
           autoCapitalize="none"
           secureTextEntry={true}
           mode="outlined"
-          outlineColor="#201e23ff"
+          outlineColor="#424242ff"
+          activeOutlineColor="#201e23ff"
           style={styles.input}
         />
         <Selector onPress={isSignUp ? handleSignUp : handleLogin}>
