@@ -41,7 +41,11 @@ export default function QRScanner({
             <Text style={{ marginBottom: 20, textAlign: "center" }}>
               Press "Join Game" below to scan the QR code and enter the game
             </Text>
-            <Selector onPress={() => setShowCamera(true)}>
+            <Selector
+              onPress={() => {
+                setShowCamera(true), setScanned(false);
+              }}
+            >
               <AppButton onPress={() => {}} mode="contained">
                 <View style={styles.buttonIconRow}>
                   <Entypo name="game-controller" size={20} color="white" />
