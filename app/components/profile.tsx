@@ -24,15 +24,15 @@ export default function ProfileScreen({
       <Card style={styles.card}>
         <View style={styles.row}>
           <Text style={styles.label}>Name:</Text>
-          <Text style={styles.value}>{user.UserName || "-"}</Text>
+          <Text style={styles.value}>{user.player_name || "-"}</Text>
         </View>
         <View style={styles.row}>
           <Text style={styles.label}>Email:</Text>
-          <Text style={styles.value}>{user.UserEmail || "-"}</Text>
+          <Text style={styles.value}>{user.player_email || "-"}</Text>
         </View>
         <View style={styles.row}>
           <Text style={styles.label}>Mobile:</Text>
-          <Text style={styles.value}>{user.UserPhone || "-"}</Text>
+          <Text style={styles.value}>{user.player_mobile || "-"}</Text>
         </View>
       </Card>
       <Selector label="Edit" onPress={onEditProfile}>

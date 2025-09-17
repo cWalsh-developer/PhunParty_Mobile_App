@@ -6,11 +6,13 @@ const dataAccess = {
     const response = await API.get(`${RetrievePlayerEndpoint}/${playerId}`);
     return response.result;
   },
-};
-
-const updatePlayer = async (playerId: string, data: any) => {
-  const response = await API.put(`${RetrievePlayerEndpoint}/${playerId}`, data);
-  return response.isSuccess;
+  updatePlayer: async (playerId: string, data: any) => {
+    const response = await API.put(
+      `${RetrievePlayerEndpoint}/${playerId}`,
+      data
+    );
+    return response.isSuccess;
+  },
 };
 
 export default dataAccess;

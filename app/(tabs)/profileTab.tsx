@@ -1,16 +1,40 @@
 import { UserContext } from "@/assets/authentication-storage/authContext";
 import { removeToken } from "@/assets/authentication-storage/authStorage";
 import { useRouter } from "expo-router";
-import React, { useContext } from "react";
+import React, { useContext, useState } from "react";
 import { Alert } from "react-native";
+import dataAccess from "../../databaseAccess/dataAccess";
+import EditProfileModal from "../components/EditProfileModal";
 import ProfileScreen from "../components/profile";
 
 export default function ProfileTab() {
   const router = useRouter();
-  const { setUser } = useContext(UserContext)!;
+  const { user, setUser } = useContext(UserContext)!;
+  const [editVisible, setEditVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleEditProfile = () => {
-    router.push(""); // Change to your edit profile route if needed
+    setEditVisible(true);
+  };
+
+  const handleSaveProfile = async (data: {
+    player_name: string;
+    player_email: string;
+    player_mobile: string;
+  }) => {
+    setLoading(true);
+    try {
+      const playerId = user?.player_id;
+      if (!playerId) throw new Error("No user ID");
+      const success = await dataAccess.updatePlayer(playerId, data);
+      if (!success) throw new Error("API update failed");
+      setUser((prev: any) => ({ ...prev, ...data }));
+      setEditVisible(false);
+    } catch (e) {
+      Alert.alert("Error", "Failed to update profile.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -24,10 +48,10 @@ export default function ProfileTab() {
         onPress: async () => {
           await removeToken();
           setUser({
-            UserID: null,
-            UserName: null,
-            UserPhone: null,
-            UserEmail: null,
+            player_id: null,
+            player_name: null,
+            player_mobile: null,
+            player_email: null,
           });
           router.replace("/login");
         },
@@ -36,6 +60,18 @@ export default function ProfileTab() {
   };
 
   return (
-    <ProfileScreen onEditProfile={handleEditProfile} onLogout={handleLogout} />
+    <>
+      <ProfileScreen
+        onEditProfile={handleEditProfile}
+        onLogout={handleLogout}
+      />
+      <EditProfileModal
+        visible={editVisible}
+        onClose={() => setEditVisible(false)}
+        user={user}
+        onSave={handleSaveProfile}
+        loading={loading}
+      />
+    </>
   );
 }

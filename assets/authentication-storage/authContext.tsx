@@ -7,10 +7,10 @@ import React, {
 } from "react";
 
 interface UserType {
-  UserID: number | null;
-  UserName: string | null;
-  UserPhone: string | null;
-  UserEmail: string | null;
+  player_id: string | null;
+  player_name: string | null;
+  player_mobile: string | null;
+  player_email: string | null;
 }
 
 interface UserContextType {
@@ -24,10 +24,10 @@ export const UserContext = createContext<UserContextType | undefined>(
 
 export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<UserType>({
-    UserID: null,
-    UserName: null,
-    UserPhone: null,
-    UserEmail: null,
+    player_id: null,
+    player_name: null,
+    player_mobile: null,
+    player_email: null,
   });
 
   return (

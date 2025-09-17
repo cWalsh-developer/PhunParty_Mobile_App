@@ -24,7 +24,7 @@ export default function QRScannerScreen() {
 
   return (
     <QRScanner
-      userName={user?.UserName || "Player"}
+      userName={user?.player_name || "Player"}
       showCamera={showCamera}
       setShowCamera={setShowCamera}
       scanned={scanned}

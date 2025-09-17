@@ -31,10 +31,10 @@ export default function Login() {
       const decodedToken = decodeToken(token);
       const currentUser = await dataAccess.getPlayerById(decodedToken?.sub);
       setUser({
-        UserID: currentUser.player_id,
-        UserName: currentUser.player_name,
-        UserPhone: currentUser.player_mobile,
-        UserEmail: currentUser.player_email,
+        player_id: currentUser.player_id,
+        player_name: currentUser.player_name,
+        player_mobile: currentUser.player_mobile,
+        player_email: currentUser.player_email,
       });
     };
     const redirectIfAuthenticated = async () => {
