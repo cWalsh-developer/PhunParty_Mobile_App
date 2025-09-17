@@ -6,7 +6,9 @@ import {
   SignUpEndpoint,
 } from "@env";
 import * as SecureStore from "expo-secure-store";
+import dataAccess from "../../databaseAccess/dataAccess";
 import API from "../api/API";
+import { decodeToken, getToken } from "./authStorage";
 
 export interface LoginRequest {
   email: string;
@@ -19,10 +21,10 @@ export interface SignUpRequest {
   mobile: string;
 }
 
-export const login = async ({
-  email,
-  password,
-}: LoginRequest): Promise<boolean> => {
+export const login = async (
+  { email, password }: LoginRequest,
+  setUser: (user: any) => void
+): Promise<boolean> => {
   const result = await API.post(
     AuthenticationEndpoint,
     {
@@ -33,6 +35,7 @@ export const login = async ({
   );
   if (result.isSuccess && result.result?.access_token) {
     await SecureStore.setItemAsync("jwt", result.result.access_token);
+    await createUserContext(setUser);
     return true;
   } else {
     alert("Login failed: " + result.message);
@@ -97,7 +100,11 @@ export const verifyResetCode = async (phone: string, code: string) => {
   }
 };
 
-export const updatePassword = async (newPassword: string, number: string) => {
+export const updatePassword = async (
+  newPassword: string,
+  number: string,
+  setUser: (user: any) => void
+) => {
   const result = await API.put(
     PasswordUpdateEndpoint,
     {
@@ -108,9 +115,23 @@ export const updatePassword = async (newPassword: string, number: string) => {
   );
   if (result.isSuccess) {
     await SecureStore.setItemAsync("jwt", result.result.access_token);
+    await createUserContext(setUser);
     return true;
   } else {
     alert("Password update failed: " + result.message);
     return false;
   }
+};
+
+export const createUserContext = async (setUser: (user: any) => void) => {
+  const token = await getToken();
+  if (!token) return;
+  const decodedToken = decodeToken(token);
+  const currentUser = await dataAccess.getPlayerById(decodedToken?.sub);
+  setUser({
+    player_id: currentUser.player_id,
+    player_name: currentUser.player_name,
+    player_mobile: currentUser.player_mobile,
+    player_email: currentUser.player_email,
+  });
 };

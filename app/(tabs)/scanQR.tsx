@@ -2,7 +2,6 @@ import { UserContext } from "@/assets/authentication-storage/authContext";
 import { Camera } from "expo-camera";
 import React, { useContext, useEffect, useState } from "react";
 import QRScanner from "../components/QRScanner";
-
 export default function QRScannerScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);

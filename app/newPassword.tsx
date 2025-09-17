@@ -1,6 +1,7 @@
+import { UserContext } from "@/assets/authentication-storage/authContext";
 import { updatePassword } from "@/assets/authentication-storage/authenticationLogic";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 import NewPasswordForm from "./components/NewPasswordForm";
 //State--------------------------------------------------------------------------------------------
@@ -11,6 +12,8 @@ export default function NewPassword() {
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const { phone } = useLocalSearchParams();
   const router = useRouter();
+  const { setUser } = useContext(UserContext)!;
+  //Handlers-----------------------------------------------------------------------------------------
   const handlePasswordChange = (text: string) => setPassword(text);
   const handleConfirmPasswordChange = (text: string) =>
     setConfirmPassword(text);
@@ -22,8 +25,10 @@ export default function NewPassword() {
       alert("Password must be at least 6 characters long");
       return;
     } else {
-      const result = await updatePassword(password, phone as string);
-      if (result) setIsSuccess(true);
+      const result = await updatePassword(password, phone as string, setUser);
+      if (result) {
+        setIsSuccess(true);
+      }
     }
   };
   useEffect(() => {

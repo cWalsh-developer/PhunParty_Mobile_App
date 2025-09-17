@@ -3,18 +3,13 @@ import {
   login,
   signUp,
 } from "@/assets/authentication-storage/authenticationLogic";
-import {
-  decodeToken,
-  getToken,
-} from "@/assets/authentication-storage/authStorage";
-import dataAccess from "@/databaseAccess/dataAccess";
+import { getToken } from "@/assets/authentication-storage/authStorage";
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useState } from "react";
 import LoginForm from "./components/LoginForm";
 
 export default function Login() {
   //Initialisation----------------------------------------------------------------------------------
-  const { setUser } = useContext(UserContext)!;
   const router = useRouter();
 
   //State--------------------------------------------------------------------------------------------
@@ -23,27 +18,15 @@ export default function Login() {
   const [password, setPassword] = useState<string>("");
   const [name, setName] = useState<string>("");
   const [mobile, setMobile] = useState<string>("");
+  const { setUser } = useContext(UserContext)!;
 
   useEffect(() => {
-    const createUserContext = async () => {
-      const token = await getToken();
-      if (!token) return;
-      const decodedToken = decodeToken(token);
-      const currentUser = await dataAccess.getPlayerById(decodedToken?.sub);
-      setUser({
-        player_id: currentUser.player_id,
-        player_name: currentUser.player_name,
-        player_mobile: currentUser.player_mobile,
-        player_email: currentUser.player_email,
-      });
-    };
     const redirectIfAuthenticated = async () => {
       const token = await getToken();
       if (token) {
         router.replace("/(tabs)/scanQR");
       }
     };
-    createUserContext();
     redirectIfAuthenticated();
   }, [isLoggedIn]);
   const [isSignUp, setIsSignUp] = useState<boolean>(false);
@@ -55,7 +38,7 @@ export default function Login() {
   //Handlers-----------------------------------------------------------------------------------------
 
   const handleLogin = async () => {
-    const result = await login({ email, password });
+    const result = await login({ email, password }, setUser);
     if (result) {
       setIsLoggedIn(true);
     }
