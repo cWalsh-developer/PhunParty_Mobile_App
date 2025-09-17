@@ -9,7 +9,7 @@ interface SelectorProps {
 
 const Selector = ({ children, onPress, label }: SelectorProps) => {
   const handlePress = () => {
-    if (label === "Logout") {
+    if (label === "Logout" || label === "Delete Account") {
       Vibration.vibrate(400);
     } else {
       Vibration.vibrate(25);

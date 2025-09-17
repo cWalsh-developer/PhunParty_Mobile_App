@@ -1,3 +1,4 @@
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import React from "react";
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { Text, TextInput } from "react-native-paper";
@@ -93,7 +94,17 @@ export default function LoginForm({
         />
         <Selector onPress={isSignUp ? handleSignUp : handleLogin}>
           <AppButton mode="contained" style={styles.button} onPress={() => {}}>
-            {isSignUp ? "Sign Up" : "Login"}
+            <View style={styles.buttonIconRow}>
+              <MaterialIcons
+                name={isSignUp ? "person-add" : "login"}
+                size={24}
+                color="#ffffff"
+                style={{ marginRight: 8 }}
+              />
+              <Text style={{ color: "#ffffff" }}>
+                {isSignUp ? "Sign Up" : "Login"}
+              </Text>
+            </View>
           </AppButton>
         </Selector>
         <Selector onPress={toggleForm}>
@@ -123,4 +134,5 @@ const styles = StyleSheet.create({
   button: { marginTop: 8, backgroundColor: "#201e23ff" },
   toggleButton: { marginTop: 16, alignSelf: "center" },
   forgotButton: { marginTop: 4, alignSelf: "center" },
+  buttonIconRow: { flexDirection: "row", alignItems: "center" },
 });

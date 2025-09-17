@@ -1,4 +1,5 @@
 import { UserContext } from "@/assets/authentication-storage/authContext";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import React, { useContext } from "react";
 import { StyleSheet, View } from "react-native";
 import { Card, Text } from "react-native-paper";
@@ -7,15 +8,16 @@ import Selector from "./Selector";
 
 interface ProfileScreenProps {
   onEditProfile: () => void;
+  onDeleteAccount: () => void;
   onLogout: () => void;
 }
 
 export default function ProfileScreen({
   onEditProfile,
+  onDeleteAccount,
   onLogout,
 }: ProfileScreenProps) {
   const { user } = useContext(UserContext)!;
-
   return (
     <View style={styles.container}>
       <Text style={styles.heading} variant="headlineLarge">
@@ -41,7 +43,10 @@ export default function ProfileScreen({
           style={styles.editButton}
           onPress={() => {}}
         >
-          Edit Profile
+          <View style={styles.buttonIconRow}>
+            <MaterialIcons name="edit" size={24} color="#ffffff" />
+            <Text style={{ color: "#ffffff" }}>Edit Profile</Text>
+          </View>
         </AppButton>
       </Selector>
       <Selector label="Logout" onPress={onLogout}>
@@ -50,7 +55,18 @@ export default function ProfileScreen({
           style={styles.logoutButton}
           onPress={() => {}}
         >
-          <Text style={{ color: "#020202ff" }}>Logout</Text>
+          <View style={styles.buttonIconRow}>
+            <MaterialIcons name="logout" size={24} color="black" />
+            <Text style={{ color: "#020202ff" }}>Logout</Text>
+          </View>
+        </AppButton>
+      </Selector>
+      <Selector label="Delete Account" onPress={onDeleteAccount}>
+        <AppButton mode="text" style={styles.deleteButton} onPress={() => {}}>
+          <View style={styles.buttonIconRow}>
+            <MaterialIcons name="delete" size={20} color="#d32f2f" />
+            <Text style={{ color: "#d32f2f" }}>Delete Account</Text>
+          </View>
         </AppButton>
       </Selector>
     </View>
@@ -101,8 +117,19 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     backgroundColor: "#201e23ff",
   },
+  deleteButton: {
+    width: "100%",
+    borderColor: "#d32f2f",
+    marginBottom: 16,
+  },
   logoutButton: {
     width: "100%",
     borderColor: "#201e23ff",
+  },
+  buttonIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
   },
 });

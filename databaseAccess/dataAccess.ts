@@ -13,6 +13,10 @@ const dataAccess = {
     );
     return response.isSuccess;
   },
+  deletePlayer: async (playerId: string) => {
+    const response = await API.delete(`${RetrievePlayerEndpoint}/${playerId}`);
+    return response.isSuccess;
+  },
 };
 
 export default dataAccess;

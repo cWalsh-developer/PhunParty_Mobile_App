@@ -17,6 +17,36 @@ export default function ProfileTab() {
     setEditVisible(true);
   };
 
+  const handleDeleteAccount = async () => {
+    Alert.alert(
+      "Confirm Deletion",
+      "Are you sure you want to delete your account? This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          onPress: async () => {
+            const playerId = user?.player_id;
+            if (!playerId) throw new Error("No user ID");
+            const success = await dataAccess.deletePlayer(playerId);
+            if (!success) throw new Error("API delete failed");
+            setUser({
+              player_id: null,
+              player_name: null,
+              player_mobile: null,
+              player_email: null,
+            });
+            await removeToken();
+            router.replace("/login");
+          },
+        },
+      ]
+    );
+  };
+
   const handleSaveProfile = async (data: {
     player_name: string;
     player_email: string;
@@ -63,6 +93,7 @@ export default function ProfileTab() {
     <>
       <ProfileScreen
         onEditProfile={handleEditProfile}
+        onDeleteAccount={handleDeleteAccount}
         onLogout={handleLogout}
       />
       <EditProfileModal

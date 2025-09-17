@@ -1,6 +1,8 @@
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import React, { useState } from "react";
 import { Modal, StyleSheet, View } from "react-native";
-import { Button, Card, Text, TextInput } from "react-native-paper";
+import { Card, Text, TextInput } from "react-native-paper";
+import AppButton from "./AppButton";
 
 interface EditProfileModalProps {
   visible: boolean;
@@ -29,7 +31,6 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [email, setEmail] = useState(user.player_email || "");
   const [phone, setPhone] = useState(user.player_mobile || "");
 
-  // Reset fields when modal opens
   React.useEffect(() => {
     if (visible) {
       setName(user.player_name || "");
@@ -76,16 +77,13 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
             activeOutlineColor="#201e23ff"
           />
           <View style={styles.buttonRow}>
-            <Button
-              onPress={onClose}
-              mode="text"
-              disabled={loading}
-              style={styles.button}
-              theme={{ colors: { primary: "#202002ff" } }}
-            >
-              Cancel
-            </Button>
-            <Button
+            <AppButton onPress={onClose} mode="text" disabled={loading}>
+              <View style={styles.buttonIconRow}>
+                <MaterialIcons name="cancel" size={20} color="#201e23ff" />
+                <Text style={{ color: "#201e23ff", fontSize: 17 }}>Cancel</Text>
+              </View>
+            </AppButton>
+            <AppButton
               onPress={() =>
                 onSave({
                   player_name: name,
@@ -94,13 +92,13 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 })
               }
               mode="contained"
-              loading={loading}
               disabled={loading}
-              style={styles.button}
-              theme={{ colors: { primary: "#202002ff" } }}
             >
-              Save
-            </Button>
+              <View style={styles.buttonIconRow}>
+                <MaterialIcons name="save" size={20} color="#ffffff" />
+                <Text style={{ color: "#ffffff" }}>Save</Text>
+              </View>
+            </AppButton>
           </View>
         </Card>
       </View>
@@ -131,10 +129,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     marginTop: 12,
+    gap: 10,
   },
   button: {
+    flex: 1,
     marginLeft: 8,
   },
+  buttonIconRow: { flexDirection: "row", alignItems: "center", gap: 4 },
 });
 
 export default EditProfileModal;

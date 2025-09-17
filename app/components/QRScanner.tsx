@@ -1,3 +1,4 @@
+import Entypo from "@expo/vector-icons/Entypo";
 import { CameraView } from "expo-camera";
 import React from "react";
 import { StyleSheet, View } from "react-native";
@@ -42,7 +43,10 @@ export default function QRScanner({
             </Text>
             <Selector onPress={() => setShowCamera(true)}>
               <AppButton onPress={() => {}} mode="contained">
-                Join Game
+                <View style={styles.buttonIconRow}>
+                  <Entypo name="game-controller" size={20} color="white" />
+                  <Text style={{ color: "white" }}>Join Game</Text>
+                </View>
               </AppButton>
             </Selector>
           </View>
@@ -122,5 +126,10 @@ const styles = StyleSheet.create({
     color: "#201e23ff",
     fontSize: 24,
     textAlign: "center",
+  },
+  buttonIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
 });
