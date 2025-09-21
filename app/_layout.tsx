@@ -17,9 +17,14 @@ export default function RootLayout() {
 
   if (isAuthenticated === null) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" />
-      </View>
+      <>
+        {console.log("Rendering TabsLayout")}
+        <View
+          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+        >
+          <ActivityIndicator size="large" />
+        </View>
+      </>
     );
   }
 

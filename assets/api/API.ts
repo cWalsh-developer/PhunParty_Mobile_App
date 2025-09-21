@@ -1,4 +1,5 @@
 //Imports
+import Constants from "expo-constants";
 import { getToken } from "../authentication-storage/authStorage";
 
 // Define API result shape
@@ -48,6 +49,12 @@ const callFetch = async <T = any>(
     }
   }
 
+  // Use API_URL from Constants.expoConfig.extra
+  const baseUrl = Constants.expoConfig?.extra?.API_URL;
+  const url = baseUrl
+    ? `${baseUrl.replace(/\/$/, "")}/${endpoint.replace(/^\//, "")}`
+    : endpoint;
+
   const requestObj: RequestInit = {
     method,
     headers,
@@ -55,7 +62,7 @@ const callFetch = async <T = any>(
   };
 
   try {
-    const response = await fetch(endpoint, requestObj);
+    const response = await fetch(url, requestObj);
     const result = response.status !== 204 ? await response.json() : null;
 
     return response.ok

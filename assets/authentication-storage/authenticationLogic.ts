@@ -1,10 +1,4 @@
-import {
-  AuthenticationEndpoint,
-  PasswordResetEndpoint,
-  PasswordResetVerificationEndpoint,
-  PasswordUpdateEndpoint,
-  SignUpEndpoint,
-} from "@env";
+import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 import dataAccess from "../../databaseAccess/dataAccess";
 import API from "../api/API";
@@ -20,6 +14,15 @@ export interface SignUpRequest {
   password: string;
   mobile: string;
 }
+
+const {
+  AuthenticationEndpoint,
+  SignUpEndpoint,
+  PasswordResetEndpoint,
+  PasswordResetVerificationEndpoint,
+  PasswordUpdateEndpoint,
+  RetrievePlayerEndpoint,
+} = Constants.expoConfig?.extra || {};
 
 export const login = async (
   { email, password }: LoginRequest,

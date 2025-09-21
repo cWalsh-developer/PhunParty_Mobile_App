@@ -4,6 +4,7 @@ import {
   signUp,
 } from "@/assets/authentication-storage/authenticationLogic";
 import { getToken } from "@/assets/authentication-storage/authStorage";
+import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useState } from "react";
 import LoginForm from "./components/LoginForm";
@@ -19,6 +20,7 @@ export default function Login() {
   const [name, setName] = useState<string>("");
   const [mobile, setMobile] = useState<string>("");
   const { setUser } = useContext(UserContext)!;
+  const { AuthenticationEndpoint } = Constants.expoConfig?.extra || {};
 
   useEffect(() => {
     const redirectIfAuthenticated = async () => {
@@ -32,6 +34,7 @@ export default function Login() {
   const [isSignUp, setIsSignUp] = useState<boolean>(false);
 
   const toggleForm = () => {
+    console.log(AuthenticationEndpoint);
     setIsSignUp((prev) => !prev);
   };
 
@@ -39,6 +42,7 @@ export default function Login() {
 
   const handleLogin = async () => {
     const result = await login({ email, password }, setUser);
+    console.log(result);
     if (result) {
       setIsLoggedIn(true);
     }

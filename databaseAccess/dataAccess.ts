@@ -1,5 +1,7 @@
 import API from "@/assets/api/API";
-import { RetrievePlayerEndpoint } from "@env";
+import Constants from "expo-constants";
+
+const { RetrievePlayerEndpoint } = Constants.expoConfig?.extra || {};
 
 const dataAccess = {
   getPlayerById: async (playerId?: string) => {
