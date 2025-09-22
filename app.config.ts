@@ -14,7 +14,11 @@ const config: ExpoConfig = {
   name: "PhunParty_Mobile_App",
   slug: "PhunParty_Mobile_App",
   version: "1.0.0",
-  extra,
+  extra: {
+    API_URL: process.env.API_URL,
+    API_KEY: process.env.API_KEY,
+    ...extra,
+  },
 };
 
 export default ({ config: existingConfig }: { config: ExpoConfig }) => ({
