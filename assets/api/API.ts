@@ -38,6 +38,7 @@ const callFetch = async <T = any>(
   withAuth: boolean = true
 ): Promise<APIResponse<T>> => {
   const headers: HeadersInit = {
+    "X-API-Key": Constants.expoConfig?.extra?.API_KEY || "",
     "Content-Type": "application/json",
   };
 
