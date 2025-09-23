@@ -37,8 +37,10 @@ const callFetch = async <T = any>(
   dataObj: DataObject | null = null,
   withAuth: boolean = true
 ): Promise<APIResponse<T>> => {
+  const apiKey = Constants.expoConfig?.extra?.API_KEY || "";
+
   const headers: HeadersInit = {
-    "X-API-Key": Constants.expoConfig?.extra?.API_KEY || "",
+    "X-API-Key": apiKey,
     "Content-Type": "application/json",
   };
 
@@ -50,9 +52,11 @@ const callFetch = async <T = any>(
     }
   }
 
-  // Use API_URL from Constants.expoConfig.extra
+  // Use endpoint directly if it's a full URL, otherwise combine with base URL
   const baseUrl = Constants.expoConfig?.extra?.API_URL;
-  const url = baseUrl
+  const url = endpoint.startsWith("https")
+    ? endpoint
+    : baseUrl
     ? `${baseUrl.replace(/\/$/, "")}/${endpoint.replace(/^\//, "")}`
     : endpoint;
 
@@ -63,8 +67,19 @@ const callFetch = async <T = any>(
   };
 
   try {
+    console.log("Making API call to:", url);
+    console.log("Headers:", JSON.stringify(headers, null, 2));
     const response = await fetch(url, requestObj);
+    console.log("Response status:", response.status);
+    console.log(
+      "Response headers:",
+      JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)
+    );
     const result = response.status !== 204 ? await response.json() : null;
+
+    if (!response.ok) {
+      console.log("Error response body:", JSON.stringify(result, null, 2));
+    }
 
     return response.ok
       ? { isSuccess: true, result }

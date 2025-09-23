@@ -8,21 +8,20 @@ const extra = {
     process.env.PASSWORD_RESET_VERIFICATION_ENDPOINT,
   PasswordUpdateEndpoint: process.env.PASSWORD_UPDATE_ENDPOINT,
   RetrievePlayerEndpoint: process.env.RETRIEVE_PLAYER_ENDPOINT,
+  API_KEY: process.env.API_KEY,
+  API_URL: process.env.API_URL,
 };
 
 const config: ExpoConfig = {
   name: "PhunParty_Mobile_App",
   slug: "PhunParty_Mobile_App",
   version: "1.0.0",
-  extra: {
-    API_URL: process.env.API_URL,
-    API_KEY: process.env.API_KEY,
-    ...extra,
-  },
+  extra: extra,
 };
 
 export default ({ config: existingConfig }: { config: ExpoConfig }) => ({
   ...existingConfig,
+  ...config,
   extra: {
     ...existingConfig.extra,
     ...extra,
