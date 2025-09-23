@@ -1,7 +1,8 @@
-import React from "react";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { Text, TextInput } from "react-native-paper";
 import AppButton from "./AppButton";
+import Selector from "./Selector";
 
 interface NewPasswordFormProps {
   password: string;
@@ -47,9 +48,17 @@ export default function NewPasswordForm({
           secureTextEntry
           style={styles.input}
         />
-        <AppButton mode="contained" onPress={onSubmit} style={styles.button}>
-          Set New Password
-        </AppButton>
+        <Selector onPress={onSubmit}>
+          <AppButton mode="contained" onPress={() => {}} style={styles.button}>
+            <MaterialIcons
+              name="lock-reset"
+              size={20}
+              color="white"
+              style={{ marginRight: 8 }}
+            />
+            Set New Password
+          </AppButton>
+        </Selector>
       </View>
     </KeyboardAvoidingView>
   );

@@ -1,8 +1,14 @@
+import { AppButton, AppCard, AppInput } from "@/assets/components";
+import { colors, layoutStyles, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import React from "react";
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
-import { Text, TextInput } from "react-native-paper";
-import AppButton from "./AppButton";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import Selector from "./Selector";
 
 interface LoginFormProps {
@@ -37,106 +43,162 @@ export default function LoginForm({
   handleReset,
 }: LoginFormProps) {
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
-    >
-      <View style={styles.content}>
-        <Text style={styles.title} variant="headlineMedium">
-          {isSignUp ? "Create Account" : "Welcome Back"}
-        </Text>
-        <TextInput
-          label="Email"
-          value={email}
-          onChangeText={setEmail}
-          placeholder="example@gmail.com"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          mode="outlined"
-          outlineColor="#424242ff"
-          activeOutlineColor="#201e23ff"
-          style={styles.input}
-        />
-        {isSignUp && (
-          <>
-            <TextInput
-              label="Name"
-              value={name}
-              onChangeText={setName}
-              placeholder="John Doe"
-              autoCapitalize="words"
-              keyboardType="default"
-              mode="outlined"
-              outlineColor="#424242ff"
-              activeOutlineColor="#201e23ff"
-              style={styles.input}
-            />
-            <TextInput
-              label="Mobile"
-              value={mobile}
-              onChangeText={setMobile}
-              placeholder="07712345678"
+    <View style={layoutStyles.screen}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "position"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : -185}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingHorizontal: 16,
+            paddingVertical: 105,
+          }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={{ alignItems: "center", marginBottom: 48 }}>
+            <Text
+              style={[typography.h1, { textAlign: "center", marginBottom: 8 }]}
+            >
+              Welcome to{"\n"}
+              <Text style={{ color: colors.peach[400] }}>PhunParty</Text>
+            </Text>
+            <Text style={[typography.bodyMuted, { textAlign: "center" }]}>
+              {isSignUp
+                ? "Create your account to start playing"
+                : "Sign in to continue your journey"}
+            </Text>
+          </View>
+
+          {/* Form Card */}
+          <AppCard style={{ marginBottom: 0 }}>
+            <Text
+              style={[typography.h2, { marginBottom: 24, textAlign: "center" }]}
+            >
+              {isSignUp ? "Create Account" : "Welcome Back"}
+            </Text>
+
+            {/* Sign Up Fields */}
+            {isSignUp && (
+              <>
+                <AppInput
+                  label="Name"
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Enter your name"
+                  style={{ marginBottom: 16 }}
+                />
+                <AppInput
+                  label="Mobile"
+                  value={mobile}
+                  onChangeText={setMobile}
+                  placeholder="Enter your mobile number"
+                  keyboardType="phone-pad"
+                  style={{ marginBottom: 16 }}
+                />
+              </>
+            )}
+
+            {/* Common Fields */}
+            <AppInput
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Enter your email"
+              keyboardType="email-address"
               autoCapitalize="none"
-              keyboardType="phone-pad"
-              mode="outlined"
-              outlineColor="#424242ff"
-              activeOutlineColor="#201e23ff"
-              style={styles.input}
+              style={{ marginBottom: 16 }}
             />
-          </>
-        )}
-        <TextInput
-          label="Password"
-          value={password}
-          onChangeText={setPassword}
-          autoCapitalize="none"
-          secureTextEntry={true}
-          mode="outlined"
-          outlineColor="#424242ff"
-          activeOutlineColor="#201e23ff"
-          style={styles.input}
-        />
-        <Selector onPress={isSignUp ? handleSignUp : handleLogin}>
-          <AppButton mode="contained" style={styles.button} onPress={() => {}}>
-            <View style={styles.buttonIconRow}>
-              <MaterialIcons
-                name={isSignUp ? "person-add" : "login"}
-                size={24}
-                color="#ffffff"
-                style={{ marginRight: 8 }}
+            <AppInput
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Enter your password"
+              autoCapitalize="none"
+              secureTextEntry
+              style={{ marginBottom: 24 }}
+            />
+
+            {/* Action Buttons */}
+            <Selector onPress={isSignUp ? handleSignUp : handleLogin}>
+              <AppButton
+                title={isSignUp ? "Create Account" : "Sign In"}
+                onPress={() => {}} // This will be overridden by Selector
+                variant="primary"
+                style={{ marginBottom: 16 }}
+                icon={
+                  isSignUp ? (
+                    <MaterialIcons
+                      name="person-add"
+                      size={20}
+                      color={colors.ink[900]}
+                    />
+                  ) : (
+                    <MaterialIcons
+                      name="login"
+                      size={20}
+                      color={colors.ink[900]}
+                    />
+                  )
+                }
               />
-              <Text style={{ color: "#ffffff" }}>
-                {isSignUp ? "Sign Up" : "Login"}
+            </Selector>
+
+            {/* Reset Password (Login only) */}
+            {!isSignUp && (
+              <Selector onPress={handleReset}>
+                <TouchableOpacity style={{ marginBottom: 16 }}>
+                  <Text
+                    style={[
+                      typography.small,
+                      {
+                        textAlign: "center",
+                        color: colors.tea[400],
+                        textDecorationLine: "underline",
+                      },
+                    ]}
+                  >
+                    Forgot your password?
+                  </Text>
+                </TouchableOpacity>
+              </Selector>
+            )}
+
+            {/* Toggle Form */}
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "center",
+                alignItems: "center",
+                marginTop: 8,
+              }}
+            >
+              <Text style={[typography.small, { marginRight: 8 }]}>
+                {isSignUp
+                  ? "Already have an account?"
+                  : "Don't have an account?"}
               </Text>
+              <Selector onPress={toggleForm}>
+                <TouchableOpacity>
+                  <Text
+                    style={[
+                      typography.small,
+                      {
+                        color: colors.tea[400],
+                        fontWeight: "600",
+                      },
+                    ]}
+                  >
+                    {isSignUp ? "Sign In" : "Sign Up"}
+                  </Text>
+                </TouchableOpacity>
+              </Selector>
             </View>
-          </AppButton>
-        </Selector>
-        <Selector onPress={toggleForm}>
-          <AppButton mode="text" style={styles.toggleButton} onPress={() => {}}>
-            {isSignUp
-              ? "Already have an account? Sign In"
-              : "Don't have an account? Sign Up"}
-          </AppButton>
-        </Selector>
-        <Selector onPress={handleReset}>
-          <AppButton mode="text" onPress={() => {}} noMargin={true}>
-            Forgot Password
-          </AppButton>
-        </Selector>
-      </View>
-    </KeyboardAvoidingView>
+          </AppCard>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: { flex: 1, justifyContent: "center", padding: 16 },
-  title: { textAlign: "center", marginBottom: 16 },
-  input: { marginBottom: 16 },
-  button: { marginTop: 8, backgroundColor: "#201e23ff" },
-  toggleButton: { marginTop: 16, alignSelf: "center" },
-  forgotButton: { marginTop: 4, alignSelf: "center" },
-  buttonIconRow: { flexDirection: "row", alignItems: "center" },
-});

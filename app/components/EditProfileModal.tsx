@@ -1,8 +1,9 @@
+import { AppButton, AppCard, AppInput } from "@/assets/components";
+import { colors, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import React, { useState } from "react";
-import { Modal, StyleSheet, View } from "react-native";
-import { Card, Text, TextInput } from "react-native-paper";
-import AppButton from "./AppButton";
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import Selector from "./Selector";
 
 interface EditProfileModalProps {
   visible: boolean;
@@ -42,48 +43,59 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.overlay}>
-        <Card style={styles.card}>
-          <Text variant="headlineSmall" style={styles.title}>
-            Edit Profile
-          </Text>
-          <TextInput
-            label="Name"
-            value={name}
-            onChangeText={setName}
-            style={styles.input}
-            mode="outlined"
-            outlineColor="#393939ff"
-            activeOutlineColor="#201e23ff"
-          />
-          <TextInput
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            style={styles.input}
-            mode="outlined"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            outlineColor="#393939ff"
-            activeOutlineColor="#201e23ff"
-          />
-          <TextInput
-            label="Phone"
-            value={phone}
-            onChangeText={setPhone}
-            style={styles.input}
-            mode="outlined"
-            keyboardType="phone-pad"
-            outlineColor="#393939ff"
-            activeOutlineColor="#201e23ff"
-          />
-          <View style={styles.buttonRow}>
-            <AppButton onPress={onClose} mode="text" disabled={loading}>
-              <View style={styles.buttonIconRow}>
-                <MaterialIcons name="cancel" size={20} color="#201e23ff" />
-                <Text style={{ color: "#201e23ff", fontSize: 17 }}>Cancel</Text>
-              </View>
-            </AppButton>
-            <AppButton
+        {/* Close button overlay */}
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={onClose}
+          activeOpacity={0.7}
+        >
+          <MaterialIcons name="close" size={24} color={colors.stone[100]} />
+        </TouchableOpacity>
+
+        <AppCard style={styles.card}>
+          {/* Header */}
+          <View style={styles.header}>
+            <MaterialIcons name="edit" size={24} color={colors.tea[400]} />
+            <Text style={[typography.h2, styles.title]}>Edit Profile</Text>
+          </View>
+
+          {/* Form Fields */}
+          <View style={styles.formContainer}>
+            <AppInput
+              label="Name"
+              value={name}
+              onChangeText={setName}
+              placeholder="Enter your name"
+              autoCapitalize="words"
+              style={styles.input}
+              inputStyle={styles.inputField}
+            />
+
+            <AppInput
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Enter your email"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={styles.input}
+              inputStyle={styles.inputField}
+            />
+
+            <AppInput
+              label="Phone"
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="Enter your phone number"
+              keyboardType="phone-pad"
+              style={styles.input}
+              inputStyle={styles.inputField}
+            />
+          </View>
+
+          {/* Save Button */}
+          <View style={styles.buttonContainer}>
+            <Selector
               onPress={() =>
                 onSave({
                   player_name: name,
@@ -91,16 +103,24 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   player_mobile: phone,
                 })
               }
-              mode="contained"
-              disabled={loading}
             >
-              <View style={styles.buttonIconRow}>
-                <MaterialIcons name="save" size={20} color="#ffffff" />
-                <Text style={{ color: "#ffffff" }}>Save</Text>
-              </View>
-            </AppButton>
+              <AppButton
+                title={loading ? "Saving..." : "Save Changes"}
+                onPress={() => {}}
+                variant="primary"
+                disabled={loading}
+                style={styles.centeredSaveButton}
+                icon={
+                  <MaterialIcons
+                    name="save"
+                    size={20}
+                    color={colors.ink[900]}
+                  />
+                }
+              />
+            </Selector>
           </View>
-        </Card>
+        </AppCard>
       </View>
     </Modal>
   );
@@ -109,33 +129,67 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(0, 0, 0, 0.9)", // Less transparent
     justifyContent: "center",
     alignItems: "center",
+    padding: 20,
+  },
+  closeButton: {
+    position: "absolute",
+    top: 60,
+    right: 30,
+    zIndex: 10,
+    backgroundColor: colors.ink[800] + "CC",
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.tea[400],
   },
   card: {
-    width: "90%",
-    padding: 20,
-    borderRadius: 16,
+    width: "100%",
+    maxWidth: 400,
+    maxHeight: "80%",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
+    gap: 12,
   },
   title: {
-    marginBottom: 16,
+    color: colors.stone[100],
     textAlign: "center",
   },
+  formContainer: {
+    marginBottom: 24,
+  },
   input: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  buttonRow: {
+  inputField: {
+    backgroundColor: colors.ink[800], // Slightly lighter than ink[900]
+    borderColor: colors.tea[400], // Subtle tea green border
+    borderWidth: 1,
+    color: colors.stone[100], // Brighter text
+  },
+  buttonContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  centeredSaveButton: {
+    minWidth: 200,
+  },
+  buttonIconRow: {
     flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 12,
-    gap: 10,
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  button: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  buttonIconRow: { flexDirection: "row", alignItems: "center", gap: 4 },
 });
 
 export default EditProfileModal;

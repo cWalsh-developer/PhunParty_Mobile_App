@@ -1,9 +1,9 @@
+import { AppButton, AppCard } from "@/assets/components";
+import { colors, layoutStyles, typography } from "@/assets/theme";
 import Entypo from "@expo/vector-icons/Entypo";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { CameraView } from "expo-camera";
-import React from "react";
-import { StyleSheet, View } from "react-native";
-import { IconButton, Text } from "react-native-paper";
-import AppButton from "./AppButton";
+import { Text, TouchableOpacity, View } from "react-native";
 import Selector from "./Selector";
 
 interface QRScannerProps {
@@ -25,115 +25,189 @@ export default function QRScanner({
   hasPermission,
   handleBarCodeScanned,
 }: QRScannerProps) {
-  if (hasPermission === null) return <Text>Requesting permission...</Text>;
-  if (hasPermission === false) return <Text>No camera access</Text>;
+  if (hasPermission === null) {
+    return (
+      <View style={[layoutStyles.screen, layoutStyles.container]}>
+        <Text style={typography.body}>Requesting camera permission...</Text>
+      </View>
+    );
+  }
+
+  if (hasPermission === false) {
+    return (
+      <View style={[layoutStyles.screen, layoutStyles.container]}>
+        <AppCard style={{ alignItems: "center" }}>
+          <Ionicons
+            name="camera-outline"
+            size={48}
+            color={colors.stone[400]}
+            style={{ marginBottom: 16 }}
+          />
+          <Text
+            style={[typography.h3, { marginBottom: 8, textAlign: "center" }]}
+          >
+            Camera Access Required
+          </Text>
+          <Text style={[typography.bodyMuted, { textAlign: "center" }]}>
+            Please enable camera access in your device settings to scan QR codes
+          </Text>
+        </AppCard>
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
+    <View style={layoutStyles.screen}>
       {!showCamera ? (
-        <>
-          <View style={styles.heading}>
-            <Text style={styles.headingText} variant="headlineMedium">
-              Welcome, {userName || "Player"}!
+        <View style={[layoutStyles.container, { justifyContent: "center" }]}>
+          {/* Welcome Header */}
+          <View style={{ alignItems: "center", marginBottom: 48 }}>
+            <Text
+              style={[typography.h1, { textAlign: "center", marginBottom: 8 }]}
+            >
+              Welcome,{"\n"}
+              <Text style={{ color: colors.tea[400] }}>{userName}!</Text>
+            </Text>
+            <Text style={[typography.bodyMuted, { textAlign: "center" }]}>
+              Ready to join the fun? Scan a game QR code to get started
             </Text>
           </View>
-          <View style={styles.textView}>
-            <Text style={{ marginBottom: 20, textAlign: "center" }}>
-              Press "Join Game" below to scan the QR code and enter the game
+
+          {/* Join Game Card */}
+          <AppCard style={{ alignItems: "center", marginBottom: 24 }}>
+            <Entypo
+              name="game-controller"
+              size={64}
+              color={colors.tea[400]}
+              style={{ marginBottom: 24 }}
+            />
+            <Text
+              style={[typography.h2, { marginBottom: 16, textAlign: "center" }]}
+            >
+              Join Game
+            </Text>
+            <Text
+              style={[
+                typography.body,
+                { textAlign: "center", marginBottom: 32 },
+              ]}
+            >
+              Tap the button below to open your camera and scan the host's QR
+              code
             </Text>
             <Selector
               onPress={() => {
-                setShowCamera(true), setScanned(false);
+                setShowCamera(true);
+                setScanned(false);
               }}
             >
-              <AppButton onPress={() => {}} mode="contained">
-                <View style={styles.buttonIconRow}>
-                  <Entypo name="game-controller" size={20} color="white" />
-                  <Text style={{ color: "white" }}>Join Game</Text>
-                </View>
-              </AppButton>
+              <AppButton
+                title="Start Camera"
+                onPress={() => {}}
+                variant="primary"
+                style={{ paddingHorizontal: 32 }}
+                icon={
+                  <Ionicons name="camera" size={20} color={colors.ink[900]} />
+                }
+              />
             </Selector>
-          </View>
-        </>
+          </AppCard>
+        </View>
       ) : (
         <>
+          {/* Camera View */}
           <CameraView
             onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-            style={StyleSheet.absoluteFillObject}
+            style={{ flex: 1 }}
             barcodeScannerSettings={{
               barcodeTypes: ["qr"],
             }}
           />
+
+          {/* Close Button */}
           <View
-            style={{ position: "absolute", top: 40, right: 20, zIndex: 20 }}
+            style={{
+              position: "absolute",
+              top: 60,
+              right: 20,
+              zIndex: 20,
+            }}
           >
-            <IconButton
-              icon="close"
-              size={18}
+            <Selector
               onPress={() => {
                 setShowCamera(false);
                 setScanned(false);
               }}
-              style={{ backgroundColor: "white", elevation: 2 }}
-              iconColor="#201e23ff"
-            />
+            >
+              <TouchableOpacity
+                style={{
+                  backgroundColor: colors.ink[800],
+                  borderRadius: 25,
+                  width: 50,
+                  height: 50,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 2,
+                  borderColor: colors.tea[400],
+                }}
+              >
+                <Ionicons name="close" size={24} color={colors.stone[100]} />
+              </TouchableOpacity>
+            </Selector>
           </View>
-          <View style={styles.view} />
+
+          {/* Scanning Frame */}
+          <View
+            style={{
+              position: "absolute",
+              top: "25%",
+              left: "15%",
+              width: "70%",
+              height: "30%",
+              borderWidth: 3,
+              borderColor: colors.tea[400],
+              borderRadius: 12,
+              zIndex: 10,
+            }}
+          />
+
+          {/* Instructions */}
+          <View
+            style={{
+              position: "absolute",
+              bottom: 100,
+              left: 20,
+              right: 20,
+              alignItems: "center",
+              zIndex: 10,
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: `${colors.ink[800]}CC`,
+                paddingHorizontal: 24,
+                paddingVertical: 16,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: colors.tea[400],
+              }}
+            >
+              <Text
+                style={[
+                  typography.body,
+                  {
+                    textAlign: "center",
+                    color: colors.stone[100],
+                    fontWeight: "600",
+                  },
+                ]}
+              >
+                Position the QR code within the frame
+              </Text>
+            </View>
+          </View>
         </>
       )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  button: {
-    position: "absolute",
-    bottom: 20,
-    left: 20,
-    right: 20,
-  },
-  view: {
-    position: "absolute",
-    top: "35%",
-    left: "15%",
-    width: "70%",
-    height: "30%",
-    borderWidth: 3,
-    borderColor: "#fefefeff",
-    borderRadius: 12,
-    zIndex: 10,
-  },
-  textView: {
-    position: "absolute",
-    top: "50%",
-    left: "10%",
-    width: "80%",
-    padding: 10,
-    textAlign: "center",
-    color: "#fefefeff",
-    fontSize: 16,
-    fontWeight: "bold",
-    zIndex: 10,
-  },
-  heading: {
-    position: "absolute",
-    top: 50,
-    left: 20,
-    right: 20,
-    alignItems: "center",
-    zIndex: 20,
-  },
-  headingText: {
-    color: "#201e23ff",
-    fontSize: 24,
-    textAlign: "center",
-  },
-  buttonIconRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-});

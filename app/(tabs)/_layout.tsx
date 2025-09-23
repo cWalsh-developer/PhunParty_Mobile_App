@@ -1,15 +1,30 @@
+import { colors } from "@/assets/theme";
 import FontAwesom from "@expo/vector-icons/FontAwesome";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Tabs } from "expo-router";
+
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: "#ffffffff",
-        tabBarActiveBackgroundColor: "#201e23ff",
-        tabBarInactiveTintColor: "#201e23ff",
-        tabBarStyle: { height: 105 },
-        tabBarLabelStyle: { fontSize: 12, marginBottom: 5 },
+        tabBarActiveTintColor: colors.tea[400],
+        tabBarActiveBackgroundColor: colors.ink[900],
+        tabBarInactiveTintColor: colors.stone[400],
+        tabBarStyle: {
+          height: 105,
+          backgroundColor: colors.stone[950],
+          borderTopColor: colors.ink[800],
+          borderTopWidth: 1,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          marginBottom: 5,
+          fontWeight: "600",
+        },
+        headerStyle: {
+          backgroundColor: colors.stone[950],
+        },
+        headerTintColor: colors.stone[100],
       }}
     >
       <Tabs.Screen
