@@ -1,7 +1,14 @@
+import { AppButton, AppCard, AppInput } from "@/assets/components";
+import { colors, layoutStyles, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
-import { Text, TextInput } from "react-native-paper";
-import AppButton from "./AppButton";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import Selector from "./Selector";
 
 interface NewPasswordFormProps {
@@ -20,56 +27,115 @@ export default function NewPasswordForm({
   onSubmit,
 }: NewPasswordFormProps) {
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
-    >
-      <View style={styles.content}>
-        <Text style={styles.title} variant="headlineMedium">
-          Set New Password
-        </Text>
-        <TextInput
-          label="New Password"
-          value={password}
-          onChangeText={onPasswordChange}
-          outlineColor="#201e23ff"
-          activeOutlineColor="#201e23ff"
-          mode="outlined"
-          secureTextEntry
-          style={styles.input}
-        />
-        <TextInput
-          label="Confirm Password"
-          value={confirmPassword}
-          onChangeText={onConfirmPasswordChange}
-          outlineColor="#201e23ff"
-          activeOutlineColor="#201e23ff"
-          mode="outlined"
-          secureTextEntry
-          style={styles.input}
-        />
-        <Selector onPress={onSubmit}>
-          <AppButton mode="contained" onPress={() => {}} style={styles.button}>
-            <MaterialIcons
-              name="lock-reset"
-              size={20}
-              color="white"
-              style={{ marginRight: 8 }}
-            />
-            Set New Password
-          </AppButton>
-        </Selector>
-      </View>
-    </KeyboardAvoidingView>
+    <View style={[layoutStyles.screen, layoutStyles.container]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.content}>
+            {/* Header */}
+            <View style={styles.header}>
+              <MaterialIcons
+                name="lock-reset"
+                size={48}
+                color={colors.tea[400]}
+              />
+              <Text style={[typography.h1, styles.title]}>
+                Set New Password
+              </Text>
+            </View>
+
+            {/* Form Card */}
+            <AppCard style={styles.formCard}>
+              <AppInput
+                label="New Password"
+                value={password}
+                onChangeText={onPasswordChange}
+                placeholder="Enter your new password"
+                secureTextEntry
+                style={styles.input}
+                inputStyle={styles.inputField}
+              />
+
+              <AppInput
+                label="Confirm Password"
+                value={confirmPassword}
+                onChangeText={onConfirmPasswordChange}
+                placeholder="Confirm your new password"
+                secureTextEntry
+                style={styles.input}
+                inputStyle={styles.inputField}
+              />
+
+              <Selector onPress={onSubmit}>
+                <AppButton
+                  title="Set New Password"
+                  onPress={() => {}}
+                  variant="primary"
+                  disabled={
+                    !(
+                      password &&
+                      confirmPassword &&
+                      password === confirmPassword
+                    )
+                  }
+                  style={styles.button}
+                  icon={
+                    <MaterialIcons
+                      name="lock-reset"
+                      size={20}
+                      color={
+                        password &&
+                        confirmPassword &&
+                        password === confirmPassword
+                          ? colors.ink[900]
+                          : colors.stone[400]
+                      }
+                    />
+                  }
+                  iconPosition="left"
+                />
+              </Selector>
+            </AppCard>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  content: {
     flex: 1,
+    justifyContent: "center",
+    padding: 20,
   },
-  content: { flex: 1, justifyContent: "center", padding: 16 },
-  title: { textAlign: "center", marginBottom: 16 },
-  input: { marginBottom: 16 },
-  button: { marginTop: 8, backgroundColor: "#201e23ff" },
+  header: {
+    alignItems: "center",
+    marginBottom: 32,
+  },
+  title: {
+    textAlign: "center",
+    marginTop: 16,
+    color: colors.tea[400], // PhunParty tea green theme color
+  },
+  formCard: {
+    padding: 24,
+  },
+  input: {
+    marginBottom: 16,
+  },
+  inputField: {
+    backgroundColor: colors.ink[800], // Matches EditProfileModal
+    borderColor: colors.tea[400], // Tea green border
+    borderWidth: 1,
+    color: colors.stone[100], // Bright text
+  },
+  button: {
+    marginTop: 16,
+  },
 });

@@ -37,12 +37,22 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <UserProvider>
-        <Stack>
-          <Stack.Screen name="login" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="resetPassword" options={{ headerShown: false }} />
-          <Stack.Screen name="newPassword" options={{ headerShown: false }} />
-        </Stack>
+        <View style={{ flex: 1, backgroundColor: colors.ink[900] }}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: colors.ink[900] },
+            }}
+          >
+            <Stack.Screen name="login" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="resetPassword"
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen name="newPassword" options={{ headerShown: false }} />
+          </Stack>
+        </View>
       </UserProvider>
     </ThemeProvider>
   );

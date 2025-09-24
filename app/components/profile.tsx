@@ -3,7 +3,7 @@ import { AppButton, AppCard } from "@/assets/components";
 import { colors, layoutStyles, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useContext } from "react";
-import { Text, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 import Selector from "./Selector";
 
 interface ProfileScreenProps {
@@ -23,12 +23,34 @@ export default function ProfileScreen({
     <View style={[layoutStyles.screen, layoutStyles.container]}>
       {/* Header */}
       <View style={{ alignItems: "center", marginBottom: 32 }}>
-        <MaterialIcons
-          name="account-circle"
-          size={80}
-          color={colors.tea[400]}
-          style={{ marginBottom: 16 }}
-        />
+        <View style={{ position: "relative", alignItems: "center" }}>
+          <MaterialIcons
+            name="account-circle"
+            size={80}
+            color={colors.tea[400]}
+            style={{ marginBottom: 16 }}
+          />
+
+          {/* Edit/Add Photo Icon - Simple Overlay */}
+          <Selector onPress={() => console.log("Photo action pressed")}>
+            <TouchableOpacity
+              style={{
+                position: "absolute",
+                bottom: 15,
+                right: -70,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <MaterialIcons name="add" size={16} color={colors.stone[100]} />
+              <Text style={[typography.small, { color: colors.stone[100] }]}>
+                Add Photo
+              </Text>
+            </TouchableOpacity>
+          </Selector>
+        </View>
+
         <Text style={[typography.h1, { textAlign: "center" }]}>
           Your Profile
         </Text>

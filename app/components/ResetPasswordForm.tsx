@@ -216,7 +216,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({
                 variant="primary"
                 disabled={
                   loading ||
-                  (!isPressed && phone.length === 0) ||
+                  (!isPressed && phone.length < 11) ||
                   (isPressed && code.length < 6)
                 }
                 style={{ marginBottom: 16 }}
