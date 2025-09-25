@@ -126,7 +126,10 @@ export const updatePassword = async (
   }
 };
 
-const verifyCurrentPassword = async (email: string, password: string): Promise<boolean> => {
+const verifyCurrentPassword = async (
+  email: string,
+  password: string
+): Promise<boolean> => {
   const result = await API.post(
     AuthenticationEndpoint,
     {
@@ -158,7 +161,10 @@ export const changePassword = async (
     throw new Error("Unable to retrieve user email for verification");
   }
 
-  const isCurrentPasswordValid = await verifyCurrentPassword(userEmail, currentPassword);
+  const isCurrentPasswordValid = await verifyCurrentPassword(
+    userEmail,
+    currentPassword
+  );
 
   if (!isCurrentPasswordValid) {
     return {
