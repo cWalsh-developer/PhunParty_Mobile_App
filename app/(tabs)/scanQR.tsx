@@ -1,7 +1,7 @@
 import { UserContext } from "@/assets/authentication-storage/authContext";
 import { createUserContext } from "@/assets/authentication-storage/authenticationLogic";
 import { Camera } from "expo-camera";
-import React, { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import QRScanner from "../components/QRScanner";
 export default function QRScannerScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
@@ -24,7 +24,7 @@ export default function QRScannerScreen() {
 
   return (
     <QRScanner
-      userName={user.player_name || "Player"}
+      userName={user?.player_name || "Player"}
       showCamera={showCamera}
       setShowCamera={setShowCamera}
       scanned={scanned}

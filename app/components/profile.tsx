@@ -20,6 +20,23 @@ export default function ProfileScreen({
   const [isPhotoSheetVisible, setIsPhotoSheetVisible] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
 
+  // Early return if user is not loaded yet
+  if (!user) {
+    return (
+      <View
+        style={[
+          layoutStyles.screen,
+          layoutStyles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <Text style={[typography.body, { color: colors.stone[300] }]}>
+          Loading...
+        </Text>
+      </View>
+    );
+  }
+
   const handleImageSelected = (imageUri: string) => {
     setProfileImage(imageUri);
     // Here you would typically upload the image to your server

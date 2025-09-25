@@ -6,8 +6,12 @@ import { Alert } from "react-native";
 import dataAccess from "../../databaseAccess/dataAccess";
 import ChangePasswordModal from "../components/ChangePasswordModal";
 import EditProfileModal from "../components/EditProfileModal";
+import NotificationSettingsScreen from "../components/NotificationSettingsScreen";
+import PrivacySettingsScreen from "../components/PrivacySettingsScreen";
 import ProfileScreen from "../components/profile";
 import SettingsScreen from "../components/SettingsScreen";
+
+type ScreenType = "profile" | "settings" | "notifications" | "privacy";
 
 export default function ProfileTab() {
   const router = useRouter();
@@ -15,9 +19,7 @@ export default function ProfileTab() {
   const [editVisible, setEditVisible] = useState(false);
   const [changePasswordVisible, setChangePasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [currentScreen, setCurrentScreen] = useState<"profile" | "settings">(
-    "profile"
-  );
+  const [currentScreen, setCurrentScreen] = useState<ScreenType>("profile");
 
   const handleEditProfile = () => {
     setEditVisible(true);
@@ -37,13 +39,11 @@ export default function ProfileTab() {
   };
 
   const handlePrivacySettings = () => {
-    // TODO: Implement privacy settings
-    Alert.alert("Privacy Settings", "Privacy settings coming soon!");
+    setCurrentScreen("privacy");
   };
 
   const handleNotificationSettings = () => {
-    // TODO: Implement notification settings
-    Alert.alert("Notifications", "Notification settings coming soon!");
+    setCurrentScreen("notifications");
   };
 
   const handleDeleteAccount = async () => {
@@ -58,18 +58,38 @@ export default function ProfileTab() {
         {
           text: "Delete",
           onPress: async () => {
-            const playerId = user?.player_id;
-            if (!playerId) throw new Error("No user ID");
-            const success = await dataAccess.deletePlayer(playerId);
-            if (!success) throw new Error("API delete failed");
-            setUser({
-              player_id: null,
-              player_name: null,
-              player_mobile: null,
-              player_email: null,
-            });
-            await removeToken();
-            router.replace("/login");
+            try {
+              const playerId = user?.player_id;
+              if (!playerId) {
+                Alert.alert(
+                  "Error",
+                  "User ID not found. Please try logging out and back in."
+                );
+                return;
+              }
+              const success = await dataAccess.deletePlayer(playerId);
+              if (!success) {
+                Alert.alert(
+                  "Error",
+                  "Failed to delete account. Please try again."
+                );
+                return;
+              }
+              setUser({
+                player_id: null,
+                player_name: null,
+                player_mobile: null,
+                player_email: null,
+              });
+              await removeToken();
+              router.replace("/login");
+            } catch (error) {
+              console.error("Delete account error:", error);
+              Alert.alert(
+                "Error",
+                "Failed to delete account. Please try again."
+              );
+            }
           },
         },
       ]
@@ -84,13 +104,25 @@ export default function ProfileTab() {
     setLoading(true);
     try {
       const playerId = user?.player_id;
-      if (!playerId) throw new Error("No user ID");
+      if (!playerId) {
+        Alert.alert(
+          "Error",
+          "User ID not found. Please try logging out and back in."
+        );
+        setLoading(false);
+        return;
+      }
       const success = await dataAccess.updatePlayer(playerId, data);
-      if (!success) throw new Error("API update failed");
+      if (!success) {
+        Alert.alert("Error", "Failed to update profile. Please try again.");
+        setLoading(false);
+        return;
+      }
       setUser((prev: any) => ({ ...prev, ...data }));
       setEditVisible(false);
-    } catch (e) {
-      Alert.alert("Error", "Failed to update profile.");
+    } catch (error) {
+      console.error("Update profile error:", error);
+      Alert.alert("Error", "Failed to update profile. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -118,6 +150,11 @@ export default function ProfileTab() {
     ]);
   };
 
+  // Early return if user is not loaded yet
+  if (!user) {
+    return null; // or a loading screen
+  }
+
   return (
     <>
       {currentScreen === "profile" ? (
@@ -125,7 +162,7 @@ export default function ProfileTab() {
           onEditProfile={handleEditProfile}
           onNavigateToSettings={handleNavigateToSettings}
         />
-      ) : (
+      ) : currentScreen === "settings" ? (
         <SettingsScreen
           onBack={handleBackToProfile}
           onLogout={handleLogout}
@@ -134,6 +171,12 @@ export default function ProfileTab() {
           onPrivacySettings={handlePrivacySettings}
           onNotificationSettings={handleNotificationSettings}
         />
+      ) : currentScreen === "notifications" ? (
+        <NotificationSettingsScreen
+          onBack={() => setCurrentScreen("settings")}
+        />
+      ) : (
+        <PrivacySettingsScreen onBack={() => setCurrentScreen("settings")} />
       )}
 
       <EditProfileModal

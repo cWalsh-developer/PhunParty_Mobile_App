@@ -1,6 +1,6 @@
 import { UserContext } from "@/assets/authentication-storage/authContext";
 import { changePassword } from "@/assets/authentication-storage/authenticationLogic";
-import { AppButton, AppCard, AppInput } from "@/assets/components";
+import { AppButton, AppCard, AppInput, useToast } from "@/assets/components";
 import { colors, layoutStyles, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useContext, useState } from "react";
@@ -27,6 +27,7 @@ export default function ChangePasswordModal({
   onClose,
 }: ChangePasswordModalProps) {
   const { user, setUser } = useContext(UserContext)!;
+  const { showToast } = useToast();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -62,7 +63,12 @@ export default function ChangePasswordModal({
   const handleChangePassword = async () => {
     if (!validatePasswords()) return;
 
-    // Check if user has phone number
+    // Check if user exists and has phone number
+    if (!user) {
+      Alert.alert("Error", "User not found. Please log in again.");
+      return;
+    }
+
     const phoneNumber = user.player_mobile;
     if (!phoneNumber) {
       Alert.alert(
@@ -82,14 +88,13 @@ export default function ChangePasswordModal({
       );
 
       if (result.success) {
-        Alert.alert("Success", result.message, [
-          { text: "OK", onPress: handleClose },
-        ]);
+        showToast("Password changed successfully!", "success");
+        handleClose();
       } else {
-        Alert.alert("Error", result.message);
+        showToast(result.message, "error");
       }
     } catch (error) {
-      Alert.alert("Error", "Failed to change password. Please try again.");
+      showToast("Failed to change password. Please try again.", "error");
     } finally {
       setLoading(false);
     }
