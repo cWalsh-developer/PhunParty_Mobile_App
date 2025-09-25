@@ -30,7 +30,7 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
             photoUrl
           );
           // Convert SVG to PNG for React Native compatibility
-          const pngUrl = photoUrl.replace('/svg?', '/png?');
+          const pngUrl = photoUrl.replace("/svg?", "/png?");
           console.log("AuthenticatedImage: Converted to PNG URL:", pngUrl);
           setImageSource(pngUrl);
           return;
