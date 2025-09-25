@@ -1,20 +1,49 @@
 import { UserContext } from "@/assets/authentication-storage/authContext";
 import { removeToken } from "@/assets/authentication-storage/authStorage";
 import { useRouter } from "expo-router";
-import React, { useContext, useState } from "react";
+import { useContext, useState } from "react";
 import { Alert } from "react-native";
 import dataAccess from "../../databaseAccess/dataAccess";
+import ChangePasswordModal from "../components/ChangePasswordModal";
 import EditProfileModal from "../components/EditProfileModal";
 import ProfileScreen from "../components/profile";
+import SettingsScreen from "../components/SettingsScreen";
 
 export default function ProfileTab() {
   const router = useRouter();
   const { user, setUser } = useContext(UserContext)!;
   const [editVisible, setEditVisible] = useState(false);
+  const [changePasswordVisible, setChangePasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [currentScreen, setCurrentScreen] = useState<"profile" | "settings">(
+    "profile"
+  );
 
   const handleEditProfile = () => {
     setEditVisible(true);
+  };
+
+  const handleNavigateToSettings = () => {
+    setCurrentScreen("settings");
+  };
+
+  const handleBackToProfile = () => {
+    setCurrentScreen("profile");
+  };
+
+  // Settings screen handlers
+  const handleChangePassword = () => {
+    setChangePasswordVisible(true);
+  };
+
+  const handlePrivacySettings = () => {
+    // TODO: Implement privacy settings
+    Alert.alert("Privacy Settings", "Privacy settings coming soon!");
+  };
+
+  const handleNotificationSettings = () => {
+    // TODO: Implement notification settings
+    Alert.alert("Notifications", "Notification settings coming soon!");
   };
 
   const handleDeleteAccount = async () => {
@@ -91,17 +120,33 @@ export default function ProfileTab() {
 
   return (
     <>
-      <ProfileScreen
-        onEditProfile={handleEditProfile}
-        onDeleteAccount={handleDeleteAccount}
-        onLogout={handleLogout}
-      />
+      {currentScreen === "profile" ? (
+        <ProfileScreen
+          onEditProfile={handleEditProfile}
+          onNavigateToSettings={handleNavigateToSettings}
+        />
+      ) : (
+        <SettingsScreen
+          onBack={handleBackToProfile}
+          onLogout={handleLogout}
+          onDeleteAccount={handleDeleteAccount}
+          onChangePassword={handleChangePassword}
+          onPrivacySettings={handlePrivacySettings}
+          onNotificationSettings={handleNotificationSettings}
+        />
+      )}
+
       <EditProfileModal
         visible={editVisible}
         onClose={() => setEditVisible(false)}
         user={user}
         onSave={handleSaveProfile}
         loading={loading}
+      />
+
+      <ChangePasswordModal
+        visible={changePasswordVisible}
+        onClose={() => setChangePasswordVisible(false)}
       />
     </>
   );

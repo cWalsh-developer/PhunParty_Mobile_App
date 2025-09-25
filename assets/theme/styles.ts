@@ -9,13 +9,14 @@ export const layoutStyles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingVertical: 32,
+    paddingVertical: 60,
   },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 16,
+    paddingBottom: 100,
   },
 });
 

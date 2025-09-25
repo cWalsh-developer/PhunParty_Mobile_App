@@ -126,6 +126,71 @@ export const updatePassword = async (
   }
 };
 
+const verifyCurrentPassword = async (email: string, password: string): Promise<boolean> => {
+  const result = await API.post(
+    AuthenticationEndpoint,
+    {
+      player_email: email,
+      password: password,
+    },
+    false
+  );
+
+  return result.isSuccess;
+};
+
+export const changePassword = async (
+  currentPassword: string,
+  newPassword: string,
+  phoneNumber: string,
+  setUser: (user: any) => void
+) => {
+  const token = await getToken();
+  if (!token) {
+    throw new Error("No authentication token found");
+  }
+
+  const decodedToken = decodeToken(token);
+  const currentUser = await dataAccess.getPlayerById(decodedToken?.sub);
+  const userEmail = currentUser?.player_email;
+
+  if (!userEmail) {
+    throw new Error("Unable to retrieve user email for verification");
+  }
+
+  const isCurrentPasswordValid = await verifyCurrentPassword(userEmail, currentPassword);
+
+  if (!isCurrentPasswordValid) {
+    return {
+      success: false,
+      message: "Current password is incorrect",
+    };
+  }
+
+  const result = await API.put(
+    PasswordUpdateEndpoint,
+    {
+      phone_number: phoneNumber,
+      current_password: currentPassword,
+      new_password: newPassword,
+    },
+    true
+  );
+
+  if (result.isSuccess) {
+    if (result.result?.access_token) {
+      await SecureStore.setItemAsync("jwt", result.result.access_token);
+    }
+    await createUserContext(setUser);
+    return { success: true, message: "Password changed successfully" };
+  } else {
+    return {
+      success: false,
+      message: result.message || "Password change failed",
+    };
+  }
+};
+
 export const createUserContext = async (setUser: (user: any) => void) => {
   const token = await getToken();
   if (!token) return;
