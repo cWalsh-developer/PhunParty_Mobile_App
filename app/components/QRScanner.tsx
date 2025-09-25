@@ -92,8 +92,8 @@ export default function QRScanner({
                 { textAlign: "center", marginBottom: 32 },
               ]}
             >
-              Tap the button below to open your camera and scan the host's QR
-              code
+              Tap the button below to open your camera and scan the host&apos;s
+              QR code
             </Text>
             <Selector
               onPress={() => {
