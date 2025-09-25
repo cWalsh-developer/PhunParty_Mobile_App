@@ -80,6 +80,7 @@ export default function ProfileTab() {
                 player_name: null,
                 player_mobile: null,
                 player_email: null,
+                profile_photo_url: null,
               });
               await removeToken();
               router.replace("/login");
@@ -143,6 +144,7 @@ export default function ProfileTab() {
             player_name: null,
             player_mobile: null,
             player_email: null,
+            profile_photo_url: null,
           });
           router.replace("/login");
         },

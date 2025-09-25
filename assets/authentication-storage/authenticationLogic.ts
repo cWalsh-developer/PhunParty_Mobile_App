@@ -207,5 +207,6 @@ export const createUserContext = async (setUser: (user: any) => void) => {
     player_name: currentUser.player_name,
     player_mobile: currentUser.player_mobile,
     player_email: currentUser.player_email,
+    profile_photo_url: currentUser.profile_photo_url || null,
   });
 };

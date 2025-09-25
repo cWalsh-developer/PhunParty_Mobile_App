@@ -3,7 +3,8 @@ import { AppCard } from "@/assets/components";
 import { colors, layoutStyles, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useContext, useState } from "react";
-import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import AuthenticatedImage from "./AuthenticatedImage";
 import PhotoUploadActionSheet from "./PhotoUploadActionSheet";
 import Selector from "./Selector";
 
@@ -16,12 +17,29 @@ export default function ProfileScreen({
   onEditProfile,
   onNavigateToSettings,
 }: ProfileScreenProps) {
-  const { user } = useContext(UserContext)!;
+  const userContext = useContext(UserContext);
   const [isPhotoSheetVisible, setIsPhotoSheetVisible] = useState(false);
-  const [profileImage, setProfileImage] = useState<string | null>(null);
+
+  if (!userContext) {
+    return (
+      <View
+        style={[
+          layoutStyles.screen,
+          layoutStyles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <Text style={[typography.body, { color: colors.stone[300] }]}>
+          User context not available
+        </Text>
+      </View>
+    );
+  }
+
+  const { user, setUser } = userContext;
 
   // Early return if user is not loaded yet
-  if (!user) {
+  if (!user || !user.player_id) {
     return (
       <View
         style={[
@@ -37,10 +55,28 @@ export default function ProfileScreen({
     );
   }
 
+  console.log("Profile: Current user state:", {
+    player_id: user.player_id,
+    player_name: user.player_name,
+    profile_photo_url: user.profile_photo_url,
+    hasProfilePhoto: !!user.profile_photo_url,
+  });
+
   const handleImageSelected = (imageUri: string) => {
-    setProfileImage(imageUri);
-    // Here you would typically upload the image to your server
-    console.log("Profile image selected:", imageUri);
+    console.log(
+      "Profile: Image selected, updating user context with URI:",
+      imageUri
+    );
+    // Update the user context with the new profile photo URL
+    setUser((prevUser) => {
+      const updatedUser = {
+        ...prevUser,
+        profile_photo_url: imageUri,
+      };
+      console.log("Profile: Updated user context:", updatedUser);
+      return updatedUser;
+    });
+    console.log("Profile image updated:", imageUri);
   };
 
   return (
@@ -108,14 +144,28 @@ export default function ProfileScreen({
               borderColor: colors.ink[700],
             }}
           >
-            {profileImage ? (
-              <Image
-                source={{ uri: profileImage }}
+            {user.profile_photo_url ? (
+              <AuthenticatedImage
+                photoUrl={user.profile_photo_url}
                 style={{
                   width: "100%",
                   height: "100%",
                 }}
                 resizeMode="cover"
+                onLoad={() =>
+                  console.log(
+                    "Profile image loaded successfully:",
+                    user.profile_photo_url
+                  )
+                }
+                onError={(error) =>
+                  console.error(
+                    "Profile image failed to load:",
+                    error.nativeEvent.error,
+                    "URI:",
+                    user.profile_photo_url
+                  )
+                }
               />
             ) : (
               <View
@@ -159,7 +209,7 @@ export default function ProfileScreen({
               }}
             >
               <MaterialIcons
-                name={profileImage ? "edit" : "add"}
+                name={user.profile_photo_url ? "edit" : "add"}
                 size={18}
                 color={colors.ink[900]}
               />

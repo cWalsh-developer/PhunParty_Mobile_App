@@ -1,4 +1,4 @@
-import React, {
+import {
   createContext,
   Dispatch,
   ReactNode,
@@ -11,6 +11,7 @@ interface UserType {
   player_name: string | null;
   player_mobile: string | null;
   player_email: string | null;
+  profile_photo_url: string | null;
 }
 
 interface UserContextType {
@@ -28,6 +29,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     player_name: null,
     player_mobile: null,
     player_email: null,
+    profile_photo_url: null,
   });
 
   return (
