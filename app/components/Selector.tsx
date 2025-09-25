@@ -1,5 +1,5 @@
 import React from "react";
-import { Vibration } from "react-native";
+import { Platform, Vibration } from "react-native";
 
 interface SelectorProps {
   children: React.ReactElement<any>;
@@ -11,7 +11,9 @@ const Selector = ({ children, onPress, label }: SelectorProps) => {
   const handlePress = () => {
     if (label === "Logout" || label === "Delete Account") {
       Vibration.vibrate(400);
-    } else {
+    } else if (Platform.OS === "ios") {
+      null;
+    } else if (Platform.OS === "android") {
       Vibration.vibrate(25);
     }
     onPress && onPress();
