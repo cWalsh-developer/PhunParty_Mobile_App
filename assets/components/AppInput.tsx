@@ -44,9 +44,10 @@ export const AppInput: React.FC<AppInputProps> = ({
 
   const getInputStyle = () => {
     const baseStyles = [];
-    
+
     if (error) baseStyles.push(inputStyles.container, inputStyles.error);
-    else if (isFocused) baseStyles.push(inputStyles.container, inputStyles.focused);
+    else if (isFocused)
+      baseStyles.push(inputStyles.container, inputStyles.focused);
     else baseStyles.push(inputStyles.container);
 
     // Add horizontal scrolling styles if enabled
