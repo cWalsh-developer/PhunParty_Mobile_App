@@ -54,14 +54,14 @@ export class GameWebSocketService {
   private getWebSocketUrl(): string {
     // Try multiple possible API URL configurations
     const baseUrl =
-      Constants.expoConfig?.extra?.API_BASE_URL || 
+      Constants.expoConfig?.extra?.API_BASE_URL ||
       Constants.expoConfig?.extra?.API_URL ||
       "https://api.phun.party";
-    
-    console.log('Base API URL:', baseUrl);
+
+    console.log("Base API URL:", baseUrl);
     const wsUrl = baseUrl.replace(/^https?:\/\//, "wss://");
-    console.log('WebSocket URL base:', wsUrl);
-    
+    console.log("WebSocket URL base:", wsUrl);
+
     return wsUrl;
   }
 
@@ -72,86 +72,100 @@ export class GameWebSocketService {
 
     // Validate inputs
     if (!sessionCode || sessionCode.trim().length === 0) {
-      console.error('Invalid session code provided:', sessionCode);
-      this.onError?.('Invalid session code. Please scan a valid game QR code.');
+      console.error("Invalid session code provided:", sessionCode);
+      this.onError?.("Invalid session code. Please scan a valid game QR code.");
       return false;
     }
 
     if (!playerInfo || !playerInfo.player_name || !playerInfo.player_id) {
-      console.error('Invalid player info provided:', playerInfo);
-      this.onError?.('Invalid player information. Please check your profile.');
+      console.error("Invalid player info provided:", playerInfo);
+      this.onError?.("Invalid player information. Please check your profile.");
       return false;
     }
 
     this.sessionCode = sessionCode;
     this.playerInfo = playerInfo;
 
-    console.log(`Connecting to session: ${sessionCode} as player: ${playerInfo.player_name}`);
-    console.log('Base URL for WebSocket:', this.getWebSocketUrl());
-    
+    console.log(
+      `Connecting to session: ${sessionCode} as player: ${playerInfo.player_name}`
+    );
+    console.log("Base URL for WebSocket:", this.getWebSocketUrl());
+
     // Test if the WebSocket endpoint is reachable
     try {
-      const testUrl = this.getWebSocketUrl().replace('wss://', 'https://');
-      console.log('Testing HTTP endpoint accessibility:', testUrl);
-      
+      const testUrl = this.getWebSocketUrl().replace("wss://", "https://");
+      console.log("Testing HTTP endpoint accessibility:", testUrl);
+
       // Create timeout promise
-      const timeoutPromise = new Promise<null>((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout')), 5000)
+      const timeoutPromise = new Promise<null>((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout")), 5000)
       );
-      
-      const fetchPromise = fetch(`${testUrl}/health`, { 
-        method: 'GET'
+
+      const fetchPromise = fetch(`${testUrl}/health`, {
+        method: "GET",
       });
-      
-      const response = await Promise.race([fetchPromise, timeoutPromise]).catch(() => null);
-      
+
+      const response = await Promise.race([fetchPromise, timeoutPromise]).catch(
+        () => null
+      );
+
       if (response) {
-        console.log('HTTP endpoint is reachable, status:', (response as Response).status);
+        console.log(
+          "HTTP endpoint is reachable, status:",
+          (response as Response).status
+        );
       } else {
-        console.warn('HTTP endpoint test failed - continuing with WebSocket attempt');
+        console.warn(
+          "HTTP endpoint test failed - continuing with WebSocket attempt"
+        );
       }
     } catch (error) {
-      console.warn('Endpoint test failed:', error);
+      console.warn("Endpoint test failed:", error);
     }
 
     try {
       // Try both JWT token and API key for authentication
       const token = await SecureStore.getItemAsync("jwt");
       const apiKey = Constants.expoConfig?.extra?.API_KEY;
-      
-      console.log('Authentication check:', {
+
+      console.log("Authentication check:", {
         hasToken: !!token,
         hasApiKey: !!apiKey,
         tokenLength: token?.length,
       });
-      
+
       // Build the WebSocket URL with different auth approaches
       const baseWsUrl = `${this.getWebSocketUrl()}/ws/session/${sessionCode}`;
       const params = new URLSearchParams({
-        client_type: 'mobile',
+        client_type: "mobile",
         player_id: playerInfo.player_id,
         player_name: playerInfo.player_name,
       });
-      
+
       // Add player photo if available
       if (playerInfo.player_photo) {
-        params.append('player_photo', playerInfo.player_photo);
+        params.append("player_photo", playerInfo.player_photo);
       }
-      
+
       // Try JWT token first, then API key, then no auth
       if (token) {
-        params.append('token', token);
-        console.log('Using JWT token authentication');
+        params.append("token", token);
+        console.log("Using JWT token authentication");
       } else if (apiKey) {
-        params.append('api_key', apiKey);
-        console.log('Using API key authentication');
+        params.append("api_key", apiKey);
+        console.log("Using API key authentication");
       } else {
-        console.warn('No authentication method available - attempting unauthenticated connection');
+        console.warn(
+          "No authentication method available - attempting unauthenticated connection"
+        );
       }
-      
+
       const wsUrl = `${baseWsUrl}?${params.toString()}`;
-      console.log('Final WebSocket URL:', wsUrl.replace(/(token|api_key)=[^&]+/g, '$1=***'));
-      
+      console.log(
+        "Final WebSocket URL:",
+        wsUrl.replace(/(token|api_key)=[^&]+/g, "$1=***")
+      );
+
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
@@ -176,24 +190,30 @@ export class GameWebSocketService {
           code: event.code,
           reason: event.reason,
           wasClean: event.wasClean,
-          url: this.ws?.url?.replace(/(token|api_key)=[^&]+/g, '$1=***')
+          url: this.ws?.url?.replace(/(token|api_key)=[^&]+/g, "$1=***"),
         });
-        
+
         // Log specific error codes for debugging
         if (event.code === 1006) {
-          console.error('WebSocket closed unexpectedly (1006). Common causes:');
-          console.error('- Server rejected connection (wrong endpoint, auth failure)');
-          console.error('- Network/CORS issues');
-          console.error('- Server not responding');
-          console.error('- Invalid session code:', this.sessionCode);
+          console.error("WebSocket closed unexpectedly (1006). Common causes:");
+          console.error(
+            "- Server rejected connection (wrong endpoint, auth failure)"
+          );
+          console.error("- Network/CORS issues");
+          console.error("- Server not responding");
+          console.error("- Invalid session code:", this.sessionCode);
         } else if (event.code === 1002) {
-          console.error('WebSocket protocol error (1002) - Server rejected the connection');
+          console.error(
+            "WebSocket protocol error (1002) - Server rejected the connection"
+          );
         } else if (event.code === 1003) {
-          console.error('WebSocket unsupported data (1003)');
+          console.error("WebSocket unsupported data (1003)");
         } else if (event.code === 1011) {
-          console.error('WebSocket server error (1011) - Internal server error');
+          console.error(
+            "WebSocket server error (1011) - Internal server error"
+          );
         }
-        
+
         this.isConnected = false;
         this.onConnectionStatusChange?.(false);
         this.stopHeartbeat();
@@ -203,20 +223,26 @@ export class GameWebSocketService {
           event.code !== 1000 &&
           this.reconnectAttempts < this.maxReconnectAttempts
         ) {
-          console.log(`Scheduling reconnect attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts}`);
+          console.log(
+            `Scheduling reconnect attempt ${this.reconnectAttempts + 1}/${
+              this.maxReconnectAttempts
+            }`
+          );
           this.scheduleReconnect();
         }
       };
 
       this.ws.onerror = (error) => {
         console.error("WebSocket error:", error);
-        
+
         // Provide more specific error messages based on common issues
-        const token = this.ws?.url?.includes('token=');
+        const token = this.ws?.url?.includes("token=");
         if (!token) {
-          this.onError?.('Authentication required. Please login first.');
+          this.onError?.("Authentication required. Please login first.");
         } else {
-          this.onError?.('Connection error occurred. Please check your network and try again.');
+          this.onError?.(
+            "Connection error occurred. Please check your network and try again."
+          );
         }
       };
 
