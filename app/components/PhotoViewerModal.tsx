@@ -1,14 +1,14 @@
-import React from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import React from "react";
 import {
-  Modal,
-  View,
-  TouchableOpacity,
-  StyleSheet,
   Dimensions,
+  Modal,
   StatusBar,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { AuthenticatedImage } from './AuthenticatedImage';
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { AuthenticatedImage } from "./AuthenticatedImage";
 
 interface PhotoViewerModalProps {
   visible: boolean;
@@ -16,7 +16,7 @@ interface PhotoViewerModalProps {
   onClose: () => void;
 }
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
   visible,
@@ -60,12 +60,12 @@ const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
 const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   overlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
@@ -73,11 +73,11 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   closeButton: {
-    position: 'absolute',
+    position: "absolute",
     top: 50,
     right: 20,
     zIndex: 3,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
     borderRadius: 20,
     padding: 8,
   },

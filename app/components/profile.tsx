@@ -1,14 +1,14 @@
+import { PhotoService } from "@/assets/api/photoService";
 import { UserContext } from "@/assets/authentication-storage/authContext";
 import { AppCard } from "@/assets/components";
 import { colors, layoutStyles, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useContext, useState } from "react";
-import { ScrollView, Text, TouchableOpacity, View, Alert } from "react-native";
+import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { AuthenticatedImage } from "./AuthenticatedImage";
 import PhotoUploadActionSheet from "./PhotoUploadActionSheet";
 import PhotoViewerModal from "./PhotoViewerModal";
 import Selector from "./Selector";
-import { PhotoService } from "@/assets/api/photoService";
 
 interface ProfileScreenProps {
   onEditProfile: () => void;
@@ -102,7 +102,7 @@ export default function ProfileScreen({
                 Alert.alert("Error", "Player ID not found. Please try again.");
                 return;
               }
-              
+
               const success = await PhotoService.deletePhoto(user.player_id);
               if (success) {
                 // Update user context to remove photo
@@ -112,7 +112,10 @@ export default function ProfileScreen({
                 }));
                 console.log("Profile: Photo deleted successfully");
               } else {
-                Alert.alert("Error", "Failed to delete photo. Please try again.");
+                Alert.alert(
+                  "Error",
+                  "Failed to delete photo. Please try again."
+                );
               }
             } catch (error) {
               console.error("Profile: Error deleting photo:", error);
