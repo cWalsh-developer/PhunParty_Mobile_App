@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import DismissKeyboardWrapper from "./DismissKeyboardWrapper";
 import Selector from "./Selector";
 
 interface ResetPasswordFormProps {
@@ -57,7 +58,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({
   };
 
   return (
-    <View style={layoutStyles.screen}>
+    <DismissKeyboardWrapper style={layoutStyles.screen}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
@@ -258,7 +259,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({
           </AppCard>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </DismissKeyboardWrapper>
   );
 };
 

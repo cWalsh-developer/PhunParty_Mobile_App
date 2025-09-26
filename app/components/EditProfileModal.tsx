@@ -3,6 +3,7 @@ import { colors, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import React, { useState } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import DismissKeyboardWrapper from "./DismissKeyboardWrapper";
 import Selector from "./Selector";
 
 interface EditProfileModalProps {
@@ -43,6 +44,13 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.overlay}>
+        {/* Tap away to close overlay - covers entire screen */}
+        <TouchableOpacity
+          style={styles.tapAwayOverlay}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        
         {/* Close button overlay */}
         <TouchableOpacity
           style={styles.closeButton}
@@ -52,12 +60,15 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
           <MaterialIcons name="close" size={24} color={colors.stone[100]} />
         </TouchableOpacity>
 
-        <AppCard style={styles.card}>
-          {/* Header */}
-          <View style={styles.header}>
-            <MaterialIcons name="edit" size={24} color={colors.tea[400]} />
-            <Text style={[typography.h2, styles.title]}>Edit Profile</Text>
-          </View>
+        {/* Centered modal content with keyboard dismissal */}
+        <View style={styles.modalContent}>
+          <DismissKeyboardWrapper>
+          <AppCard style={styles.card}>
+            {/* Header */}
+            <View style={styles.header}>
+              <MaterialIcons name="edit" size={24} color={colors.tea[400]} />
+              <Text style={[typography.h2, styles.title]}>Edit Profile</Text>
+            </View>
 
           {/* Form Fields */}
           <View style={styles.formContainer}>
@@ -120,7 +131,9 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
               />
             </Selector>
           </View>
-        </AppCard>
+          </AppCard>
+          </DismissKeyboardWrapper>
+        </View>
       </View>
     </Modal>
   );
@@ -133,6 +146,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
+  },
+  tapAwayOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1,
+    backgroundColor: "transparent",
+  },
+  modalContent: {
+    justifyContent: "center",
+    alignItems: "center",
+    flex: 1,
+    zIndex: 2,
+    pointerEvents: "box-none", // Allow touch events to pass through to overlay
   },
   closeButton: {
     position: "absolute",
@@ -150,7 +179,7 @@ const styles = StyleSheet.create({
   },
   card: {
     width: "100%",
-    maxWidth: 400,
+    maxWidth: 450, // Increased from 400 to make card wider
     maxHeight: "80%",
   },
   header: {

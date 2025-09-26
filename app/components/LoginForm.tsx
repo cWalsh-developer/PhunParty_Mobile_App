@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import DismissKeyboardWrapper from "./DismissKeyboardWrapper";
 import Selector from "./Selector";
 
 interface LoginFormProps {
@@ -43,7 +44,7 @@ export default function LoginForm({
   handleReset,
 }: LoginFormProps) {
   return (
-    <View style={layoutStyles.screen}>
+    <DismissKeyboardWrapper style={layoutStyles.screen}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "position"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : -185}
@@ -199,6 +200,6 @@ export default function LoginForm({
           </AppCard>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </DismissKeyboardWrapper>
   );
 }

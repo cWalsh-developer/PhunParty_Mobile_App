@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
+import DismissKeyboardWrapper from "./DismissKeyboardWrapper";
 import Selector from "./Selector";
 
 interface NewPasswordFormProps {
@@ -27,7 +28,7 @@ export default function NewPasswordForm({
   onSubmit,
 }: NewPasswordFormProps) {
   return (
-    <View style={[layoutStyles.screen, layoutStyles.container]}>
+    <DismissKeyboardWrapper style={[layoutStyles.screen, layoutStyles.container]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
@@ -104,7 +105,7 @@ export default function NewPasswordForm({
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </DismissKeyboardWrapper>
   );
 }
 
