@@ -21,6 +21,8 @@ interface PhotoUploadActionSheetProps {
   isVisible: boolean;
   onClose: () => void;
   onImageSelected: (imageUri: string) => void;
+  onDeletePhoto?: () => void;
+  hasCurrentPhoto?: boolean;
   title?: string;
 }
 
@@ -30,6 +32,8 @@ export default function PhotoUploadActionSheet({
   isVisible,
   onClose,
   onImageSelected,
+  onDeletePhoto,
+  hasCurrentPhoto = false,
   title = "Choose Profile Photo",
 }: PhotoUploadActionSheetProps) {
   const [showAvatars, setShowAvatars] = useState(false);
@@ -152,6 +156,13 @@ export default function PhotoUploadActionSheet({
       showToast("Gallery error occurred", "error");
     }
     setIsUploading(false);
+  };
+
+  const deletePhoto = () => {
+    if (onDeletePhoto) {
+      onDeletePhoto();
+      onClose();
+    }
   };
 
   const selectAvatar = async (avatar: AvatarOption) => {
@@ -343,6 +354,16 @@ export default function PhotoUploadActionSheet({
                 color={colors.tea[400]}
                 disabled={isUploading}
               />
+
+              {hasCurrentPhoto && (
+                <ActionButton
+                  icon="delete"
+                  title="Delete Photo"
+                  onPress={deletePhoto}
+                  color={colors.red[500]}
+                  disabled={isUploading}
+                />
+              )}
 
               {isUploading && (
                 <View

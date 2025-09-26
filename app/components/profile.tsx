@@ -3,10 +3,12 @@ import { AppCard } from "@/assets/components";
 import { colors, layoutStyles, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useContext, useState } from "react";
-import { ScrollView, Text, TouchableOpacity, View } from "react-native";
-import AuthenticatedImage from "./AuthenticatedImage";
+import { ScrollView, Text, TouchableOpacity, View, Alert } from "react-native";
+import { AuthenticatedImage } from "./AuthenticatedImage";
 import PhotoUploadActionSheet from "./PhotoUploadActionSheet";
+import PhotoViewerModal from "./PhotoViewerModal";
 import Selector from "./Selector";
+import { PhotoService } from "@/assets/api/photoService";
 
 interface ProfileScreenProps {
   onEditProfile: () => void;
@@ -19,6 +21,8 @@ export default function ProfileScreen({
 }: ProfileScreenProps) {
   const userContext = useContext(UserContext);
   const [isPhotoSheetVisible, setIsPhotoSheetVisible] = useState(false);
+  const [isPhotoViewerVisible, setIsPhotoViewerVisible] = useState(false);
+  const [isDeletingPhoto, setIsDeletingPhoto] = useState(false);
 
   if (!userContext) {
     return (
@@ -79,6 +83,49 @@ export default function ProfileScreen({
     console.log("Profile image updated:", imageUri);
   };
 
+  const handleDeletePhoto = async () => {
+    Alert.alert(
+      "Delete Photo",
+      "Are you sure you want to delete your profile photo?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setIsDeletingPhoto(true);
+            try {
+              if (!user.player_id) {
+                Alert.alert("Error", "Player ID not found. Please try again.");
+                return;
+              }
+              
+              const success = await PhotoService.deletePhoto(user.player_id);
+              if (success) {
+                // Update user context to remove photo
+                setUser((prevUser) => ({
+                  ...prevUser,
+                  profile_photo_url: null,
+                }));
+                console.log("Profile: Photo deleted successfully");
+              } else {
+                Alert.alert("Error", "Failed to delete photo. Please try again.");
+              }
+            } catch (error) {
+              console.error("Profile: Error deleting photo:", error);
+              Alert.alert("Error", "Failed to delete photo. Please try again.");
+            } finally {
+              setIsDeletingPhoto(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <ScrollView
       style={[layoutStyles.screen, layoutStyles.container]}
@@ -132,7 +179,13 @@ export default function ProfileScreen({
           }}
         >
           {/* Profile Image Container */}
-          <View
+          <TouchableOpacity
+            onPress={() => {
+              if (user.profile_photo_url) {
+                setIsPhotoViewerVisible(true);
+              }
+            }}
+            activeOpacity={user.profile_photo_url ? 0.8 : 1}
             style={{
               position: "relative",
               width: 100,
@@ -184,7 +237,7 @@ export default function ProfileScreen({
                 />
               </View>
             )}
-          </View>
+          </TouchableOpacity>
 
           {/* Edit Photo Button - Bottom Right Corner */}
           <Selector onPress={() => setIsPhotoSheetVisible(true)}>
@@ -375,8 +428,19 @@ export default function ProfileScreen({
         isVisible={isPhotoSheetVisible}
         onClose={() => setIsPhotoSheetVisible(false)}
         onImageSelected={handleImageSelected}
+        onDeletePhoto={handleDeletePhoto}
+        hasCurrentPhoto={!!user.profile_photo_url}
         title="Choose Profile Photo"
       />
+
+      {/* Photo Viewer Modal */}
+      {user.profile_photo_url && (
+        <PhotoViewerModal
+          visible={isPhotoViewerVisible}
+          photoUri={user.profile_photo_url}
+          onClose={() => setIsPhotoViewerVisible(false)}
+        />
+      )}
     </ScrollView>
   );
 }

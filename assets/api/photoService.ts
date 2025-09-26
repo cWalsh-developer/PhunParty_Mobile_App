@@ -125,10 +125,18 @@ export class PhotoService {
   // Delete current photo
   static async deletePhoto(playerId: string): Promise<boolean> {
     try {
-      const response = await API.delete(`${playerId}/photo`);
-      return response.isSuccess;
+      console.log("PhotoService: Deleting photo for player:", playerId);
+      const response = await API.delete(`photos/${playerId}/photo`);
+      
+      if (response.isSuccess) {
+        console.log("PhotoService: Photo deleted successfully");
+        return true;
+      } else {
+        console.error("PhotoService: Failed to delete photo:", response.message);
+        return false;
+      }
     } catch (error) {
-      console.error("Error deleting photo:", error);
+      console.error("PhotoService: Error deleting photo:", error);
       return false;
     }
   }
@@ -244,14 +252,36 @@ export class PhotoService {
         JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)
       );
 
-      const result = response.status !== 204 ? await response.json() : null;
+      let result = null;
+      if (response.status !== 204) {
+        try {
+          const responseText = await response.text();
+          console.log("PhotoService: Raw response:", responseText);
+          
+          // Try to parse as JSON
+          try {
+            result = JSON.parse(responseText);
+          } catch (parseError) {
+            console.error("PhotoService: Failed to parse JSON response:", responseText.substring(0, 500));
+            result = { 
+              error: "Invalid response format", 
+              details: responseText.substring(0, 200) 
+            };
+          }
+        } catch (textError) {
+          console.error("PhotoService: Failed to read response text:", textError);
+          result = { error: "Failed to read response" };
+        }
+      }
       console.log("PhotoService: Upload response body:", result);
 
       return response.ok
         ? { isSuccess: true, result }
         : {
             isSuccess: false,
-            message: result?.detail || result?.message || "Upload failed",
+            message: response.status === 413 
+              ? "Image too large. Please try a smaller image or use lower quality."
+              : result?.detail || result?.message || "Upload failed",
           };
     } catch (error: any) {
       console.error("PhotoService: uploadFormData error:", error);
@@ -284,7 +314,7 @@ export class PhotoService {
       mediaTypes: "images" as any, // Use string value to avoid deprecation
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.8,
+      quality: 0.3, // Reduced from 0.8 to 0.3 for smaller file size
     });
 
     console.log("PhotoService: Camera result:", {
@@ -313,7 +343,7 @@ export class PhotoService {
       mediaTypes: "images" as any, // Use string value to avoid deprecation
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.8,
+      quality: 0.3, // Reduced from 0.8 to 0.3 for smaller file size
     });
 
     console.log("PhotoService: Gallery result:", {
