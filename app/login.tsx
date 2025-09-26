@@ -34,7 +34,6 @@ export default function Login() {
   const [isSignUp, setIsSignUp] = useState<boolean>(false);
 
   const toggleForm = () => {
-    console.log(AuthenticationEndpoint);
     setIsSignUp((prev) => !prev);
   };
 
@@ -42,7 +41,6 @@ export default function Login() {
 
   const handleLogin = async () => {
     const result = await login({ email, password }, setUser);
-    console.log(result);
     if (result) {
       setIsLoggedIn(true);
     }

@@ -67,18 +67,10 @@ const callFetch = async <T = any>(
   };
 
   try {
-    console.log("Making API call to:", url);
-    console.log("Headers:", JSON.stringify(headers, null, 2));
     const response = await fetch(url, requestObj);
-    console.log("Response status:", response.status);
-    console.log(
-      "Response headers:",
-      JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)
-    );
     const result = response.status !== 204 ? await response.json() : null;
 
     if (!response.ok) {
-      console.log("Error response body:", JSON.stringify(result, null, 2));
     }
 
     return response.ok

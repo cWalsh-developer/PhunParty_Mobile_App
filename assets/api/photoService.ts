@@ -23,16 +23,12 @@ export class PhotoService {
     imageUri: string
   ): Promise<PhotoUploadResponse | null> {
     try {
-      console.log("PhotoService: Starting photo upload for player:", playerId);
-      console.log("PhotoService: Image URI:", imageUri);
-
       // Create form data
       const formData = new FormData();
 
       // Get file extension from URI
       const uriParts = imageUri.split(".");
       const fileType = uriParts[uriParts.length - 1];
-      console.log("PhotoService: Detected file type:", fileType);
 
       // Create file object for FormData
       const fileObject: any = {
@@ -41,10 +37,8 @@ export class PhotoService {
         type: `image/${fileType === "jpg" ? "jpeg" : fileType}`,
       };
 
-      console.log("PhotoService: File object:", fileObject);
       formData.append("file", fileObject);
 
-      console.log("PhotoService: Making upload request...");
       // Make API call with FormData
       const response = await this.uploadFormData(
         `photos/upload/${playerId}`,
@@ -76,26 +70,12 @@ export class PhotoService {
     avatar: AvatarOption
   ): Promise<PhotoUploadResponse | null> {
     try {
-      console.log(
-        "PhotoService: Setting DiceBear avatar for player:",
-        playerId,
-        "avatar:",
-        avatar.name,
-        "style:",
-        avatar.style,
-        "seed:",
-        avatar.seed
-      );
-
       const response = await API.post(
         `photos/avatar/${playerId}?avatar_style=${avatar.style}&avatar_seed=${avatar.seed}`,
         {} // Empty body since we're using query parameters
       );
 
-      console.log("PhotoService: Set avatar response:", response);
-
       if (response.isSuccess) {
-        console.log("PhotoService: Avatar set successfully:", response.result);
         return {
           photo_url: response.result.photo_url,
           player_id: playerId,
@@ -125,11 +105,9 @@ export class PhotoService {
   // Delete current photo
   static async deletePhoto(playerId: string): Promise<boolean> {
     try {
-      console.log("PhotoService: Deleting photo for player:", playerId);
       const response = await API.delete(`photos/${playerId}/photo`);
 
       if (response.isSuccess) {
-        console.log("PhotoService: Photo deleted successfully");
         return true;
       } else {
         console.error(

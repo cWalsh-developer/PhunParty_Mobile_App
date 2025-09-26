@@ -25,13 +25,8 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
 
         // Check if this is a DiceBear avatar (public URL)
         if (photoUrl.includes("api.dicebear.com")) {
-          console.log(
-            "AuthenticatedImage: Loading public DiceBear avatar:",
-            photoUrl
-          );
           // Convert SVG to PNG for React Native compatibility
           const pngUrl = photoUrl.replace("/svg?", "/png?");
-          console.log("AuthenticatedImage: Converted to PNG URL:", pngUrl);
           setImageSource(pngUrl);
           return;
         }
@@ -41,7 +36,6 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
         const token = await SecureStore.getItemAsync("jwt");
 
         if (!apiKey) {
-          console.log("No API key found, falling back to regular image");
           setImageSource(photoUrl);
           return;
         }
@@ -58,8 +52,6 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
         const fullUrl = photoUrl.startsWith("http")
           ? photoUrl
           : `${Constants.expoConfig?.extra?.API_URL}${photoUrl}`;
-
-        console.log("AuthenticatedImage: Loading image from:", fullUrl);
 
         // Fetch the image with authentication
         const response = await fetch(fullUrl, {

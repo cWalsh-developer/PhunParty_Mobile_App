@@ -59,28 +59,15 @@ export default function ProfileScreen({
     );
   }
 
-  console.log("Profile: Current user state:", {
-    player_id: user.player_id,
-    player_name: user.player_name,
-    profile_photo_url: user.profile_photo_url,
-    hasProfilePhoto: !!user.profile_photo_url,
-  });
-
   const handleImageSelected = (imageUri: string) => {
-    console.log(
-      "Profile: Image selected, updating user context with URI:",
-      imageUri
-    );
     // Update the user context with the new profile photo URL
     setUser((prevUser) => {
       const updatedUser = {
         ...prevUser,
         profile_photo_url: imageUri,
       };
-      console.log("Profile: Updated user context:", updatedUser);
       return updatedUser;
     });
-    console.log("Profile image updated:", imageUri);
   };
 
   const handleDeletePhoto = async () => {
@@ -110,7 +97,6 @@ export default function ProfileScreen({
                   ...prevUser,
                   profile_photo_url: null,
                 }));
-                console.log("Profile: Photo deleted successfully");
               } else {
                 Alert.alert(
                   "Error",
@@ -208,12 +194,6 @@ export default function ProfileScreen({
                   height: "100%",
                 }}
                 resizeMode="cover"
-                onLoad={() =>
-                  console.log(
-                    "Profile image loaded successfully:",
-                    user.profile_photo_url
-                  )
-                }
                 onError={(error) =>
                   console.error(
                     "Profile image failed to load:",

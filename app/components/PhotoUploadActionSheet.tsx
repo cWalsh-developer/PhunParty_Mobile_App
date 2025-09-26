@@ -11,7 +11,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { DebugService } from "../../assets/api/debugService";
 import { AvatarOption, PhotoService } from "../../assets/api/photoService";
 import { UserContext } from "../../assets/authentication-storage/authContext";
 import { useToast } from "../../assets/components/ToastContext";
@@ -50,28 +49,12 @@ export default function PhotoUploadActionSheet({
     if (isVisible && showAvatars && availableAvatars.length === 0) {
       loadAvatars();
     }
-
-    // Debug endpoints when modal opens
-    if (isVisible && user?.player_id) {
-      console.log(
-        "PhotoUploadActionSheet: Modal opened, running debug checks..."
-      );
-      DebugService.logConfig();
-      DebugService.testAvatarEndpoint();
-      DebugService.testUploadEndpointExists(user.player_id);
-    }
   }, [isVisible, showAvatars, user?.player_id]);
 
   const loadAvatars = async () => {
-    console.log("PhotoUploadActionSheet: Loading avatars...");
     setIsLoadingAvatars(true);
     try {
       const avatars = await PhotoService.getAvailableAvatars();
-      console.log(
-        "PhotoUploadActionSheet: Loaded avatars:",
-        avatars.length,
-        "avatars"
-      );
       setAvailableAvatars(avatars);
     } catch (error) {
       console.error("PhotoUploadActionSheet: Error loading avatars:", error);
@@ -93,12 +76,9 @@ export default function PhotoUploadActionSheet({
     setIsUploading(true);
     try {
       const imageUri = await PhotoService.launchCamera();
-      console.log("PhotoUploadActionSheet: Camera returned URI:", imageUri);
 
       if (imageUri) {
-        console.log("PhotoUploadActionSheet: Starting photo upload...");
         const result = await PhotoService.uploadPhoto(user.player_id, imageUri);
-        console.log("PhotoUploadActionSheet: Upload result:", result);
 
         if (result) {
           showToast("Photo uploaded successfully!", "success");
@@ -107,10 +87,6 @@ export default function PhotoUploadActionSheet({
         } else {
           showToast("Failed to upload photo", "error");
         }
-      } else {
-        console.log(
-          "PhotoUploadActionSheet: No image URI returned from camera"
-        );
       }
     } catch (error) {
       console.error("PhotoUploadActionSheet: Error with camera:", error);
@@ -125,19 +101,12 @@ export default function PhotoUploadActionSheet({
       return;
     }
 
-    console.log(
-      "PhotoUploadActionSheet: Selecting from gallery for user:",
-      user.player_id
-    );
     setIsUploading(true);
     try {
       const imageUri = await PhotoService.launchImageLibrary();
-      console.log("PhotoUploadActionSheet: Gallery returned URI:", imageUri);
 
       if (imageUri) {
-        console.log("PhotoUploadActionSheet: Starting photo upload...");
         const result = await PhotoService.uploadPhoto(user.player_id, imageUri);
-        console.log("PhotoUploadActionSheet: Upload result:", result);
 
         if (result) {
           showToast("Photo uploaded successfully!", "success");
@@ -146,10 +115,6 @@ export default function PhotoUploadActionSheet({
         } else {
           showToast("Failed to upload photo", "error");
         }
-      } else {
-        console.log(
-          "PhotoUploadActionSheet: No image URI returned from gallery"
-        );
       }
     } catch (error) {
       console.error("PhotoUploadActionSheet: Error with gallery:", error);
@@ -173,8 +138,6 @@ export default function PhotoUploadActionSheet({
 
     setIsUploading(true);
     try {
-      console.log("PhotoUploadActionSheet: Selecting avatar:", avatar.name);
-
       // Use the avatar endpoint with the full avatar object
       const result = await PhotoService.setAvatar(user.player_id, avatar);
       if (result) {

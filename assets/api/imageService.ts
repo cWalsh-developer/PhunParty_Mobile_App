@@ -19,8 +19,6 @@ export class ImageService {
 
       // Since React Native Image component can't set headers easily,
       // we'll try to work around the backend auth requirement
-      console.log("ImageService: Creating authenticated URL for:", photoUrl);
-      console.log("ImageService: Full URL:", fullUrl);
 
       return fullUrl;
     } catch (error) {
