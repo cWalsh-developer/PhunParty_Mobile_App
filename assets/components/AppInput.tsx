@@ -21,6 +21,8 @@ interface AppInputProps {
   style?: ViewStyle;
   inputStyle?: TextStyle;
   error?: string;
+  horizontalScrollEnabled?: boolean; // New prop for horizontal scrolling
+  maxWidth?: number; // Optional max width for the input
 }
 
 export const AppInput: React.FC<AppInputProps> = ({
@@ -35,13 +37,27 @@ export const AppInput: React.FC<AppInputProps> = ({
   style,
   inputStyle,
   error,
+  horizontalScrollEnabled = false,
+  maxWidth,
 }) => {
   const [isFocused, setIsFocused] = useState(false);
 
   const getInputStyle = () => {
-    if (error) return [inputStyles.container, inputStyles.error];
-    if (isFocused) return [inputStyles.container, inputStyles.focused];
-    return inputStyles.container;
+    const baseStyles = [];
+    
+    if (error) baseStyles.push(inputStyles.container, inputStyles.error);
+    else if (isFocused) baseStyles.push(inputStyles.container, inputStyles.focused);
+    else baseStyles.push(inputStyles.container);
+
+    // Add horizontal scrolling styles if enabled
+    if (horizontalScrollEnabled) {
+      baseStyles.push({
+        width: maxWidth || 250, // Set a fixed width to enable horizontal scrolling
+        textAlign: "left" as const,
+      });
+    }
+
+    return baseStyles;
   };
 
   return (
@@ -59,6 +75,8 @@ export const AppInput: React.FC<AppInputProps> = ({
         editable={editable}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
+        scrollEnabled={horizontalScrollEnabled} // Enable horizontal scrolling
+        multiline={false} // Ensure single line for horizontal scrolling
       />
       {error && (
         <Text style={[inputStyles.label, { color: "#ef4444", marginTop: 4 }]}>

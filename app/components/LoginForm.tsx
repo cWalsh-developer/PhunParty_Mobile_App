@@ -90,6 +90,8 @@ export default function LoginForm({
                   onChangeText={setName}
                   placeholder="Enter your name"
                   style={{ marginBottom: 16 }}
+                  horizontalScrollEnabled={true}
+                  maxWidth={320}
                 />
                 <AppInput
                   label="Mobile"
@@ -98,6 +100,8 @@ export default function LoginForm({
                   placeholder="Enter your mobile number"
                   keyboardType="phone-pad"
                   style={{ marginBottom: 16 }}
+                  horizontalScrollEnabled={true}
+                  maxWidth={320}
                 />
               </>
             )}
@@ -111,6 +115,8 @@ export default function LoginForm({
               keyboardType="email-address"
               autoCapitalize="none"
               style={{ marginBottom: 16 }}
+              horizontalScrollEnabled={true}
+              maxWidth={320}
             />
             <AppInput
               label="Password"
@@ -120,6 +126,8 @@ export default function LoginForm({
               autoCapitalize="none"
               secureTextEntry
               style={{ marginBottom: 24 }}
+              horizontalScrollEnabled={true}
+              maxWidth={320}
             />
 
             {/* Action Buttons */}

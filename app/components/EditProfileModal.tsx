@@ -2,7 +2,16 @@ import { AppButton, AppCard, AppInput } from "@/assets/components";
 import { colors, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import React, { useState } from "react";
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { 
+  Modal, 
+  StyleSheet, 
+  Text, 
+  TouchableOpacity, 
+  View, 
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView 
+} from "react-native";
 import DismissKeyboardWrapper from "./DismissKeyboardWrapper";
 import Selector from "./Selector";
 
@@ -43,27 +52,35 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.overlay}>
-        {/* Tap away to close overlay - covers entire screen */}
-        <TouchableOpacity
-          style={styles.tapAwayOverlay}
+      <KeyboardAvoidingView 
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <TouchableOpacity 
+          style={styles.backgroundOverlay}
           activeOpacity={1}
           onPress={onClose}
-        />
-
-        {/* Close button overlay */}
-        <TouchableOpacity
-          style={styles.closeButton}
-          onPress={onClose}
-          activeOpacity={0.7}
         >
-          <MaterialIcons name="close" size={24} color={colors.stone[100]} />
-        </TouchableOpacity>
+          <View style={styles.overlay}>
+            {/* Close button overlay */}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={onClose}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="close" size={24} color={colors.stone[100]} />
+            </TouchableOpacity>
 
-        {/* Centered modal content with keyboard dismissal */}
-        <View style={styles.modalContent}>
-          <DismissKeyboardWrapper>
-            <AppCard style={styles.card}>
+            {/* Scrollable modal content */}
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+                <DismissKeyboardWrapper>
+                  <AppCard style={styles.card}>
               {/* Header */}
               <View style={styles.header}>
                 <MaterialIcons name="edit" size={24} color={colors.tea[400]} />
@@ -80,6 +97,8 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   autoCapitalize="words"
                   style={styles.input}
                   inputStyle={styles.inputField}
+                  horizontalScrollEnabled={true}
+                  maxWidth={300}
                 />
 
                 <AppInput
@@ -91,6 +110,8 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   autoCapitalize="none"
                   style={styles.input}
                   inputStyle={styles.inputField}
+                  horizontalScrollEnabled={true}
+                  maxWidth={300}
                 />
 
                 <AppInput
@@ -101,6 +122,8 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   keyboardType="phone-pad"
                   style={styles.input}
                   inputStyle={styles.inputField}
+                  horizontalScrollEnabled={true}
+                  maxWidth={300}
                 />
               </View>
 
@@ -132,36 +155,33 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 </Selector>
               </View>
             </AppCard>
-          </DismissKeyboardWrapper>
+            </DismissKeyboardWrapper>
+                </TouchableOpacity>
+          </ScrollView>
         </View>
-      </View>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  backgroundOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+  },
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.9)", // Less transparent
-    justifyContent: "center",
-    alignItems: "center",
     padding: 20,
   },
-  tapAwayOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 1,
-    backgroundColor: "transparent",
-  },
-  modalContent: {
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
-    flex: 1,
-    zIndex: 2,
-    pointerEvents: "box-none", // Allow touch events to pass through to overlay
+    minHeight: "100%",
   },
   closeButton: {
     position: "absolute",
@@ -179,8 +199,9 @@ const styles = StyleSheet.create({
   },
   card: {
     width: "100%",
-    maxWidth: 450, // Increased from 400 to make card wider
-    maxHeight: "80%",
+    maxWidth: 450,
+    marginVertical: 20, // Add some vertical margin for better spacing
+    zIndex: 2, // Ensure it's above the tap-away overlay
   },
   header: {
     flexDirection: "row",
