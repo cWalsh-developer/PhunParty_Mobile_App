@@ -28,7 +28,9 @@ export default function NewPasswordForm({
   onSubmit,
 }: NewPasswordFormProps) {
   return (
-    <DismissKeyboardWrapper style={[layoutStyles.screen, layoutStyles.container]}>
+    <DismissKeyboardWrapper
+      style={[layoutStyles.screen, layoutStyles.container]}
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}

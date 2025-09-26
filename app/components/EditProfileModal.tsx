@@ -50,7 +50,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
           activeOpacity={1}
           onPress={onClose}
         />
-        
+
         {/* Close button overlay */}
         <TouchableOpacity
           style={styles.closeButton}
@@ -63,75 +63,75 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
         {/* Centered modal content with keyboard dismissal */}
         <View style={styles.modalContent}>
           <DismissKeyboardWrapper>
-          <AppCard style={styles.card}>
-            {/* Header */}
-            <View style={styles.header}>
-              <MaterialIcons name="edit" size={24} color={colors.tea[400]} />
-              <Text style={[typography.h2, styles.title]}>Edit Profile</Text>
-            </View>
+            <AppCard style={styles.card}>
+              {/* Header */}
+              <View style={styles.header}>
+                <MaterialIcons name="edit" size={24} color={colors.tea[400]} />
+                <Text style={[typography.h2, styles.title]}>Edit Profile</Text>
+              </View>
 
-          {/* Form Fields */}
-          <View style={styles.formContainer}>
-            <AppInput
-              label="Name"
-              value={name}
-              onChangeText={setName}
-              placeholder="Enter your name"
-              autoCapitalize="words"
-              style={styles.input}
-              inputStyle={styles.inputField}
-            />
+              {/* Form Fields */}
+              <View style={styles.formContainer}>
+                <AppInput
+                  label="Name"
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Enter your name"
+                  autoCapitalize="words"
+                  style={styles.input}
+                  inputStyle={styles.inputField}
+                />
 
-            <AppInput
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Enter your email"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={styles.input}
-              inputStyle={styles.inputField}
-            />
+                <AppInput
+                  label="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="Enter your email"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  style={styles.input}
+                  inputStyle={styles.inputField}
+                />
 
-            <AppInput
-              label="Phone"
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="Enter your phone number"
-              keyboardType="phone-pad"
-              style={styles.input}
-              inputStyle={styles.inputField}
-            />
-          </View>
+                <AppInput
+                  label="Phone"
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="Enter your phone number"
+                  keyboardType="phone-pad"
+                  style={styles.input}
+                  inputStyle={styles.inputField}
+                />
+              </View>
 
-          {/* Save Button */}
-          <View style={styles.buttonContainer}>
-            <Selector
-              onPress={() =>
-                onSave({
-                  player_name: name,
-                  player_email: email,
-                  player_mobile: phone,
-                })
-              }
-            >
-              <AppButton
-                title={loading ? "Saving..." : "Save Changes"}
-                onPress={() => {}}
-                variant="primary"
-                disabled={loading}
-                style={styles.centeredSaveButton}
-                icon={
-                  <MaterialIcons
-                    name="save"
-                    size={20}
-                    color={colors.ink[900]}
+              {/* Save Button */}
+              <View style={styles.buttonContainer}>
+                <Selector
+                  onPress={() =>
+                    onSave({
+                      player_name: name,
+                      player_email: email,
+                      player_mobile: phone,
+                    })
+                  }
+                >
+                  <AppButton
+                    title={loading ? "Saving..." : "Save Changes"}
+                    onPress={() => {}}
+                    variant="primary"
+                    disabled={loading}
+                    style={styles.centeredSaveButton}
+                    icon={
+                      <MaterialIcons
+                        name="save"
+                        size={20}
+                        color={colors.ink[900]}
+                      />
+                    }
                   />
-                }
-              />
-            </Selector>
-          </View>
-          </AppCard>
+                </Selector>
+              </View>
+            </AppCard>
           </DismissKeyboardWrapper>
         </View>
       </View>

@@ -1,11 +1,11 @@
-import React from 'react';
+import React from "react";
 import {
   Keyboard,
+  StyleProp,
   TouchableWithoutFeedback,
   View,
   ViewStyle,
-  StyleProp,
-} from 'react-native';
+} from "react-native";
 
 interface DismissKeyboardWrapperProps {
   children: React.ReactNode;
@@ -26,9 +26,7 @@ const DismissKeyboardWrapper: React.FC<DismissKeyboardWrapperProps> = ({
 
   return (
     <TouchableWithoutFeedback onPress={dismissKeyboard}>
-      <View style={style}>
-        {children}
-      </View>
+      <View style={style}>{children}</View>
     </TouchableWithoutFeedback>
   );
 };
