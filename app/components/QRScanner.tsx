@@ -14,6 +14,14 @@ interface QRScannerProps {
   setScanned: (v: boolean) => void;
   hasPermission: boolean | null;
   handleBarCodeScanned: ({ data }: { data: string }) => void;
+  // Game-specific props (optional)
+  isGameMode?: boolean;
+  onGameJoin?: (sessionCode: string, playerInfo: any) => void;
+  playerInfo?: {
+    player_id: string;
+    player_name: string;
+    profile_photo_url?: string;
+  };
 }
 
 export default function QRScanner({
@@ -24,7 +32,52 @@ export default function QRScanner({
   setScanned,
   hasPermission,
   handleBarCodeScanned,
+  isGameMode = false,
+  onGameJoin,
+  playerInfo,
 }: QRScannerProps) {
+  const handleQRScan = ({ data }: { data: string }) => {
+    if (isGameMode && onGameJoin && playerInfo) {
+      // Parse game session code from QR data
+      const sessionCode = extractSessionCode(data);
+      if (sessionCode) {
+        onGameJoin(sessionCode, playerInfo);
+      } else {
+        // Invalid game QR code
+        handleBarCodeScanned({ data });
+      }
+    } else {
+      // Default behavior
+      handleBarCodeScanned({ data });
+    }
+  };
+
+  const extractSessionCode = (qrData: string): string | null => {
+    try {
+      // Handle different QR formats:
+      // 1. Direct session code: "ABC123"
+      // 2. URL format: "https://phun.party/join/ABC123"
+      // 3. JSON format: {"session_code": "ABC123"}
+
+      if (qrData.length === 6 && /^[A-Z0-9]{6}$/.test(qrData)) {
+        return qrData;
+      }
+
+      if (qrData.includes("/join/")) {
+        const match = qrData.match(/\/join\/([A-Z0-9]{6})/);
+        return match ? match[1] : null;
+      }
+
+      try {
+        const parsed = JSON.parse(qrData);
+        return parsed.session_code || null;
+      } catch {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  };
   if (hasPermission === null) {
     return (
       <View style={[layoutStyles.screen, layoutStyles.container]}>
@@ -117,7 +170,7 @@ export default function QRScanner({
         <>
           {/* Camera View */}
           <CameraView
-            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+            onBarcodeScanned={scanned ? undefined : handleQRScan}
             style={{ flex: 1 }}
             barcodeScannerSettings={{
               barcodeTypes: ["qr"],
@@ -202,7 +255,9 @@ export default function QRScanner({
                   },
                 ]}
               >
-                Position the QR code within the frame
+                {isGameMode
+                  ? "Scan the game QR code to join session"
+                  : "Position the QR code within the frame"}
               </Text>
             </View>
           </View>

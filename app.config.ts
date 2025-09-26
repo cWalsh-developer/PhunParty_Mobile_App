@@ -10,6 +10,7 @@ const extra = {
   RetrievePlayerEndpoint: process.env.RETRIEVE_PLAYER_ENDPOINT,
   API_KEY: process.env.API_KEY,
   API_URL: process.env.API_URL,
+  API_BASE_URL: process.env.API_URL || process.env.API_BASE_URL, // Add this for WebSocket service
 };
 
 const config: ExpoConfig = {
