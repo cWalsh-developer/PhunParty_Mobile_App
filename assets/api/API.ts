@@ -26,6 +26,67 @@ const API = {
   ) => callFetch<T>(endpoint, "PUT", data, withAuth),
   delete: <T = any>(endpoint: string, withAuth: boolean = true) =>
     callFetch<T>(endpoint, "DELETE", null, withAuth),
+
+  // Game Session Management
+  gameSession: {
+    // Join a game session
+    join: (sessionCode: string, playerId: string) =>
+      callFetch("/game/join", "POST", {
+        session_code: sessionCode,
+        player_id: playerId,
+      }),
+
+    // Get session join information (includes WebSocket URL)
+    getJoinInfo: (sessionCode: string) =>
+      callFetch(`/game/session/${sessionCode}/join-info`, "GET"),
+
+    // Get current game session status
+    getStatus: (sessionCode: string) =>
+      callFetch(`/game-logic/status/${sessionCode}`, "GET"),
+
+    // Get current question for session
+    getCurrentQuestion: (sessionCode: string) =>
+      callFetch(`/game-logic/current-question/${sessionCode}`, "GET"),
+
+    // Submit player answer
+    submitAnswer: (
+      sessionCode: string,
+      playerId: string,
+      questionId: string,
+      playerAnswer: string
+    ) =>
+      callFetch("/game-logic/submit-answer", "POST", {
+        session_code: sessionCode,
+        player_id: playerId,
+        question_id: questionId,
+        player_answer: playerAnswer,
+      }),
+  },
+
+  // Game Management
+  game: {
+    // Get game details by game code
+    getByCode: (gameCode: string) => callFetch(`/game/${gameCode}`, "GET"),
+
+    // Get all available games
+    getAll: () => callFetch("/game", "GET"),
+
+    // Create new game
+    create: (rules: string, genre: string) =>
+      callFetch("/game", "POST", { rules, genre }),
+
+    // Create game session
+    createSession: (
+      hostName: string,
+      numberOfQuestions: number,
+      gameCode: string
+    ) =>
+      callFetch("/game/create/session", "POST", {
+        host_name: hostName,
+        number_of_questions: numberOfQuestions,
+        game_code: gameCode,
+      }),
+  },
 };
 
 export default API;

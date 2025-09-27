@@ -89,42 +89,50 @@ export class GameWebSocketService {
     console.log(
       `Connecting to session: ${sessionCode} as player: ${playerInfo.player_name}`
     );
-    console.log("Base URL for WebSocket:", this.getWebSocketUrl());
 
-    // Test if the WebSocket endpoint is reachable
     try {
-      const testUrl = this.getWebSocketUrl().replace("wss://", "https://");
-      console.log("Testing HTTP endpoint accessibility:", testUrl);
+      // First, ensure player is properly joined to the session via API
+      const API = (await import("./API")).default;
 
-      // Create timeout promise
-      const timeoutPromise = new Promise<null>((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout")), 5000)
+      console.log("Ensuring player is joined to session via API...");
+      const joinResponse = await API.gameSession.join(
+        sessionCode,
+        playerInfo.player_id
       );
 
-      const fetchPromise = fetch(`${testUrl}/health`, {
-        method: "GET",
-      });
-
-      const response = await Promise.race([fetchPromise, timeoutPromise]).catch(
-        () => null
-      );
-
-      if (response) {
+      if (!joinResponse.isSuccess) {
+        // If already joined, that's fine - continue
+        if (!joinResponse.message?.includes("already in a game session")) {
+          throw new Error(joinResponse.message || "Failed to join session");
+        }
         console.log(
-          "HTTP endpoint is reachable, status:",
-          (response as Response).status
+          "Player already in session, proceeding to WebSocket connection"
         );
       } else {
-        console.warn(
-          "HTTP endpoint test failed - continuing with WebSocket attempt"
+        console.log("Successfully joined session via API");
+      }
+
+      // Get session join info to get the correct WebSocket URL
+      const joinInfoResponse = await API.gameSession.getJoinInfo(sessionCode);
+      if (!joinInfoResponse.isSuccess) {
+        throw new Error(
+          joinInfoResponse.message || "Could not get session info"
         );
       }
-    } catch (error) {
-      console.warn("Endpoint test failed:", error);
-    }
 
-    try {
-      // Try both JWT token and API key for authentication
+      const sessionInfo = joinInfoResponse.result;
+      console.log("Session info:", sessionInfo);
+
+      // Use the WebSocket URL provided by the backend
+      let wsUrl = sessionInfo.websocket_url;
+
+      // If we don't have a specific websocket URL from backend, construct one
+      if (!wsUrl) {
+        const baseUrl = this.getWebSocketUrl();
+        wsUrl = `${baseUrl}/ws/session/${sessionCode}`;
+      }
+
+      // Try multiple authentication methods based on your backend dependencies
       const token = await SecureStore.getItemAsync("jwt");
       const apiKey = Constants.expoConfig?.extra?.API_KEY;
 
@@ -134,39 +142,31 @@ export class GameWebSocketService {
         tokenLength: token?.length,
       });
 
-      // Build the WebSocket URL with different auth approaches
-      const baseWsUrl = `${this.getWebSocketUrl()}/ws/session/${sessionCode}`;
-      const params = new URLSearchParams({
-        client_type: "mobile",
-        player_id: playerInfo.player_id,
-        player_name: playerInfo.player_name,
-      });
+      // Build query parameters - based on your backend get_api_key dependency
+      const params = new URLSearchParams();
 
-      // Add player photo if available
+      // Add API key for get_api_key dependency (required by your backend routes)
+      if (apiKey) {
+        params.append("api_key", apiKey);
+        console.log("Using API key authentication for WebSocket");
+      }
+
+      // Add additional parameters
+      params.append("client_type", "mobile");
+      params.append("player_id", playerInfo.player_id);
+      params.append("player_name", playerInfo.player_name);
+
       if (playerInfo.player_photo) {
         params.append("player_photo", playerInfo.player_photo);
       }
 
-      // Try JWT token first, then API key, then no auth
-      if (token) {
-        params.append("token", token);
-        console.log("Using JWT token authentication");
-      } else if (apiKey) {
-        params.append("api_key", apiKey);
-        console.log("Using API key authentication");
-      } else {
-        console.warn(
-          "No authentication method available - attempting unauthenticated connection"
-        );
-      }
-
-      const wsUrl = `${baseWsUrl}?${params.toString()}`;
+      const finalWsUrl = `${wsUrl}?${params.toString()}`;
       console.log(
         "Final WebSocket URL:",
-        wsUrl.replace(/(token|api_key)=[^&]+/g, "$1=***")
+        finalWsUrl.replace(/(api_key|token)=[^&]+/g, "$1=***")
       );
 
-      this.ws = new WebSocket(wsUrl);
+      this.ws = new WebSocket(finalWsUrl);
 
       this.ws.onopen = () => {
         console.log(`WebSocket connected to session ${sessionCode}`);
@@ -190,21 +190,22 @@ export class GameWebSocketService {
           code: event.code,
           reason: event.reason,
           wasClean: event.wasClean,
-          url: this.ws?.url?.replace(/(token|api_key)=[^&]+/g, "$1=***"),
         });
 
         // Log specific error codes for debugging
         if (event.code === 1006) {
-          console.error("WebSocket closed unexpectedly (1006). Common causes:");
           console.error(
-            "- Server rejected connection (wrong endpoint, auth failure)"
+            "WebSocket closed unexpectedly (1006). Possible causes:"
           );
-          console.error("- Network/CORS issues");
-          console.error("- Server not responding");
-          console.error("- Invalid session code:", this.sessionCode);
+          console.error(
+            "- Server rejected connection (authentication failure)"
+          );
+          console.error("- Session does not exist or expired");
+          console.error("- Player not properly joined to session");
+          console.error("- Backend dependency check failed (API key required)");
         } else if (event.code === 1002) {
           console.error(
-            "WebSocket protocol error (1002) - Server rejected the connection"
+            "WebSocket protocol error (1002) - Invalid request format"
           );
         } else if (event.code === 1003) {
           console.error("WebSocket unsupported data (1003)");
@@ -235,21 +236,16 @@ export class GameWebSocketService {
       this.ws.onerror = (error) => {
         console.error("WebSocket error:", error);
 
-        // Provide more specific error messages based on common issues
-        const token = this.ws?.url?.includes("token=");
-        if (!token) {
-          this.onError?.("Authentication required. Please login first.");
-        } else {
-          this.onError?.(
-            "Connection error occurred. Please check your network and try again."
-          );
-        }
+        // Provide more specific error guidance
+        this.onError?.(
+          "Connection failed. Please ensure you've joined the session properly and have a stable internet connection."
+        );
       };
 
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error connecting to WebSocket:", error);
-      this.onError?.("Failed to connect to game session");
+      this.onError?.(`Failed to connect: ${error.message}`);
       return false;
     }
   }
@@ -389,6 +385,8 @@ export class GameWebSocketService {
       data: {
         answer,
         question_id: questionId,
+        session_code: this.sessionCode,
+        player_id: this.playerInfo?.player_id,
       },
     });
   }
@@ -396,13 +394,53 @@ export class GameWebSocketService {
   pressBuzzer(): boolean {
     return this.sendMessage({
       type: "buzzer_press",
+      data: {
+        session_code: this.sessionCode,
+        player_id: this.playerInfo?.player_id,
+      },
     });
   }
 
   requestSessionStats(): boolean {
     return this.sendMessage({
       type: "get_session_stats",
+      data: {
+        session_code: this.sessionCode,
+      },
     });
+  }
+
+  // HTTP API integrations for when WebSocket is not available
+  async submitAnswerViaAPI(questionId: string, answer: string): Promise<any> {
+    if (!this.sessionCode || !this.playerInfo?.player_id) {
+      throw new Error("Not connected to a session");
+    }
+
+    const API = (await import("./API")).default;
+    return await API.gameSession.submitAnswer(
+      this.sessionCode,
+      this.playerInfo.player_id,
+      questionId,
+      answer
+    );
+  }
+
+  async getSessionStatus(): Promise<any> {
+    if (!this.sessionCode) {
+      throw new Error("Not connected to a session");
+    }
+
+    const API = (await import("./API")).default;
+    return await API.gameSession.getStatus(this.sessionCode);
+  }
+
+  async getCurrentQuestion(): Promise<any> {
+    if (!this.sessionCode) {
+      throw new Error("Not connected to a session");
+    }
+
+    const API = (await import("./API")).default;
+    return await API.gameSession.getCurrentQuestion(this.sessionCode);
   }
 }
 

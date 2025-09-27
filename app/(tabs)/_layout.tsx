@@ -1,5 +1,5 @@
 import { colors } from "@/assets/theme";
-import FontAwesom from "@expo/vector-icons/FontAwesome";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Tabs } from "expo-router";
 
@@ -34,7 +34,7 @@ export default function TabsLayout() {
           title: "Join Game",
           headerShown: false,
           tabBarIcon: ({ color, focused }) => (
-            <FontAwesom
+            <FontAwesome
               name="qrcode"
               size={29}
               color={focused ? color : "#201e23ff"}
