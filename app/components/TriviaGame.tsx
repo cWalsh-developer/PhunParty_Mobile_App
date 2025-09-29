@@ -50,6 +50,15 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
   useEffect(() => {
     setupWebSocketListeners();
+
+    // Fetch initial question when component mounts
+    if (sessionCode) {
+      console.log("🚀 TriviaGame mounted - fetching initial question");
+      setTimeout(() => {
+        fetchInitialQuestion();
+      }, 1000); // Small delay to ensure WebSocket is connected
+    }
+
     return () => {
       // Cleanup handled by parent component
     };
@@ -63,12 +72,39 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   }, [currentQuestion]);
 
   const setupWebSocketListeners = () => {
+    console.log("🔌 Setting up TriviaGame WebSocket listeners");
+
     gameWebSocket.onQuestionReceived = (question: GameQuestion) => {
-      console.log("New trivia question received:", question);
+      console.log("🎯 TriviaGame - Question received:", {
+        hasQuestionId: !!question.question_id,
+        hasQuestion: !!question.question,
+        hasOptions: !!question.options,
+        questionText: question.question?.substring(0, 50) + "...",
+      });
+
+      // If this is an empty event (WebSocket notification without data)
+      if (!question.question_id || !question.question) {
+        console.log(
+          "⚡ Empty WebSocket event - fetching current question immediately"
+        );
+        fetchCurrentQuestionNow();
+        return;
+      }
+
+      // Valid question received via WebSocket
+      console.log("✅ Valid question received via WebSocket - updating UI");
       setCurrentQuestion(question);
 
-      if (question.options) {
+      if (question.options && question.options.length > 0) {
         const answerOptions = question.options.map((option) => ({
+          option,
+          isSelected: false,
+        }));
+        setAnswers(answerOptions);
+      } else {
+        // Generate default options if none provided
+        const options = ["Option A", "Option B", "Option C", "Option D"];
+        const answerOptions = options.map((option) => ({
           option,
           isSelected: false,
         }));
@@ -76,15 +112,24 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       }
     };
 
+    // Handle when the game starts - fetch initial question
+    gameWebSocket.onGameStarted = (data: any) => {
+      console.log("🎮 TriviaGame - Game started event received:", data);
+      // Small delay to ensure backend is ready
+      setTimeout(() => {
+        fetchInitialQuestion();
+      }, 500);
+    };
+
     gameWebSocket.onAnswerSubmitted = (data: any) => {
-      console.log("Answer submission result:", data);
+      console.log("✅ Answer submission result:", data);
       if (data.is_correct !== undefined) {
         updateAnswerResults(data);
       }
     };
 
     gameWebSocket.onBuzzerUpdate = (data: any) => {
-      console.log("Game update received:", data);
+      console.log("📢 Game update received:", data);
 
       if (data.type === "correct_answer" && data.correct_option) {
         showCorrectAnswer(data.correct_option);
@@ -97,7 +142,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     };
 
     gameWebSocket.onGameEnded = (data: any) => {
-      console.log("Game ended:", data);
+      console.log("🏁 Game ended:", data);
       setIsGameActive(false);
       Alert.alert("Game Over!", data.message || "Thanks for playing!", [
         { text: "OK", onPress: onGameEnd },
@@ -105,9 +150,104 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     };
 
     gameWebSocket.onError = (error: string) => {
-      console.error("Game error:", error);
+      console.error("❌ Game error:", error);
       onError(error);
     };
+  };
+
+  const fetchCurrentQuestionNow = async () => {
+    try {
+      console.log(
+        "⚡ Fetching current question immediately for session:",
+        sessionCode
+      );
+      const API = (await import("../../assets/api/API")).default;
+
+      const response = await API.gameSession.getCurrentQuestion(sessionCode);
+
+      if (response.isSuccess && response.result) {
+        const questionData = response.result;
+        console.log("✅ Current question fetched:", {
+          question_id: questionData.question_id,
+          has_question: !!questionData.question,
+        });
+
+        const question: GameQuestion = {
+          question_id: questionData.question_id,
+          question: questionData.question || "Loading question...",
+          game_type: "trivia",
+          ui_mode: "multiple_choice",
+          options: ["Option A", "Option B", "Option C", "Option D"],
+        };
+
+        setCurrentQuestion(question);
+
+        const answerOptions = question.options!.map((option) => ({
+          option,
+          isSelected: false,
+        }));
+        setAnswers(answerOptions);
+
+        console.log("✅ Current question loaded successfully");
+      } else {
+        console.log("⚠️ No current question available");
+      }
+    } catch (error) {
+      console.error("❌ Error fetching current question:", error);
+    }
+  };
+
+  const fetchInitialQuestion = async () => {
+    try {
+      console.log("🔍 Fetching initial question for session:", sessionCode);
+      const API = (await import("../../assets/api/API")).default;
+
+      // First check if game is already active
+      const statusResponse = await API.gameSession.getStatus(sessionCode);
+      if (statusResponse.isSuccess) {
+        const status = statusResponse.result;
+        console.log("📊 Game status:", {
+          is_active: status.is_active,
+          has_question: !!status.current_question,
+        });
+
+        // If game is active and has a question, use it
+        if (status.is_active && status.current_question) {
+          const question: GameQuestion = {
+            question_id:
+              status.current_question.question_id || Date.now().toString(),
+            question: status.current_question.question || "Loading question...",
+            game_type: "trivia",
+            ui_mode: "multiple_choice",
+            options: ["Option A", "Option B", "Option C", "Option D"],
+          };
+
+          setCurrentQuestion(question);
+
+          const answerOptions = question.options!.map((option) => ({
+            option,
+            isSelected: false,
+          }));
+          setAnswers(answerOptions);
+
+          console.log("✅ Initial question from status loaded");
+          return;
+        }
+      }
+
+      // Try to start the game if not active
+      try {
+        await API.put(`/game-logic/start-game/${sessionCode}`);
+        console.log("🎮 Game start attempted");
+      } catch (startError) {
+        console.log("⚠️ Game may already be started or start failed");
+      }
+
+      // Get current question after starting
+      await fetchCurrentQuestionNow();
+    } catch (error) {
+      console.error("❌ Error in fetchInitialQuestion:", error);
+    }
   };
 
   const resetForNewQuestion = () => {

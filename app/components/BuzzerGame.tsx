@@ -14,6 +14,7 @@ import {
   GameQuestion,
   gameWebSocket,
 } from "../../assets/api/gameWebSocketService";
+import { AppButton } from "../../assets/components/AppButton";
 import { AppCard } from "../../assets/components/AppCard";
 import { colors } from "../../assets/theme/colors";
 import { typography } from "../../assets/theme/typography";
@@ -53,6 +54,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
   useEffect(() => {
     setupWebSocketListeners();
+    fetchCurrentQuestion();
     return () => {
       // Cleanup handled by parent component
     };
@@ -84,7 +86,13 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         stopGlowAnimation();
         setTimeout(() => {
           resetBuzzerState();
+          fetchCurrentQuestion(); // Fetch next question after current one ends
         }, 3000);
+      } else if (data.type === "next_question" && data.question) {
+        console.log("Next buzzer question:", data.question);
+        setCurrentQuestion(data.question);
+        resetBuzzerState();
+        startGlowAnimation();
       }
     };
 
@@ -96,10 +104,44 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       ]);
     };
 
+    // Handle when the game starts - fetch the first question
+    gameWebSocket.onGameStarted = (data: any) => {
+      console.log("Game started in BuzzerGame:", data);
+      fetchCurrentQuestion(); // Now fetch the first question
+    };
+
     gameWebSocket.onError = (error: string) => {
       console.error("Game error:", error);
       onError(error);
     };
+  };
+
+  const fetchCurrentQuestion = async () => {
+    try {
+      console.log("Fetching current question for buzzer game:", sessionCode);
+      const API = (await import("../../assets/api/API")).default;
+      const response = await API.gameSession.getCurrentQuestion(sessionCode);
+
+      if (response.isSuccess && response.result) {
+        console.log("Current buzzer question fetched:", response.result);
+
+        const questionData = response.result;
+        const question: GameQuestion = {
+          question_id: questionData.question_id,
+          question: questionData.question,
+          game_type: "buzzer",
+          ui_mode: "buzzer",
+        };
+
+        setCurrentQuestion(question);
+        resetBuzzerState();
+        startGlowAnimation();
+      } else {
+        console.log("No current question available for buzzer game");
+      }
+    } catch (error) {
+      console.error("Error fetching current buzzer question:", error);
+    }
   };
 
   const resetBuzzerState = () => {
@@ -248,6 +290,15 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           />
           <Text style={styles.waitingText}>Get ready to buzz in!</Text>
           <Text style={styles.sessionCode}>Session: {sessionCode}</Text>
+
+          <View style={styles.actionButtons}>
+            <AppButton
+              title="Refresh Question"
+              onPress={fetchCurrentQuestion}
+              variant="secondary"
+              style={styles.actionButton}
+            />
+          </View>
         </AppCard>
       </View>
     );
@@ -259,6 +310,16 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         <AppCard style={styles.questionCard}>
           <Text style={styles.questionText}>{currentQuestion.question}</Text>
         </AppCard>
+
+        <View style={styles.debugInfo}>
+          <Text style={styles.debugText}>
+            Question ID: {currentQuestion.question_id}
+          </Text>
+          <Text style={styles.debugText}>
+            Buzzer Active: {buzzerState.isActive ? "Yes" : "No"} | Can Buzz:{" "}
+            {buzzerState.canBuzz ? "Yes" : "No"}
+          </Text>
+        </View>
 
         {buzzerState.winner && (
           <Animated.View
@@ -457,6 +518,28 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     textAlign: "center",
     fontSize: 16,
+  },
+  actionButtons: {
+    marginTop: 24,
+    gap: 12,
+  },
+  actionButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  debugInfo: {
+    backgroundColor: colors.ink[800],
+    padding: 12,
+    marginVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.ink[700],
+  },
+  debugText: {
+    ...typography.caption,
+    color: colors.stone[400],
+    fontSize: 12,
+    textAlign: "center",
   },
 });
 

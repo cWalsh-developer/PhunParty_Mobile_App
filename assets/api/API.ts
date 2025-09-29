@@ -79,12 +79,14 @@ const API = {
     createSession: (
       hostName: string,
       numberOfQuestions: number,
-      gameCode: string
+      gameCode: string,
+      ownerPlayerId: string
     ) =>
       callFetch("/game/create/session", "POST", {
         host_name: hostName,
         number_of_questions: numberOfQuestions,
         game_code: gameCode,
+        owner_player_id: ownerPlayerId,
       }),
   },
 };
@@ -130,9 +132,6 @@ const callFetch = async <T = any>(
   try {
     const response = await fetch(url, requestObj);
     const result = response.status !== 204 ? await response.json() : null;
-
-    if (!response.ok) {
-    }
 
     return response.ok
       ? { isSuccess: true, result }

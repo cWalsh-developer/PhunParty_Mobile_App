@@ -55,16 +55,17 @@ export default function QRScanner({
   const extractSessionCode = (qrData: string): string | null => {
     try {
       // Handle different QR formats:
-      // 1. Direct session code: "ABC123"
-      // 2. URL format: "https://phun.party/join/ABC123"
+      // 1. Direct session code: "ABC123" or longer codes like "EXGRM3U8V"
+      // 2. URL format: "https://phun.party/join/ABC123" or "https://phun.party/#/join/EXGRM3U8V"
       // 3. JSON format: {"session_code": "ABC123"}
 
-      if (qrData.length === 6 && /^[A-Z0-9]{6}$/.test(qrData)) {
+      if (qrData.length >= 6 && /^[A-Z0-9]{6,}$/.test(qrData)) {
         return qrData;
       }
 
       if (qrData.includes("/join/")) {
-        const match = qrData.match(/\/join\/([A-Z0-9]{6})/);
+        // Updated regex to handle variable length session codes
+        const match = qrData.match(/\/join\/([A-Z0-9]+)/);
         return match ? match[1] : null;
       }
 

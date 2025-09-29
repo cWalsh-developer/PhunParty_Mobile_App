@@ -32,23 +32,51 @@ export default function QRScannerScreen() {
 
     // Check if this looks like a game session QR code
     const isGameQR =
-      (data.length === 6 && /^[A-Z0-9]{6}$/.test(data)) ||
+      (data.length === 9 && /^[A-Z0-9]{9}$/.test(data)) ||
       data.includes("/join/") ||
-      data.includes("session_code");
+      data.includes("session_code") ||
+      data.includes("phun.party");
 
     if (isGameQR) {
       // Extract session code from QR data
       let sessionCode = data;
+
+      console.log("Processing QR code data:", data);
+
       if (data.includes("/join/")) {
-        const match = data.match(/\/join\/([A-Z0-9]{6})/);
+        // Handle both #/join/ and /join/ patterns
+        const match = data.match(/#?\/join\/([A-Z0-9]{9})/i);
         sessionCode = match ? match[1] : data;
+        console.log("Extracted session code from URL:", sessionCode);
       } else if (data.includes("session_code")) {
         try {
           const parsed = JSON.parse(data);
           sessionCode = parsed.session_code || data;
-        } catch {
+          console.log("Extracted session code from JSON:", sessionCode);
+        } catch (parseError) {
+          console.error("Failed to parse JSON QR data:", parseError);
           // Keep original data if parsing fails
         }
+      } else {
+        console.log("Using direct session code:", sessionCode);
+      }
+
+      // Validate session code format
+      if (!sessionCode || !/^[A-Z0-9]{9}$/.test(sessionCode)) {
+        Alert.alert(
+          "Invalid QR Code",
+          `The scanned QR code does not contain a valid session code. Expected 9 alphanumeric characters, got: ${sessionCode}`,
+          [
+            {
+              text: "Try Again",
+              onPress: () => {
+                setScanned(false);
+                setShowCamera(true);
+              },
+            },
+          ]
+        );
+        return;
       }
 
       if (!user?.player_id) {
@@ -68,10 +96,19 @@ export default function QRScannerScreen() {
       try {
         setIsJoiningSession(true);
 
+        console.log("Attempting to join session with code:", sessionCode);
+        console.log("Original QR data:", data);
+
         // Get session join info first to validate the session
         const joinInfoResponse = await API.gameSession.getJoinInfo(sessionCode);
 
+        console.log("Join info response:", joinInfoResponse);
+
         if (!joinInfoResponse.isSuccess) {
+          console.error(
+            "Failed to get session info:",
+            joinInfoResponse.message
+          );
           throw new Error(joinInfoResponse.message || "Session not found");
         }
 
@@ -123,20 +160,33 @@ export default function QRScannerScreen() {
         });
       } catch (error: any) {
         console.error("Error joining session:", error);
-        Alert.alert(
-          "Failed to Join Session",
-          error.message || "Please check the QR code and try again.",
-          [
-            {
-              text: "Try Again",
-              onPress: () => {
-                setScanned(false);
-                setShowCamera(true);
-                setIsJoiningSession(false);
-              },
+        console.error("Session code attempted:", sessionCode);
+        console.error("User context:", {
+          player_id: user?.player_id,
+          player_name: user?.player_name,
+        });
+
+        let errorMessage = "Please check the QR code and try again.";
+
+        if (error.message?.includes("Session not found")) {
+          errorMessage = `Session "${sessionCode}" was not found. The session may have expired or the QR code may be invalid.`;
+        } else if (error.message?.includes("network")) {
+          errorMessage =
+            "Network error. Please check your internet connection and try again.";
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+
+        Alert.alert("Failed to Join Session", errorMessage, [
+          {
+            text: "Try Again",
+            onPress: () => {
+              setScanned(false);
+              setShowCamera(true);
+              setIsJoiningSession(false);
             },
-          ]
-        );
+          },
+        ]);
       } finally {
         setIsJoiningSession(false);
       }

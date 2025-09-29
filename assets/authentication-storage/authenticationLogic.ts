@@ -198,15 +198,46 @@ export const changePassword = async (
 };
 
 export const createUserContext = async (setUser: (user: any) => void) => {
-  const token = await getToken();
-  if (!token) return;
-  const decodedToken = decodeToken(token);
-  const currentUser = await dataAccess.getPlayerById(decodedToken?.sub);
-  setUser({
-    player_id: currentUser.player_id,
-    player_name: currentUser.player_name,
-    player_mobile: currentUser.player_mobile,
-    player_email: currentUser.player_email,
-    profile_photo_url: currentUser.profile_photo_url || null,
-  });
+  try {
+    const token = await getToken();
+    if (!token) {
+      console.log("No token found, cannot create user context");
+      return;
+    }
+
+    const decodedToken = decodeToken(token);
+    if (!decodedToken?.sub) {
+      console.log("Invalid token or missing user ID");
+      return;
+    }
+
+    const currentUser = await dataAccess.getPlayerById(decodedToken.sub);
+
+    if (!currentUser) {
+      console.log("User not found in database for ID:", decodedToken.sub);
+      console.log("Token details:", {
+        sub: decodedToken.sub,
+        exp: decodedToken.exp,
+      });
+      return;
+    }
+
+    console.log("Retrieved user from database:", currentUser);
+
+    // Ensure all required fields exist
+    if (!currentUser.player_id) {
+      console.error("User data missing player_id:", currentUser);
+      return;
+    }
+
+    setUser({
+      player_id: currentUser.player_id,
+      player_name: currentUser.player_name || "Unknown",
+      player_mobile: currentUser.player_mobile || "",
+      player_email: currentUser.player_email || "",
+      profile_photo_url: currentUser.profile_photo_url || null,
+    });
+  } catch (error) {
+    console.error("Error creating user context:", error);
+  }
 };

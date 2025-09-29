@@ -59,9 +59,19 @@ export class GameWebSocketService {
       "https://api.phun.party";
 
     console.log("Base API URL:", baseUrl);
-    const wsUrl = baseUrl.replace(/^https?:\/\//, "wss://");
-    console.log("WebSocket URL base:", wsUrl);
 
+    // Convert HTTP(S) to WebSocket URL
+    let wsUrl;
+    if (baseUrl.startsWith("https://")) {
+      wsUrl = baseUrl.replace(/^https:\/\//, "wss://");
+    } else if (baseUrl.startsWith("http://")) {
+      wsUrl = baseUrl.replace(/^http:\/\//, "ws://");
+    } else {
+      // Assume HTTPS by default
+      wsUrl = `wss://${baseUrl.replace(/^\/+/, "")}`;
+    }
+
+    console.log("WebSocket URL base:", wsUrl);
     return wsUrl;
   }
 
@@ -302,34 +312,64 @@ export class GameWebSocketService {
   }
 
   private handleMessage(message: GameWebSocketMessage): void {
-    console.log("WebSocket message received:", message.type);
+    console.log("🔔 WebSocket message received:", {
+      type: message.type,
+      hasData: !!message.data,
+      timestamp: message.timestamp || Date.now(),
+    });
 
     switch (message.type) {
       case "initial_state":
+        console.log("📊 Initial state received");
         this.handleInitialState(message.data);
         break;
 
       case "question_started":
-        this.onQuestionReceived?.(message.data);
+      case "new_question":
+      case "question_update":
+      case "next_question":
+      case "question_changed":
+      case "current_question":
+      case "question":
+        console.log("🎯 Question event received:", message.type, message.data);
+        if (message.data) {
+          this.onQuestionReceived?.(message.data);
+        } else {
+          console.warn(
+            "⚠️ Question event received but no data - triggering fetch"
+          );
+          // Trigger a manual question fetch if no data in WebSocket event
+          this.onQuestionReceived?.({
+            question_id: "",
+            question: "",
+            game_type: "trivia",
+            ui_mode: "multiple_choice",
+          });
+        }
         break;
 
       case "player_joined":
+        console.log("👋 Player joined:", message.data);
         this.onPlayerJoined?.(message.data);
         break;
 
       case "player_left":
+        console.log("👋 Player left:", message.data);
         this.onPlayerLeft?.(message.data);
         break;
 
       case "game_started":
+        console.log("🎮 Game started event:", message.data);
         this.onGameStarted?.(message.data);
         break;
 
       case "game_ended":
+        console.log("🏁 Game ended:", message.data);
         this.onGameEnded?.(message.data);
         break;
 
       case "answer_submitted":
+        console.log("✅ Answer submitted:", message.data);
         this.onAnswerSubmitted?.(message.data);
         break;
 
@@ -337,29 +377,39 @@ export class GameWebSocketService {
       case "buzzer_winner":
       case "correct_answer":
       case "incorrect_answer":
+        console.log("🎯 Buzzer/UI update:", message.type, message.data);
         this.onBuzzerUpdate?.(message.data);
         break;
 
       case "pong":
-        // Heartbeat response - do nothing
+        // Heartbeat response - do nothing but log
+        console.log("💓 Heartbeat pong received");
         break;
 
       case "error":
+        console.error("❌ WebSocket error message:", message.data);
         this.onError?.(message.data?.message || "An error occurred");
         break;
 
       default:
-        console.log("Unknown message type:", message.type);
+        console.log("❓ Unknown message type:", message.type, message.data);
     }
   }
 
   private handleInitialState(data: any): void {
+    console.log("📊 Handling initial state:", data);
+
     if (data.game_state) {
+      console.log("🎮 Setting game state from initial state");
       this.onGameStateUpdate?.(data.game_state);
     }
 
     if (data.current_question) {
+      console.log("🎯 Setting current question from initial state");
       this.onQuestionReceived?.(data.current_question);
+    } else if (data.question) {
+      console.log("🎯 Setting question from initial state (alt format)");
+      this.onQuestionReceived?.(data.question);
     }
   }
 
