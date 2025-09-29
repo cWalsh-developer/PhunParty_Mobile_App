@@ -1,7 +1,14 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
-import { Alert, BackHandler, StyleSheet, Text, View, Animated } from "react-native";
+import {
+  Alert,
+  Animated,
+  BackHandler,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import {
   GameState,
   gameWebSocket,
@@ -108,7 +115,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
         // IMPORTANT: Only set game as started if it's both active AND has questions
         // AND not waiting for players (meaning host has actually clicked start)
-        const hasActuallyStarted = status.is_active && !!status.current_question && !status.is_waiting_for_players;
+        const hasActuallyStarted =
+          status.is_active &&
+          !!status.current_question &&
+          !status.is_waiting_for_players;
         console.log("🎮 Game start detection:", {
           is_active: status.is_active,
           has_question: !!status.current_question,
@@ -141,12 +151,20 @@ export const GameContainer: React.FC<GameContainerProps> = ({
           if (!isGameStarted) {
             try {
               const API = (await import("../../assets/api/API")).default;
-              const statusResponse = await API.gameSession.getStatus(sessionCode);
+              const statusResponse = await API.gameSession.getStatus(
+                sessionCode
+              );
               if (statusResponse.isSuccess) {
                 const status = statusResponse.result;
                 // Check if host has started the game (Go to Quiz was clicked)
-                if (status.is_active && status.current_question && !status.is_waiting_for_players) {
-                  console.log("🚀 Detected game start via status polling - Go to Quiz was clicked!");
+                if (
+                  status.is_active &&
+                  status.current_question &&
+                  !status.is_waiting_for_players
+                ) {
+                  console.log(
+                    "🚀 Detected game start via status polling - Go to Quiz was clicked!"
+                  );
                   setIsGameStarted(true);
                   clearInterval(statusPoll);
                 }
@@ -158,7 +176,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             clearInterval(statusPoll);
           }
         }, 2000); // Poll every 2 seconds
-        
+
         // Clean up polling after 60 seconds
         setTimeout(() => clearInterval(statusPoll), 60000);
       } else if (!isConnecting) {
@@ -187,19 +205,28 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     // Add missing event handlers for game flow
     gameWebSocket.onQuestionReceived = (question: any) => {
       console.log("📝 Question received in GameContainer:", question);
-      
+
       // If we receive a question but game isn't started yet, start it now
       // This handles cases where "Go to Quiz" was clicked and questions are sent
-      if (!isGameStarted && question && (question.question_id || question.question)) {
-        console.log("🎯 Question received - auto-starting game from lobby (Go to Quiz detected)");
+      if (
+        !isGameStarted &&
+        question &&
+        (question.question_id || question.question)
+      ) {
+        console.log(
+          "🎯 Question received - auto-starting game from lobby (Go to Quiz detected)"
+        );
         setIsGameStarted(true);
       }
-      
+
       // The individual game components (TriviaGame, BuzzerGame) will handle the question
     };
 
     gameWebSocket.onGameStarted = (data: any) => {
-      console.log("🚀 GAME STARTED EVENT RECEIVED FROM HOST! (Go to Quiz clicked)", data);
+      console.log(
+        "🚀 GAME STARTED EVENT RECEIVED FROM HOST! (Go to Quiz clicked)",
+        data
+      );
       console.log("Current isGameStarted state:", isGameStarted);
       // Only transition if isstarted is true
       if (data && data.isstarted === true) {
@@ -319,7 +346,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       gameState,
       isGameStarted,
       isConnecting,
-      connectionError
+      connectionError,
     });
 
     // Show lobby screen if game hasn't started yet
@@ -346,11 +373,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
             {/* Lobby status indicator */}
             <View style={styles.statusIndicator}>
-              <Animated.View 
-                style={[
-                  styles.pulsingDot,
-                  { opacity: pulseAnimation }
-                ]} 
+              <Animated.View
+                style={[styles.pulsingDot, { opacity: pulseAnimation }]}
               />
               <Text style={styles.statusText}>Connected & Ready</Text>
             </View>

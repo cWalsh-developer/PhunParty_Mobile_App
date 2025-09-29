@@ -50,7 +50,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
   useEffect(() => {
     setupWebSocketListeners();
-    
+
     // DON'T auto-fetch initial question - wait for host to start game via WebSocket
     console.log("🎮 TriviaGame mounted - waiting for host to start game");
 

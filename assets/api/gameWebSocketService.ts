@@ -333,7 +333,11 @@ export class GameWebSocketService {
       case "question":
       case "quiz_started":
       case "start_quiz":
-        console.log("🎯 Question/Quiz event received:", message.type, message.data);
+        console.log(
+          "🎯 Question/Quiz event received:",
+          message.type,
+          message.data
+        );
         if (message.data) {
           this.onQuestionReceived?.(message.data);
         } else {
