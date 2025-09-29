@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
-import { Alert, BackHandler, StyleSheet, Text, View } from "react-native";
+import { Alert, BackHandler, StyleSheet, Text, View, Animated } from "react-native";
 import {
   GameState,
   gameWebSocket,
@@ -30,6 +30,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [currentGameType, setCurrentGameType] = useState<string | null>(null);
   const [isGameStarted, setIsGameStarted] = useState(false);
+  const [pulseAnimation] = useState(new Animated.Value(1));
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -45,6 +46,9 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       handleBackPress
     );
 
+    // Start pulsing animation for lobby
+    startPulsingAnimation();
+
     return () => {
       backHandler.remove();
       gameWebSocket.disconnect();
@@ -53,6 +57,24 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       }
     };
   }, []);
+
+  const startPulsingAnimation = () => {
+    const pulse = () => {
+      Animated.sequence([
+        Animated.timing(pulseAnimation, {
+          toValue: 0.7,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnimation, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ]).start(() => pulse());
+    };
+    pulse();
+  };
 
   const connectToGame = async () => {
     setIsConnecting(true);
@@ -84,16 +106,18 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         };
         setGameState(gameState);
 
-        // Game is started if it's active AND has a current question (regardless of waiting for answers)
-        const hasStarted = status.is_active && !!status.current_question;
+        // IMPORTANT: Only set game as started if it's both active AND has questions
+        // AND not waiting for players (meaning host has actually clicked start)
+        const hasActuallyStarted = status.is_active && !!status.current_question && !status.is_waiting_for_players;
         console.log("🎮 Game start detection:", {
           is_active: status.is_active,
           has_question: !!status.current_question,
-          game_started: hasStarted,
+          is_waiting_for_players: status.is_waiting_for_players,
+          game_started: hasActuallyStarted,
           started_at: status.started_at,
         });
 
-        setIsGameStarted(hasStarted);
+        setIsGameStarted(hasActuallyStarted);
       }
     } catch (error) {
       console.error("Error getting session status:", error);
@@ -111,6 +135,32 @@ export const GameContainer: React.FC<GameContainerProps> = ({
           console.log("📡 Requesting session stats after connection");
           gameWebSocket.requestSessionStats();
         }, 1000);
+
+        // Also poll game status periodically to catch state changes
+        const statusPoll = setInterval(async () => {
+          if (!isGameStarted) {
+            try {
+              const API = (await import("../../assets/api/API")).default;
+              const statusResponse = await API.gameSession.getStatus(sessionCode);
+              if (statusResponse.isSuccess) {
+                const status = statusResponse.result;
+                // Check if host has started the game (Go to Quiz was clicked)
+                if (status.is_active && status.current_question && !status.is_waiting_for_players) {
+                  console.log("🚀 Detected game start via status polling - Go to Quiz was clicked!");
+                  setIsGameStarted(true);
+                  clearInterval(statusPoll);
+                }
+              }
+            } catch (error) {
+              console.log("Status poll error:", error);
+            }
+          } else {
+            clearInterval(statusPoll);
+          }
+        }, 2000); // Poll every 2 seconds
+        
+        // Clean up polling after 60 seconds
+        setTimeout(() => clearInterval(statusPoll), 60000);
       } else if (!isConnecting) {
         // Only show error if we were previously connected
         setConnectionError("Lost connection to game session");
@@ -136,32 +186,36 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     // Add missing event handlers for game flow
     gameWebSocket.onQuestionReceived = (question: any) => {
-      console.log("Question received in GameContainer:", question);
-      // The individual game components (TriviaGame, BuzzerGame) will handle this
-      // but we can update game state here if needed
+      console.log("📝 Question received in GameContainer:", question);
+      
+      // If we receive a question but game isn't started yet, start it now
+      // This handles cases where "Go to Quiz" was clicked and questions are sent
+      if (!isGameStarted && question && (question.question_id || question.question)) {
+        console.log("🎯 Question received - auto-starting game from lobby (Go to Quiz detected)");
+        setIsGameStarted(true);
+      }
+      
+      // The individual game components (TriviaGame, BuzzerGame) will handle the question
     };
 
     gameWebSocket.onGameStarted = (data: any) => {
-      console.log("🎮 GAME STARTED EVENT RECEIVED:", data);
+      console.log("🚀 GAME STARTED EVENT RECEIVED FROM HOST! (Go to Quiz clicked)", data);
       console.log("Current isGameStarted state:", isGameStarted);
-      // Game has actually started - show the game interface
-      setIsGameStarted(true);
-      console.log("Set isGameStarted to true");
-
+      // Only transition if isstarted is true
+      if (data && data.isstarted === true) {
+        setIsGameStarted(true);
+        // Optionally: setCurrentQuestion(data.current_question);
+        console.log("✅ Transitioning from lobby to active game");
+      }
       if (data.game_type && data.game_type !== currentGameType) {
-        console.log(
-          `Updating game type from ${currentGameType} to ${data.game_type}`
-        );
         setCurrentGameType(data.game_type);
       }
-
-      // Update game state to active
-      if (gameState) {
+      if (gameState && data.isstarted === true) {
         setGameState({
           ...gameState,
           is_active: true,
+          current_question: data.current_question || gameState.current_question,
         });
-        console.log("Updated game state to active");
       }
     };
 
@@ -264,38 +318,19 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       currentGameType,
       gameState,
       isGameStarted,
-      isWaitingForPlayers: gameState?.current_question === undefined,
+      isConnecting,
+      connectionError
     });
 
-    // Show lobby/waiting screen if game hasn't started yet
-    if (!isGameStarted || !currentGameType || !gameState) {
-      // Fallback: If we have a valid session but no game started event,
-      // assume it's a trivia game and show it directly
-      if (sessionCode && !isConnecting && !connectionError) {
-        console.log(
-          "🔍 Session exists but no game started - showing trivia game as fallback"
-        );
-        return (
-          <TriviaGame
-            sessionCode={sessionCode}
-            onGameEnd={handleGameEnd}
-            onError={handleGameError}
-          />
-        );
-      }
-
+    // Show lobby screen if game hasn't started yet
+    if (!isGameStarted) {
       return (
         <View style={styles.centerContainer}>
-          <AppCard style={styles.statusCard}>
-            <MaterialIcons name="gamepad" size={48} color={colors.tea[500]} />
-            <Text style={styles.statusTitle}>Game Lobby</Text>
-            <Text style={styles.statusText}>
-              {currentGameType
-                ? `${
-                    currentGameType.charAt(0).toUpperCase() +
-                    currentGameType.slice(1)
-                  } Game - Waiting to start...`
-                : "Waiting for game to start..."}
+          <AppCard style={styles.lobbyCard}>
+            <MaterialIcons name="people" size={64} color={colors.tea[500]} />
+            <Text style={styles.lobbyTitle}>Game Lobby</Text>
+            <Text style={styles.lobbyText}>
+              Waiting for host to start the game...
             </Text>
             <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
             <Text style={styles.playerInfo}>
@@ -308,6 +343,18 @@ export const GameContainer: React.FC<GameContainerProps> = ({
                   currentGameType.slice(1)}
               </Text>
             )}
+
+            {/* Lobby status indicator */}
+            <View style={styles.statusIndicator}>
+              <Animated.View 
+                style={[
+                  styles.pulsingDot,
+                  { opacity: pulseAnimation }
+                ]} 
+              />
+              <Text style={styles.statusText}>Connected & Ready</Text>
+            </View>
+
             <View style={styles.actionButtons}>
               <AppButton
                 title="Check Game Status"
@@ -322,8 +369,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     }
 
     // Game has started - render the actual game component
-    const gameType = currentGameType.toLowerCase();
-    console.log("Game started - rendering game type:", gameType);
+    const gameType = currentGameType?.toLowerCase() || "trivia";
+    console.log("🎮 Game started - rendering game type:", gameType);
 
     switch (gameType) {
       case "trivia":
@@ -346,25 +393,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
       default:
         return (
-          <View style={styles.centerContainer}>
-            <AppCard style={styles.statusCard}>
-              <MaterialIcons
-                name="help-outline"
-                size={48}
-                color={colors.stone[400]}
-              />
-              <Text style={styles.statusTitle}>Unknown Game Type</Text>
-              <Text style={styles.statusText}>
-                Game type "{currentGameType}" is not supported
-              </Text>
-              <AppButton
-                title="Leave Game"
-                onPress={handleLeaveGame}
-                variant="secondary"
-                style={styles.actionButton}
-              />
-            </AppCard>
-          </View>
+          <TriviaGame
+            sessionCode={sessionCode}
+            onGameEnd={handleGameEnd}
+            onError={handleGameError}
+          />
         );
     }
   };
@@ -500,6 +533,13 @@ const styles = StyleSheet.create({
     padding: 32,
     maxWidth: 350,
   },
+  lobbyCard: {
+    alignItems: "center",
+    padding: 40,
+    maxWidth: 380,
+    borderColor: colors.tea[500],
+    borderWidth: 1,
+  },
   errorCard: {
     alignItems: "center",
     padding: 32,
@@ -513,6 +553,13 @@ const styles = StyleSheet.create({
     marginTop: 16,
     textAlign: "center",
   },
+  lobbyTitle: {
+    ...typography.h2,
+    color: colors.tea[400],
+    marginTop: 16,
+    textAlign: "center",
+    fontWeight: "bold",
+  },
   errorTitle: {
     ...typography.h3,
     color: colors.red[500],
@@ -525,6 +572,13 @@ const styles = StyleSheet.create({
     marginTop: 12,
     textAlign: "center",
     lineHeight: 22,
+  },
+  lobbyText: {
+    ...typography.h3,
+    color: colors.stone[300],
+    marginTop: 12,
+    textAlign: "center",
+    lineHeight: 24,
   },
   errorText: {
     ...typography.body,
@@ -549,6 +603,19 @@ const styles = StyleSheet.create({
     color: colors.tea[400],
     marginTop: 8,
     fontStyle: "italic",
+  },
+  statusIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  pulsingDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.tea[500],
+    marginRight: 8,
   },
   actionButtons: {
     marginTop: 24,

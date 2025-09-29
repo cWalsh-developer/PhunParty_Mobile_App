@@ -331,7 +331,9 @@ export class GameWebSocketService {
       case "question_changed":
       case "current_question":
       case "question":
-        console.log("🎯 Question event received:", message.type, message.data);
+      case "quiz_started":
+      case "start_quiz":
+        console.log("🎯 Question/Quiz event received:", message.type, message.data);
         if (message.data) {
           this.onQuestionReceived?.(message.data);
         } else {
@@ -359,7 +361,10 @@ export class GameWebSocketService {
         break;
 
       case "game_started":
-        console.log("🎮 Game started event:", message.data);
+      case "quiz_started":
+      case "start_game":
+      case "begin_quiz":
+        console.log("🎮 Game/Quiz started event:", message.type, message.data);
         this.onGameStarted?.(message.data);
         break;
 

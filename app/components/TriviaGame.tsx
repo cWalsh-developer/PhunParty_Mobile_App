@@ -50,14 +50,9 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
   useEffect(() => {
     setupWebSocketListeners();
-
-    // Fetch initial question when component mounts
-    if (sessionCode) {
-      console.log("🚀 TriviaGame mounted - fetching initial question");
-      setTimeout(() => {
-        fetchInitialQuestion();
-      }, 1000); // Small delay to ensure WebSocket is connected
-    }
+    
+    // DON'T auto-fetch initial question - wait for host to start game via WebSocket
+    console.log("🎮 TriviaGame mounted - waiting for host to start game");
 
     return () => {
       // Cleanup handled by parent component
