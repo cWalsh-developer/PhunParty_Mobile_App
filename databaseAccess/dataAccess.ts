@@ -40,10 +40,7 @@ const dataAccess = {
 
   leaveGameSession: async (playerId: string) => {
     try {
-      const response = await API.post(PlayerLeaveEndpoint, {
-        player_id: playerId,
-        game_code: null,
-      });
+      const response = await API.post(`${PlayerLeaveEndpoint}/${playerId}`);
       return response.isSuccess;
     } catch (error) {
       console.error("Error in leaveGameSession:", error);
