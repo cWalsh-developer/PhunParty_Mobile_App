@@ -24,7 +24,9 @@ interface LoginFormProps {
   isSignUp: boolean;
   toggleForm: () => void;
   handleLogin: () => void;
-  handleSignUp: () => void;
+  handleSignUp: (termsAccepted: boolean) => void;
+  setTermsAccepted: (termsAccepted: boolean) => void;
+  termsAccepted: boolean;
   handleReset: () => void;
 }
 
@@ -41,6 +43,8 @@ export default function LoginForm({
   toggleForm,
   handleLogin,
   handleSignUp,
+  setTermsAccepted,
+  termsAccepted,
   handleReset,
 }: LoginFormProps) {
   return (
@@ -130,8 +134,84 @@ export default function LoginForm({
               maxWidth={320}
             />
 
+            {/* Accept TOS and PP check box button with links to https://terms-and-privacy.nexusgit.info/desktop-apps/terms */}
+            {isSignUp && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginBottom: 24,
+                }}
+              >
+                <TouchableOpacity
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderWidth: 2,
+                    borderColor: colors.tea[400],
+                    borderRadius: 6,
+                    marginRight: 12,
+                    backgroundColor: colors.ink[900],
+                  }}
+                  onPress={() => {
+                    // Toggle termsAccepted state
+                    setTermsAccepted(termsAccepted === true ? false : true);
+                  }}
+                >
+                  {termsAccepted && (
+                    <MaterialIcons
+                      name="check"
+                      size={20}
+                      color={colors.tea[400]}
+                      style={{ marginTop: 1, marginLeft: 1 }}
+                    />
+                  )}
+                </TouchableOpacity>
+                <Text style={[typography.small, { flex: 1 }]}>
+                  I agree to the{" "}
+                  <Text
+                    onPress={() => {
+                      // Open links in browser
+                      import("expo-linking").then((Linking) => {
+                        Linking.openURL(
+                          "https://terms-and-privacy.nexusgit.info/desktop-apps/terms"
+                        );
+                      });
+                    }}
+                    style={{
+                      color: colors.tea[400],
+                      textDecorationLine: "underline",
+                    }}
+                  >
+                    Terms of Service
+                  </Text>{" "}
+                  and{" "}
+                  <Text
+                    onPress={() => {
+                      // Open links in browser
+                      import("expo-linking").then((Linking) => {
+                        Linking.openURL(
+                          "https://terms-and-privacy.nexusgit.info/desktop-apps/privacy"
+                        );
+                      });
+                    }}
+                    style={{
+                      color: colors.tea[400],
+                      textDecorationLine: "underline",
+                    }}
+                  >
+                    Privacy Policy
+                  </Text>
+                </Text>
+              </View>
+            )}
+
             {/* Action Buttons */}
-            <Selector onPress={isSignUp ? handleSignUp : handleLogin}>
+            <Selector
+              onPress={
+                isSignUp ? () => handleSignUp(termsAccepted) : handleLogin
+              }
+            >
               <AppButton
                 title={isSignUp ? "Create Account" : "Sign In"}
                 onPress={() => {}} // This will be overridden by Selector

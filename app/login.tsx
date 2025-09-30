@@ -20,6 +20,7 @@ export default function Login() {
   const [name, setName] = useState<string>("");
   const [mobile, setMobile] = useState<string>("");
   const { setUser } = useContext(UserContext)!;
+  const [termsAccepted, setTermsAccepted] = useState<boolean>(false);
   const { AuthenticationEndpoint } = Constants.expoConfig?.extra || {};
 
   useEffect(() => {
@@ -45,7 +46,12 @@ export default function Login() {
       setIsLoggedIn(true);
     }
   };
-  const handleSignUp = async () => {
+  const handleSignUp = async (termsAccepted: boolean) => {
+    setTermsAccepted(termsAccepted);
+    if (!termsAccepted) {
+      alert("You must accept the terms and conditions to sign up.");
+      return;
+    }
     const result = await signUp({ name, email, password, mobile });
     if (result) {
       toggleForm();
@@ -71,6 +77,8 @@ export default function Login() {
       handleLogin={handleLogin}
       handleSignUp={handleSignUp}
       handleReset={handleReset}
+      setTermsAccepted={setTermsAccepted}
+      termsAccepted={termsAccepted}
     />
   );
 }
