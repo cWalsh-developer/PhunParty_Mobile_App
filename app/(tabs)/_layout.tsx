@@ -1,61 +1,80 @@
 import { colors } from "@/assets/theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Tabs } from "expo-router";
+import { createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
+import { withLayoutContext } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+const { Navigator } = createMaterialTopTabNavigator();
+const MaterialTopTabs = withLayoutContext(Navigator);
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+
   return (
-    <Tabs
+    <MaterialTopTabs
       screenOptions={{
         tabBarActiveTintColor: colors.tea[400],
-        tabBarActiveBackgroundColor: colors.ink[900],
         tabBarInactiveTintColor: colors.stone[400],
         tabBarStyle: {
-          height: 105,
           backgroundColor: colors.stone[950],
-          borderTopColor: colors.ink[800],
-          borderTopWidth: 1,
+          borderBottomColor: colors.ink[800],
+          borderBottomWidth: 1,
+          paddingBottom: insets.bottom,
+          height: 60 + insets.bottom,
         },
         tabBarLabelStyle: {
           fontSize: 12,
-          marginBottom: 5,
           fontWeight: "600",
+          textTransform: "none",
         },
-        headerStyle: {
-          backgroundColor: colors.stone[950],
+        tabBarIndicatorStyle: {
+          backgroundColor: colors.tea[400],
+          height: 3,
         },
-        headerTintColor: colors.stone[100],
-        sceneStyle: { backgroundColor: colors.ink[900] },
+        swipeEnabled: true,
+        tabBarPressColor: colors.ink[800],
       }}
+      tabBarPosition="bottom"
     >
-      <Tabs.Screen
+      <MaterialTopTabs.Screen
         name="scanQR"
         options={{
           title: "Join Game",
-          headerShown: false,
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({
+            color,
+            focused,
+          }: {
+            color: string;
+            focused: boolean;
+          }) => (
             <FontAwesome
               name="qrcode"
-              size={29}
-              color={focused ? color : "#201e23ff"}
+              size={24}
+              color={focused ? color : colors.stone[400]}
             />
           ),
         }}
       />
-      <Tabs.Screen
+      <MaterialTopTabs.Screen
         name="profileTab"
         options={{
           title: "Profile",
-          headerShown: false,
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({
+            color,
+            focused,
+          }: {
+            color: string;
+            focused: boolean;
+          }) => (
             <Ionicons
               name="person"
-              size={29}
-              color={focused ? color : "#201e23ff"}
+              size={24}
+              color={focused ? color : colors.stone[400]}
             />
           ),
         }}
       />
-    </Tabs>
+    </MaterialTopTabs>
   );
 }
