@@ -1,3 +1,4 @@
+import dataAccess from "@/databaseAccess/dataAccess";
 import { Camera } from "expo-camera";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
@@ -124,11 +125,12 @@ export default function GameSession() {
     }
   };
 
-  const handleLeaveGame = () => {
+  const handleLeaveGame = async () => {
     setHasJoinedGame(false);
     setSessionCode(null);
     setShowScanner(true);
-
+    await dataAccess.leaveGameSession(playerInfo!.player_id);
+    console.log(`Player ${playerInfo!.player_id} has left the game session.`);
     // Navigate back to main tabs
     router.replace("/(tabs)/scanQR");
   };
