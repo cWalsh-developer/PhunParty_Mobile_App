@@ -103,33 +103,36 @@ const dataAccess = {
     try {
       // Validate inputs
       if (!playerId) {
-        console.error("❌ Invalid playerId for leaveGameSession");
+        console.log("ℹ️ Invalid playerId for leaveGameSession");
         return false;
       }
 
       if (!PlayerLeaveEndpoint) {
-        console.error("❌ Leave game endpoint not configured");
+        console.log("ℹ️ Leave game endpoint not configured");
         return false;
       }
 
-      console.log("🚪 Calling leave session API for player:", playerId);
-      console.log("🔗 Endpoint:", `${PlayerLeaveEndpoint}/${playerId}`);
+      console.log("🚪 Attempting to leave session for player:", playerId);
 
       const response = await API.post(`${PlayerLeaveEndpoint}/${playerId}`);
 
-      console.log("📡 Leave session response:", response);
-
-      if (!response.isSuccess) {
-        console.error("❌ Leave session failed:", response.message);
+      if (response.isSuccess) {
+        console.log("✅ Successfully left session");
+        return true;
+      } else {
+        // Leave failed - this might be because player wasn't in a session
+        // or because of a backend issue. Log as info, not error.
+        const lowerMsg = response.message?.toLowerCase() || "";
+        if (lowerMsg.includes("not in") || lowerMsg.includes("no active")) {
+          console.log("ℹ️ Player was not in an active session");
+        } else {
+          console.log("ℹ️ Leave session returned:", response.message);
+        }
+        return false;
       }
-
-      return response.isSuccess;
     } catch (error: any) {
-      console.error("❌ Error in leaveGameSession:", error);
-      console.error("❌ Error details:", {
-        message: error.message,
-        playerId,
-      });
+      // Log as info since leave failures are often expected
+      console.log("ℹ️ Leave session attempt failed:", error.message || error);
       return false;
     }
   },

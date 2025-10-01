@@ -37,38 +37,87 @@ export class GameSessionService {
     }
   ): Promise<{ success: boolean; message?: string; sessionInfo?: any }> {
     try {
+      // Validate inputs
+      if (!sessionCode || !playerInfo?.player_id || !playerInfo?.player_name) {
+        console.error("Invalid session code or player info");
+        return {
+          success: false,
+          message: "Invalid session code or player information",
+        };
+      }
+
       // Step 1: Join session via HTTP API (creates session assignment)
       console.log(
-        `Joining session ${sessionCode} for player ${playerInfo.player_name}`
+        `🎮 [GameSessionService] Joining session ${sessionCode} for player ${playerInfo.player_name} (${playerInfo.player_id})`
       );
 
       const joinResponse = await API.gameSession.join(
         sessionCode,
         playerInfo.player_id
       );
+
+      console.log("🎮 [GameSessionService] Join response:", {
+        isSuccess: joinResponse.isSuccess,
+        message: joinResponse.message,
+      });
+
       if (!joinResponse.isSuccess) {
         // Check if player is already in session - this might be ok
         if (joinResponse.message?.includes("already in a game session")) {
-          console.log("Player already in session, continuing...");
+          console.log("✅ Player already in session, continuing...");
         } else {
-          return { success: false, message: joinResponse.message };
+          console.error("❌ Join failed:", joinResponse.message);
+          return {
+            success: false,
+            message: joinResponse.message || "Failed to join session",
+          };
         }
+      } else {
+        console.log("✅ Successfully joined session via API");
       }
 
       // Step 2: Get session join info
+      console.log("🔍 Getting session join info...");
       const joinInfoResponse = await API.gameSession.getJoinInfo(sessionCode);
+
+      console.log("🔍 Join info response:", {
+        isSuccess: joinInfoResponse.isSuccess,
+        hasResult: !!joinInfoResponse.result,
+      });
+
       if (!joinInfoResponse.isSuccess) {
-        return { success: false, message: joinInfoResponse.message };
+        console.error("❌ Failed to get join info:", joinInfoResponse.message);
+        return {
+          success: false,
+          message: joinInfoResponse.message || "Failed to get session information",
+        };
+      }
+
+      if (!joinInfoResponse.result) {
+        console.error("❌ Join info result is empty");
+        return {
+          success: false,
+          message: "Session information is empty. The session may be invalid.",
+        };
       }
 
       const sessionInfo = joinInfoResponse.result;
       this.sessionCode = sessionCode;
 
+      console.log("✅ Session info received:", {
+        session_code: sessionInfo.session_code,
+        host_name: sessionInfo.host_name,
+        game_code: sessionInfo.game_code,
+      });
+
       // Step 3: Connect to WebSocket for real-time updates
+      console.log("🔌 Connecting to WebSocket...");
       const wsConnected = await gameWebSocket.connect(sessionCode, playerInfo);
 
       if (!wsConnected) {
-        console.warn("WebSocket connection failed, will use HTTP polling");
+        console.warn("⚠️ WebSocket connection failed, will use HTTP polling");
+      } else {
+        console.log("✅ WebSocket connected successfully");
       }
 
       return {
@@ -77,8 +126,17 @@ export class GameSessionService {
         message: `Successfully joined ${sessionInfo.host_name}'s game`,
       };
     } catch (error: any) {
-      console.error("Error joining session:", error);
-      return { success: false, message: error.message };
+      console.error("❌ Error joining session:", error);
+      console.error("Error details:", {
+        name: error.name,
+        message: error.message,
+        sessionCode,
+        playerId: playerInfo?.player_id,
+      });
+      return {
+        success: false,
+        message: error.message || "An unexpected error occurred while joining the session",
+      };
     }
   }
 

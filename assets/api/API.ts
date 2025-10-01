@@ -155,16 +155,50 @@ const callFetch = async <T = any>(
       }
     }
 
-    return response.ok
-      ? { isSuccess: true, result }
-      : {
-          isSuccess: false,
-          message:
-            result?.detail ||
-            result?.message ||
-            JSON.stringify(result) ||
-            `Request failed with status ${response.status}`,
-        };
+    if (response.ok) {
+      return { isSuccess: true, result };
+    } else {
+      // Extract error message
+      const errorMessage =
+        result?.detail ||
+        result?.message ||
+        result?.error ||
+        (typeof result === 'string' ? result : JSON.stringify(result)) ||
+        `Request failed with status ${response.status}: ${response.statusText}`;
+
+      // Log at appropriate level - 400 errors are often expected business logic errors
+      if (response.status >= 500) {
+        // Server errors - these are unexpected
+        console.error(`API Error (${method} ${url}):`, {
+          status: response.status,
+          statusText: response.statusText,
+          result: result,
+        });
+      } else if (response.status === 400 || response.status === 403) {
+        // Client errors - often expected (validation, permissions, etc.)
+        const lowerMsg = errorMessage.toLowerCase();
+        if (lowerMsg.includes("already in") || lowerMsg.includes("already joined")) {
+          // This is expected - player trying to rejoin
+          console.log(`ℹ️ API Info (${method} ${url}): ${errorMessage}`);
+        } else {
+          console.warn(`⚠️ API Warning (${method} ${url}):`, {
+            status: response.status,
+            message: errorMessage,
+          });
+        }
+      } else {
+        // Other errors (401, 404, etc.)
+        console.warn(`⚠️ API Warning (${method} ${url}):`, {
+          status: response.status,
+          message: errorMessage,
+        });
+      }
+
+      return {
+        isSuccess: false,
+        message: errorMessage,
+      };
+    }
   } catch (error: any) {
     console.error("API request error:", error);
 
