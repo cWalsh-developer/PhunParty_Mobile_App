@@ -88,12 +88,21 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     setConnectionError(null);
 
     try {
+      // Validate session code
+      if (!sessionCode) {
+        throw new Error("No session code provided");
+      }
+
       // First, get the session status to determine game type and state
       console.log("Getting session status for game type detection...");
       const API = (await import("../../assets/api/API")).default;
       const statusResponse = await API.gameSession.getStatus(sessionCode);
 
       if (statusResponse.isSuccess) {
+        if (!statusResponse.result) {
+          throw new Error("No session data received");
+        }
+
         const status = statusResponse.result;
         console.log("Session status:", status);
 
@@ -128,9 +137,18 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         });
 
         setIsGameStarted(hasActuallyStarted);
+      } else {
+        throw new Error(statusResponse.message || "Failed to get session status");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error getting session status:", error);
+      console.error("Error details:", {
+        message: error.message,
+        sessionCode,
+      });
+      setConnectionError(
+        error.message || "Failed to connect to game session"
+      );
     }
 
     // Setup WebSocket listeners

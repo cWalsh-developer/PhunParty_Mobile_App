@@ -174,7 +174,7 @@ export default function LoginForm({
                       // Open links in browser
                       import("expo-linking").then((Linking) => {
                         Linking.openURL(
-                          "https://terms-and-privacy.nexusgit.info/desktop-apps/terms"
+                          "https://terms-and-privacy.nexusgit.info/websites/phun-party/terms"
                         );
                       });
                     }}
@@ -191,7 +191,7 @@ export default function LoginForm({
                       // Open links in browser
                       import("expo-linking").then((Linking) => {
                         Linking.openURL(
-                          "https://terms-and-privacy.nexusgit.info/desktop-apps/privacy"
+                          "https://terms-and-privacy.nexusgit.info/websites/phun-party/privacy"
                         );
                       });
                     }}

@@ -87,17 +87,27 @@ export class GameSessionService {
    */
   async getSessionStatus(): Promise<GameSessionState | null> {
     if (!this.sessionCode) {
-      throw new Error("Not connected to a session");
+      console.error("getSessionStatus: Not connected to a session");
+      return null;
     }
 
     try {
       const response = await API.gameSession.getStatus(this.sessionCode);
       if (response.isSuccess) {
+        if (!response.result) {
+          console.error("getSessionStatus: No result in response");
+          return null;
+        }
         return response.result;
       }
-      throw new Error(response.message);
-    } catch (error) {
+      console.error("getSessionStatus failed:", response.message);
+      return null;
+    } catch (error: any) {
       console.error("Error getting session status:", error);
+      console.error("Error details:", {
+        message: error.message,
+        sessionCode: this.sessionCode,
+      });
       return null;
     }
   }
@@ -107,7 +117,8 @@ export class GameSessionService {
    */
   async getCurrentQuestion(): Promise<GameQuestion | null> {
     if (!this.sessionCode) {
-      throw new Error("Not connected to a session");
+      console.error("getCurrentQuestion: Not connected to a session");
+      return null;
     }
 
     try {
@@ -115,11 +126,20 @@ export class GameSessionService {
         this.sessionCode
       );
       if (response.isSuccess) {
+        if (!response.result) {
+          console.error("getCurrentQuestion: No result in response");
+          return null;
+        }
         return response.result;
       }
-      throw new Error(response.message);
-    } catch (error) {
+      console.error("getCurrentQuestion failed:", response.message);
+      return null;
+    } catch (error: any) {
       console.error("Error getting current question:", error);
+      console.error("Error details:", {
+        message: error.message,
+        sessionCode: this.sessionCode,
+      });
       return null;
     }
   }
@@ -133,21 +153,31 @@ export class GameSessionService {
     answer: string
   ): Promise<SubmitAnswerResponse | null> {
     if (!this.sessionCode) {
-      throw new Error("Not connected to a session");
+      console.error("submitAnswer: Not connected to a session");
+      return null;
+    }
+
+    if (!questionId || !answer) {
+      console.error("submitAnswer: Invalid questionId or answer");
+      return null;
     }
 
     try {
       // Try WebSocket first for real-time submission
       if (this.isWebSocketConnected) {
-        const sent = gameWebSocket.submitAnswer(answer, questionId);
-        if (sent) {
-          // WebSocket submission sent - response will come via WebSocket events
-          return {
-            message: "Answer submitted via WebSocket",
-            is_correct: false, // Will be updated via WebSocket event
-            current_score: 0, // Will be updated via WebSocket event
-            game_status: "question_answered",
-          };
+        try {
+          const sent = gameWebSocket.submitAnswer(answer, questionId);
+          if (sent) {
+            // WebSocket submission sent - response will come via WebSocket events
+            return {
+              message: "Answer submitted via WebSocket",
+              is_correct: false, // Will be updated via WebSocket event
+              current_score: 0, // Will be updated via WebSocket event
+              game_status: "question_answered",
+            };
+          }
+        } catch (wsError: any) {
+          console.error("WebSocket submit failed, falling back to HTTP:", wsError);
         }
       }
 
@@ -156,13 +186,25 @@ export class GameSessionService {
         questionId,
         answer
       );
+
       if (response.isSuccess) {
+        if (!response.result) {
+          console.error("submitAnswer: No result in response");
+          return null;
+        }
         return response.result;
       }
-      throw new Error(response.message);
+
+      console.error("submitAnswer failed:", response.message);
+      return null;
     } catch (error: any) {
       console.error("Error submitting answer:", error);
-      throw error;
+      console.error("Error details:", {
+        message: error.message,
+        sessionCode: this.sessionCode,
+        questionId,
+      });
+      return null;
     }
   }
 
@@ -171,30 +213,48 @@ export class GameSessionService {
    */
   async pressBuzzer(): Promise<boolean> {
     if (!this.sessionCode) {
-      throw new Error("Not connected to a session");
+      console.error("pressBuzzer: Not connected to a session");
+      return false;
     }
 
     // Try WebSocket first
     if (this.isWebSocketConnected) {
-      return gameWebSocket.pressBuzzer();
+      try {
+        return gameWebSocket.pressBuzzer();
+      } catch (error: any) {
+        console.error("Error pressing buzzer:", error);
+        return false;
+      }
     }
 
     // No HTTP fallback for buzzer - requires real-time WebSocket
-    throw new Error("Buzzer requires WebSocket connection");
+    console.error("pressBuzzer: Buzzer requires WebSocket connection");
+    return false;
   }
 
   /**
    * Leave the session - cleans up connections
    */
   async leaveSession(): Promise<void> {
-    this.stopPolling();
+    try {
+      this.stopPolling();
 
-    if (this.isWebSocketConnected) {
-      gameWebSocket.disconnect();
+      if (this.isWebSocketConnected) {
+        try {
+          gameWebSocket.disconnect();
+        } catch (wsError: any) {
+          console.error("Error disconnecting WebSocket:", wsError);
+        }
+      }
+
+      this.sessionCode = null;
+      this.isWebSocketConnected = false;
+    } catch (error: any) {
+      console.error("Error leaving session:", error);
+      // Still reset state even if there's an error
+      this.sessionCode = null;
+      this.isWebSocketConnected = false;
     }
-
-    this.sessionCode = null;
-    this.isWebSocketConnected = false;
   }
 
   /**

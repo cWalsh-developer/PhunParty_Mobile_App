@@ -131,7 +131,29 @@ const callFetch = async <T = any>(
 
   try {
     const response = await fetch(url, requestObj);
-    const result = response.status !== 204 ? await response.json() : null;
+
+    // Handle network errors
+    if (!response) {
+      return {
+        isSuccess: false,
+        message: "Network error: No response received from server",
+      };
+    }
+
+    // Handle response parsing
+    let result = null;
+    if (response.status !== 204) {
+      try {
+        const text = await response.text();
+        result = text ? JSON.parse(text) : null;
+      } catch (parseError: any) {
+        console.error("Failed to parse response:", parseError);
+        return {
+          isSuccess: false,
+          message: `Invalid response format: ${parseError.message}`,
+        };
+      }
+    }
 
     return response.ok
       ? { isSuccess: true, result }
@@ -141,9 +163,26 @@ const callFetch = async <T = any>(
             result?.detail ||
             result?.message ||
             JSON.stringify(result) ||
-            "Unknown error",
+            `Request failed with status ${response.status}`,
         };
   } catch (error: any) {
-    return { isSuccess: false, message: error.message };
+    console.error("API request error:", error);
+
+    // Handle specific error types
+    if (error.name === "TypeError" && error.message.includes("fetch")) {
+      return {
+        isSuccess: false,
+        message: "Network error: Unable to connect to server",
+      };
+    }
+
+    if (error.name === "AbortError") {
+      return { isSuccess: false, message: "Request timeout" };
+    }
+
+    return {
+      isSuccess: false,
+      message: error.message || "An unexpected error occurred",
+    };
   }
 };

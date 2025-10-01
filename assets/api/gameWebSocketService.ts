@@ -471,35 +471,79 @@ export class GameWebSocketService {
 
   // HTTP API integrations for when WebSocket is not available
   async submitAnswerViaAPI(questionId: string, answer: string): Promise<any> {
-    if (!this.sessionCode || !this.playerInfo?.player_id) {
-      throw new Error("Not connected to a session");
-    }
+    try {
+      if (!this.sessionCode || !this.playerInfo?.player_id) {
+        console.error("submitAnswerViaAPI: Not connected to a session");
+        return {
+          isSuccess: false,
+          message: "Not connected to a session",
+        };
+      }
 
-    const API = (await import("./API")).default;
-    return await API.gameSession.submitAnswer(
-      this.sessionCode,
-      this.playerInfo.player_id,
-      questionId,
-      answer
-    );
+      if (!questionId || !answer) {
+        console.error("submitAnswerViaAPI: Invalid questionId or answer");
+        return {
+          isSuccess: false,
+          message: "Invalid question or answer",
+        };
+      }
+
+      const API = (await import("./API")).default;
+      return await API.gameSession.submitAnswer(
+        this.sessionCode,
+        this.playerInfo.player_id,
+        questionId,
+        answer
+      );
+    } catch (error: any) {
+      console.error("submitAnswerViaAPI error:", error);
+      return {
+        isSuccess: false,
+        message: error.message || "Failed to submit answer",
+      };
+    }
   }
 
   async getSessionStatus(): Promise<any> {
-    if (!this.sessionCode) {
-      throw new Error("Not connected to a session");
-    }
+    try {
+      if (!this.sessionCode) {
+        console.error("getSessionStatus: Not connected to a session");
+        return {
+          isSuccess: false,
+          message: "Not connected to a session",
+        };
+      }
 
-    const API = (await import("./API")).default;
-    return await API.gameSession.getStatus(this.sessionCode);
+      const API = (await import("./API")).default;
+      return await API.gameSession.getStatus(this.sessionCode);
+    } catch (error: any) {
+      console.error("getSessionStatus error:", error);
+      return {
+        isSuccess: false,
+        message: error.message || "Failed to get session status",
+      };
+    }
   }
 
   async getCurrentQuestion(): Promise<any> {
-    if (!this.sessionCode) {
-      throw new Error("Not connected to a session");
-    }
+    try {
+      if (!this.sessionCode) {
+        console.error("getCurrentQuestion: Not connected to a session");
+        return {
+          isSuccess: false,
+          message: "Not connected to a session",
+        };
+      }
 
-    const API = (await import("./API")).default;
-    return await API.gameSession.getCurrentQuestion(this.sessionCode);
+      const API = (await import("./API")).default;
+      return await API.gameSession.getCurrentQuestion(this.sessionCode);
+    } catch (error: any) {
+      console.error("getCurrentQuestion error:", error);
+      return {
+        isSuccess: false,
+        message: error.message || "Failed to get current question",
+      };
+    }
   }
 }
 

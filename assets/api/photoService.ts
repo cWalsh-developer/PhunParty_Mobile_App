@@ -23,12 +23,23 @@ export class PhotoService {
     imageUri: string
   ): Promise<PhotoUploadResponse | null> {
     try {
+      // Validate inputs
+      if (!playerId || !imageUri) {
+        console.error("PhotoService: Invalid playerId or imageUri");
+        return null;
+      }
+
       // Create form data
       const formData = new FormData();
 
       // Get file extension from URI
       const uriParts = imageUri.split(".");
       const fileType = uriParts[uriParts.length - 1];
+
+      if (!fileType) {
+        console.error("PhotoService: Unable to determine file type from URI");
+        return null;
+      }
 
       // Create file object for FormData
       const fileObject: any = {
@@ -49,6 +60,12 @@ export class PhotoService {
 
       if (response.isSuccess) {
         console.log("PhotoService: Upload successful:", response.result);
+
+        if (!response.result?.photo_url) {
+          console.error("PhotoService: No photo URL in response");
+          return null;
+        }
+
         return {
           photo_url: response.result.photo_url,
           player_id: playerId,
@@ -58,8 +75,13 @@ export class PhotoService {
         console.error("PhotoService: Photo upload failed:", response.message);
         return null;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("PhotoService: Error uploading photo:", error);
+      console.error("PhotoService: Error details:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
       return null;
     }
   }
@@ -70,12 +92,23 @@ export class PhotoService {
     avatar: AvatarOption
   ): Promise<PhotoUploadResponse | null> {
     try {
+      // Validate inputs
+      if (!playerId || !avatar?.style || !avatar?.seed) {
+        console.error("PhotoService: Invalid playerId or avatar data");
+        return null;
+      }
+
       const response = await API.post(
         `photos/avatar/${playerId}?avatar_style=${avatar.style}&avatar_seed=${avatar.seed}`,
         {} // Empty body since we're using query parameters
       );
 
       if (response.isSuccess) {
+        if (!response.result?.photo_url) {
+          console.error("PhotoService: No photo URL in avatar response");
+          return null;
+        }
+
         return {
           photo_url: response.result.photo_url,
           player_id: playerId,
@@ -85,8 +118,13 @@ export class PhotoService {
         console.error("PhotoService: Avatar set failed:", response.message);
         return null;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("PhotoService: Error setting avatar:", error);
+      console.error("PhotoService: Error details:", {
+        message: error.message,
+        playerId,
+        avatarStyle: avatar?.style,
+      });
       return null;
     }
   }
@@ -191,8 +229,27 @@ export class PhotoService {
         "PhotoService: uploadFormData called with endpoint:",
         endpoint
       );
+
+      // Validate inputs
+      if (!endpoint || !formData) {
+        console.error("PhotoService: Invalid endpoint or formData");
+        return {
+          isSuccess: false,
+          message: "Invalid upload parameters",
+        };
+      }
+
       const baseUrl =
         process.env.API_URL || Constants.expoConfig?.extra?.API_URL;
+
+      if (!baseUrl) {
+        console.error("PhotoService: API URL not configured");
+        return {
+          isSuccess: false,
+          message: "API configuration error",
+        };
+      }
+
       const url = baseUrl
         ? `${baseUrl.replace(/\/$/, "")}/${endpoint.replace(/^\//, "")}`
         : endpoint;
@@ -201,10 +258,16 @@ export class PhotoService {
       console.log("PhotoService: Base URL from config:", baseUrl);
 
       // Get auth token
-      const { getToken } = await import(
-        "../authentication-storage/authStorage"
-      );
-      const token = await getToken();
+      let token = null;
+      try {
+        const { getToken } = await import(
+          "../authentication-storage/authStorage"
+        );
+        token = await getToken();
+      } catch (tokenError: any) {
+        console.error("PhotoService: Failed to get auth token:", tokenError);
+        // Continue without token - some endpoints might not require it
+      }
 
       const headers: any = {
         "X-API-Key":
@@ -227,6 +290,14 @@ export class PhotoService {
         body: formData,
       });
 
+      if (!response) {
+        console.error("PhotoService: No response from server");
+        return {
+          isSuccess: false,
+          message: "Network error: No response from server",
+        };
+      }
+
       console.log("PhotoService: Upload response status:", response.status);
       console.log(
         "PhotoService: Upload response headers:",
@@ -241,8 +312,8 @@ export class PhotoService {
 
           // Try to parse as JSON
           try {
-            result = JSON.parse(responseText);
-          } catch (parseError) {
+            result = responseText ? JSON.parse(responseText) : null;
+          } catch (parseError: any) {
             console.error(
               "PhotoService: Failed to parse JSON response:",
               responseText.substring(0, 500)
@@ -252,7 +323,7 @@ export class PhotoService {
               details: responseText.substring(0, 200),
             };
           }
-        } catch (textError) {
+        } catch (textError: any) {
           console.error(
             "PhotoService: Failed to read response text:",
             textError
@@ -273,7 +344,24 @@ export class PhotoService {
           };
     } catch (error: any) {
       console.error("PhotoService: uploadFormData error:", error);
-      return { isSuccess: false, message: error.message };
+      console.error("PhotoService: Error type:", error.name);
+
+      // Handle specific error types
+      if (error.name === "TypeError" && error.message.includes("fetch")) {
+        return {
+          isSuccess: false,
+          message: "Network error: Unable to connect to server",
+        };
+      }
+
+      if (error.name === "AbortError") {
+        return { isSuccess: false, message: "Upload timeout" };
+      }
+
+      return {
+        isSuccess: false,
+        message: error.message || "An unexpected error occurred during upload",
+      };
     }
   }
 
