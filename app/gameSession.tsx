@@ -39,7 +39,12 @@ export default function GameSession() {
 
   // Handle session code parameter changes separately
   useEffect(() => {
-    if (paramSessionCode && paramPlayerName && !hasJoinedGame && !hasLeftSession) {
+    if (
+      paramSessionCode &&
+      paramPlayerName &&
+      !hasJoinedGame &&
+      !hasLeftSession
+    ) {
       const playerData: PlayerInfo = {
         player_id: paramPlayerId || generatePlayerId(),
         player_name: paramPlayerName,
@@ -128,22 +133,27 @@ export default function GameSession() {
   };
 
   const handleLeaveGame = async () => {
-    // Immediately mark that we've left to prevent auto-rejoin
-    const playerId = playerInfo!.player_id;
-    setHasLeftSession(true);
-    setHasJoinedGame(false);
-    setSessionCode(null);
-    setShowScanner(true);
+    try {
+      // Immediately mark that we've left to prevent auto-rejoin
+      const playerId = playerInfo!.player_id;
+      setHasLeftSession(true);
+      setHasJoinedGame(false);
+      setSessionCode(null);
+      setShowScanner(false);
 
-    // Call leave API and navigate
-    await dataAccess.leaveGameSession(playerId);
-    console.log(`Player ${playerId} has left the game session.`);
+      // Call leave API and navigate
+      await dataAccess.leaveGameSession(playerId);
+      console.log(`Player ${playerId} has left the game session.`);
 
-    // Navigate back to main tabs without any session params
-    router.replace({
-      pathname: "/(tabs)/scanQR",
-      params: {}, // Clear all params to prevent auto-rejoin
-    });
+      // Clear the entire navigation stack and navigate to root
+      router.dismissAll();
+      router.replace("/(tabs)/scanQR");
+    } catch (error) {
+      console.error("Error leaving game session:", error);
+      // Still navigate away even if API call fails
+      router.dismissAll();
+      router.replace("/(tabs)/scanQR");
+    }
   };
 
   const handleScannerClose = () => {
