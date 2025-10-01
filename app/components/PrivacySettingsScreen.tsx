@@ -59,7 +59,9 @@ export default function PrivacySettingsScreen({
           text: "View Policy",
           onPress: () => {
             // TODO: Open privacy policy URL
-            Linking.openURL("https://phun.party/privacy");
+            Linking.openURL(
+              "https://terms-and-privacy.nexusgit.info/websites/phun-party/privacy"
+            );
           },
         },
       ]
