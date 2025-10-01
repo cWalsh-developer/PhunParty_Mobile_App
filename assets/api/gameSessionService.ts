@@ -234,7 +234,7 @@ export class GameSessionService {
               message: "Answer submitted via WebSocket",
               is_correct: false, // Will be updated via WebSocket event
               current_score: 0, // Will be updated via WebSocket event
-              game_status: "question_answered",
+              game_state: "question_answered",
             };
           }
         } catch (wsError: any) {

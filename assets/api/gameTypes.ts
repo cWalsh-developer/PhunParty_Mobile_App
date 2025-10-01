@@ -77,7 +77,7 @@ export interface SubmitAnswerResponse {
   is_correct: boolean;
   correct_answer?: string;
   current_score: number;
-  game_status: "question_answered" | "question_complete" | "game_complete";
+  game_state: "question_answered" | "question_complete" | "game_complete";
   next_question?: GameQuestion;
   final_results?: SessionScore[];
 }
