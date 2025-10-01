@@ -21,6 +21,7 @@ export default function GameSession() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [hasLeftSession, setHasLeftSession] = useState(false);
 
   // Extract specific param values to avoid object dependency issues
   const paramSessionCode = params.sessionCode as string;
@@ -38,7 +39,7 @@ export default function GameSession() {
 
   // Handle session code parameter changes separately
   useEffect(() => {
-    if (paramSessionCode && paramPlayerName && !hasJoinedGame) {
+    if (paramSessionCode && paramPlayerName && !hasJoinedGame && !hasLeftSession) {
       const playerData: PlayerInfo = {
         player_id: paramPlayerId || generatePlayerId(),
         player_name: paramPlayerName,
@@ -53,6 +54,7 @@ export default function GameSession() {
     paramPlayerId,
     paramPlayerPhoto,
     hasJoinedGame,
+    hasLeftSession,
   ]);
 
   const setupCamera = async () => {
@@ -126,13 +128,22 @@ export default function GameSession() {
   };
 
   const handleLeaveGame = async () => {
+    // Immediately mark that we've left to prevent auto-rejoin
+    const playerId = playerInfo!.player_id;
+    setHasLeftSession(true);
     setHasJoinedGame(false);
     setSessionCode(null);
     setShowScanner(true);
-    await dataAccess.leaveGameSession(playerInfo!.player_id);
-    console.log(`Player ${playerInfo!.player_id} has left the game session.`);
-    // Navigate back to main tabs
-    router.replace("/(tabs)/scanQR");
+
+    // Call leave API and navigate
+    await dataAccess.leaveGameSession(playerId);
+    console.log(`Player ${playerId} has left the game session.`);
+
+    // Navigate back to main tabs without any session params
+    router.replace({
+      pathname: "/(tabs)/scanQR",
+      params: {}, // Clear all params to prevent auto-rejoin
+    });
   };
 
   const handleScannerClose = () => {

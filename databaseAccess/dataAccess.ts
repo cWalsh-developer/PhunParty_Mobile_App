@@ -40,10 +40,13 @@ const dataAccess = {
 
   leaveGameSession: async (playerId: string) => {
     try {
+      console.log("🚪 Calling leave session API for player:", playerId);
+      console.log("🔗 Endpoint:", `${PlayerLeaveEndpoint}/${playerId}`);
       const response = await API.post(`${PlayerLeaveEndpoint}/${playerId}`);
+      console.log("📡 Leave session response:", response);
       return response.isSuccess;
     } catch (error) {
-      console.error("Error in leaveGameSession:", error);
+      console.error("❌ Error in leaveGameSession:", error);
       return false;
     }
   },
