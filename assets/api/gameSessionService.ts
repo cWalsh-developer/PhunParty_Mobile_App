@@ -89,7 +89,8 @@ export class GameSessionService {
         console.error("❌ Failed to get join info:", joinInfoResponse.message);
         return {
           success: false,
-          message: joinInfoResponse.message || "Failed to get session information",
+          message:
+            joinInfoResponse.message || "Failed to get session information",
         };
       }
 
@@ -135,7 +136,9 @@ export class GameSessionService {
       });
       return {
         success: false,
-        message: error.message || "An unexpected error occurred while joining the session",
+        message:
+          error.message ||
+          "An unexpected error occurred while joining the session",
       };
     }
   }
@@ -235,7 +238,10 @@ export class GameSessionService {
             };
           }
         } catch (wsError: any) {
-          console.error("WebSocket submit failed, falling back to HTTP:", wsError);
+          console.error(
+            "WebSocket submit failed, falling back to HTTP:",
+            wsError
+          );
         }
       }
 
@@ -357,6 +363,7 @@ export class GameSessionService {
             session_code: status.session_code,
             game_type: "trivia", // Default game type
             is_active: status.is_active,
+            isstarted: status.isstarted,
             current_question: status.current_question,
           };
           gameWebSocket.onGameStateUpdate?.(gameState);
