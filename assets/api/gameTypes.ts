@@ -28,6 +28,7 @@ export interface GameSessionState {
   session_code: string;
   is_active: boolean;
   is_waiting_for_players: boolean;
+  isstarted: boolean;
   current_question_index: number;
   total_questions: number;
   current_question: {
