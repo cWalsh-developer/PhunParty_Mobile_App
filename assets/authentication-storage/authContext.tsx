@@ -12,6 +12,7 @@ interface UserType {
   player_mobile: string | null;
   player_email: string | null;
   profile_photo_url: string | null;
+  active_game_code: string | null;
 }
 
 interface UserContextType {
@@ -29,6 +30,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     player_name: null,
     player_mobile: null,
     player_email: null,
+    active_game_code: null,
     profile_photo_url: null,
   });
 

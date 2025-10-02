@@ -156,14 +156,6 @@ export default function GameSession() {
     }
   };
 
-  const handleScannerClose = () => {
-    router.replace("/(tabs)/scanQR");
-  };
-
-  const showErrorAlert = (title: string, message: string) => {
-    Alert.alert(title, message, [{ text: "OK" }]);
-  };
-
   if (hasJoinedGame && sessionCode && playerInfo) {
     return (
       <GameContainer
@@ -193,7 +185,7 @@ export default function GameSession() {
         setScanned={setScanned}
         hasPermission={hasPermission}
         handleBarCodeScanned={({ data }) => {
-          setScanned(true);
+          setScanned(false);
           setShowScanner(false);
           // Default handler - won't be called in game mode
         }}
