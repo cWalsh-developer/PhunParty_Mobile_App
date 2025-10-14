@@ -108,7 +108,9 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         }));
         setAnswers(answerOptions);
       } else {
-        console.log("⚠️ No valid options received from WebSocket - clearing answers");
+        console.log(
+          "⚠️ No valid options received from WebSocket - clearing answers"
+        );
         setAnswers([]);
       }
     };
@@ -191,12 +193,12 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
         setCurrentQuestion(question);
 
-        const answerOptions = (
-          question.display_options || []
-        ).map((option) => ({
-          option,
-          isSelected: false,
-        }));
+        const answerOptions = (question.display_options || []).map(
+          (option) => ({
+            option,
+            isSelected: false,
+          })
+        );
 
         console.log("🐛 DEBUG - Answer options created:", {
           source: question.display_options ? "display_options" : "empty",
@@ -245,12 +247,12 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
           setCurrentQuestion(question);
 
-          const answerOptions = (
-            question.display_options || []
-          ).map((option) => ({
-            option,
-            isSelected: false,
-          }));
+          const answerOptions = (question.display_options || []).map(
+            (option) => ({
+              option,
+              isSelected: false,
+            })
+          );
           setAnswers(answerOptions);
 
           console.log("✅ Initial question from status loaded");
