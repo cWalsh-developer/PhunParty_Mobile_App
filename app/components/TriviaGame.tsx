@@ -74,7 +74,11 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         hasQuestionId: !!question.question_id,
         hasQuestion: !!question.question,
         hasOptions: !!question.options,
+        hasDisplayOptions: !!question.display_options,
         questionText: question.question?.substring(0, 50) + "...",
+        display_options: question.display_options,
+        correct_index: question.correct_index,
+        raw_question: question,
       });
 
       // If this is an empty event (WebSocket notification without data)
@@ -90,20 +94,22 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       console.log("✅ Valid question received via WebSocket - updating UI");
       setCurrentQuestion(question);
 
-      if (question.options && question.options.length > 0) {
-        const answerOptions = question.options.map((option) => ({
+      // Use display_options (randomized) - no fallback to old options format
+      const questionOptions = question.display_options;
+      console.log("🐛 DEBUG - WebSocket question options:", {
+        display_options: question.display_options,
+        options_count: questionOptions?.length,
+      });
+
+      if (questionOptions && questionOptions.length > 0) {
+        const answerOptions = questionOptions.map((option) => ({
           option,
           isSelected: false,
         }));
         setAnswers(answerOptions);
       } else {
-        // Generate default options if none provided
-        const options = ["Option A", "Option B", "Option C", "Option D"];
-        const answerOptions = options.map((option) => ({
-          option,
-          isSelected: false,
-        }));
-        setAnswers(answerOptions);
+        console.log("⚠️ No valid options received from WebSocket - clearing answers");
+        setAnswers([]);
       }
     };
 
@@ -117,9 +123,16 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     };
 
     gameWebSocket.onAnswerSubmitted = (data: any) => {
-      console.log("✅ Answer submission result:", data);
+      console.log("✅ Answer submission result:", {
+        is_correct: data.is_correct,
+        correct_answer: data.correct_answer,
+        has_is_correct: data.is_correct !== undefined,
+        full_data: data,
+      });
       if (data.is_correct !== undefined) {
         updateAnswerResults(data);
+      } else {
+        console.log("⚠️ No is_correct field in answer submission response");
       }
     };
 
@@ -137,7 +150,6 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     };
 
     gameWebSocket.onGameEnded = (data: any) => {
-      console.log("🏁 Game ended:", data);
       setIsGameActive(false);
       Alert.alert("Game Over!", data.message || "Thanks for playing!", [
         { text: "OK", onPress: onGameEnd },
@@ -145,26 +157,26 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     };
 
     gameWebSocket.onError = (error: string) => {
-      console.error("❌ Game error:", error);
       onError(error);
     };
   };
 
   const fetchCurrentQuestionNow = async () => {
     try {
-      console.log(
-        "⚡ Fetching current question immediately for session:",
-        sessionCode
-      );
       const API = (await import("../../assets/api/API")).default;
 
       const response = await API.gameSession.getCurrentQuestion(sessionCode);
 
       if (response.isSuccess && response.result) {
         const questionData = response.result;
-        console.log("✅ Current question fetched:", {
+
+        console.log("🐛 DEBUG - Question data received:", {
           question_id: questionData.question_id,
-          has_question: !!questionData.question,
+          question: questionData.question,
+          display_options: questionData.display_options,
+          correct_index: questionData.correct_index,
+          answer: questionData.answer,
+          raw_response: questionData,
         });
 
         const question: GameQuestion = {
@@ -172,15 +184,26 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           question: questionData.question || "Loading question...",
           game_type: "trivia",
           ui_mode: "multiple_choice",
-          options: ["Option A", "Option B", "Option C", "Option D"],
+          display_options: questionData.display_options,
+          correct_index: questionData.correct_index,
+          answer: questionData.answer,
         };
 
         setCurrentQuestion(question);
 
-        const answerOptions = question.options!.map((option) => ({
+        const answerOptions = (
+          question.display_options || []
+        ).map((option) => ({
           option,
           isSelected: false,
         }));
+
+        console.log("🐛 DEBUG - Answer options created:", {
+          source: question.display_options ? "display_options" : "empty",
+          options_count: answerOptions.length,
+          options: answerOptions.map((a) => a.option),
+        });
+
         setAnswers(answerOptions);
 
         console.log("✅ Current question loaded successfully");
@@ -204,6 +227,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         console.log("📊 Game status:", {
           is_active: status.is_active,
           has_question: !!status.current_question,
+          current_question_data: status.current_question,
         });
 
         // If game is active and has a question, use it
@@ -214,12 +238,16 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
             question: status.current_question.question || "Loading question...",
             game_type: "trivia",
             ui_mode: "multiple_choice",
-            options: ["Option A", "Option B", "Option C", "Option D"],
+            display_options: status.current_question.display_options,
+            correct_index: status.current_question.correct_index,
+            answer: status.current_question.answer,
           };
 
           setCurrentQuestion(question);
 
-          const answerOptions = question.options!.map((option) => ({
+          const answerOptions = (
+            question.display_options || []
+          ).map((option) => ({
             option,
             isSelected: false,
           }));
@@ -291,35 +319,79 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     setAnswers(updatedAnswers);
   };
 
-  const submitAnswer = () => {
+  const submitAnswer = async () => {
     if (!selectedAnswer || !currentQuestion || hasSubmitted) return;
 
     setHasSubmitted(true);
-    const success = gameWebSocket.submitAnswer(
+    console.log("🎯 Submitting answer:", {
+      answer: selectedAnswer,
+      question_id: currentQuestion.question_id,
+      session_code: sessionCode,
+    });
+
+    // Try WebSocket first
+    const wsSuccess = gameWebSocket.submitAnswer(
       selectedAnswer,
       currentQuestion.question_id
     );
 
-    if (!success) {
-      setHasSubmitted(false);
-      onError("Failed to submit answer. Please check your connection.");
+    if (!wsSuccess) {
+      console.log("⚠️ WebSocket submission failed, trying API fallback...");
+
+      try {
+        // Fallback to API submission
+        const apiResult = await gameWebSocket.submitAnswerViaAPI(
+          currentQuestion.question_id,
+          selectedAnswer
+        );
+
+        if (!apiResult?.isSuccess) {
+          setHasSubmitted(false);
+          onError("Failed to submit answer. Please check your connection.");
+          return;
+        }
+
+        console.log("✅ Answer submitted via API fallback");
+      } catch (error) {
+        console.error("❌ Both WebSocket and API submission failed:", error);
+        setHasSubmitted(false);
+        onError("Failed to submit answer. Please check your connection.");
+      }
+    } else {
+      console.log("✅ Answer submitted via WebSocket");
     }
   };
 
   const updateAnswerResults = (data: any) => {
-    const updatedAnswers = answers.map((answer) => ({
-      ...answer,
-      isCorrect: answer.option === data.correct_answer,
-    }));
+    const updatedAnswers = answers.map((answer, index) => {
+      // Use correct_index from backend if available, otherwise fall back to answer comparison
+      const isCorrect =
+        currentQuestion?.correct_index !== undefined
+          ? index === currentQuestion.correct_index
+          : answer.option === data.correct_answer;
+
+      return {
+        ...answer,
+        isCorrect,
+      };
+    });
     setAnswers(updatedAnswers);
     setShowResults(true);
   };
 
   const showCorrectAnswer = (correctOption: string) => {
-    const updatedAnswers = answers.map((answer) => ({
-      ...answer,
-      isCorrect: answer.option === correctOption,
-    }));
+    const updatedAnswers = answers.map((answer, index) => {
+      // Use correct_index from backend if available, otherwise fall back to option comparison
+      const isCorrect =
+        currentQuestion?.correct_index !== undefined
+          ? index === currentQuestion.correct_index
+          : answer.option === correctOption;
+
+      return {
+        ...answer,
+        isCorrect,
+      };
+    });
     setAnswers(updatedAnswers);
     setShowResults(true);
   };

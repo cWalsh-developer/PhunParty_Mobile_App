@@ -24,6 +24,9 @@ export interface GameQuestion {
   question_id: string;
   question: string;
   options?: string[];
+  display_options?: string[]; // Randomized options from backend
+  correct_index?: number; // Index of correct answer in display_options
+  answer?: string; // Original correct answer (for reference)
   game_type: string;
   ui_mode: "multiple_choice" | "buzzer" | "text_input";
 }
@@ -121,25 +124,39 @@ export class GameWebSocketService {
         // Check for specific error cases
         const errorMsg = joinResponse.message?.toLowerCase() || "";
 
-        if (errorMsg.includes("already in a game session") ||
-            errorMsg.includes("already in session")) {
+        if (
+          errorMsg.includes("already in a game session") ||
+          errorMsg.includes("already in session")
+        ) {
           // Player is already in a session - check if we can get session info to verify
-          console.log("ℹ️ Backend reports player already in a session, verifying...");
+          console.log(
+            "ℹ️ Backend reports player already in a session, verifying..."
+          );
 
           // First check if player is in THIS session by trying to get session info
           try {
-            const joinInfoResponse = await API.gameSession.getJoinInfo(sessionCode);
+            const joinInfoResponse = await API.gameSession.getJoinInfo(
+              sessionCode
+            );
 
             if (joinInfoResponse.isSuccess) {
               // Session exists and we can get info - player might already be in it
-              console.log("✅ Session is accessible, player likely already joined - continuing");
+              console.log(
+                "✅ Session is accessible, player likely already joined - continuing"
+              );
               joinSuccessful = true;
             } else {
               // Can't get session info - try to leave and retry
-              console.log("⚠️ Cannot access session, attempting to leave previous session...");
+              console.log(
+                "⚠️ Cannot access session, attempting to leave previous session..."
+              );
 
-              const dataAccess = (await import("../../databaseAccess/dataAccess")).default;
-              const leaveResult = await dataAccess.leaveGameSession(playerInfo.player_id);
+              const dataAccess = (
+                await import("../../databaseAccess/dataAccess")
+              ).default;
+              const leaveResult = await dataAccess.leaveGameSession(
+                playerInfo.player_id
+              );
 
               if (leaveResult) {
                 console.log("✅ Left previous session, retrying join...");
@@ -151,48 +168,63 @@ export class GameWebSocketService {
                 );
 
                 if (retryJoinResponse.isSuccess) {
-                  console.log("✅ Successfully joined after leaving previous session");
+                  console.log(
+                    "✅ Successfully joined after leaving previous session"
+                  );
                   joinSuccessful = true;
                 } else {
-                  console.log("ℹ️ Retry join returned error, but continuing to attempt connection");
+                  console.log(
+                    "ℹ️ Retry join returned error, but continuing to attempt connection"
+                  );
                   joinSuccessful = true; // Continue anyway - WebSocket might still work
                 }
               } else {
-                console.log("ℹ️ Leave operation unsuccessful, but continuing to attempt connection");
+                console.log(
+                  "ℹ️ Leave operation unsuccessful, but continuing to attempt connection"
+                );
                 joinSuccessful = true; // Continue anyway
               }
             }
           } catch (verifyError: any) {
-            console.log("ℹ️ Could not verify session state, continuing to attempt connection");
+            console.log(
+              "ℹ️ Could not verify session state, continuing to attempt connection"
+            );
             joinSuccessful = true; // Continue anyway
           }
         } else if (errorMsg === "unable to join game") {
           // Generic error - this might mean player is already in session
           // Let's try to continue anyway and see if we can get session info
           console.warn("⚠️ Generic 'unable to join game' error received");
-          console.warn("This might mean player is already in session - attempting to continue...");
+          console.warn(
+            "This might mean player is already in session - attempting to continue..."
+          );
           console.warn("Full join response:", joinResponse);
           joinSuccessful = true; // Attempt to continue
-        } else if (errorMsg.includes("not found") ||
-                   errorMsg.includes("does not exist")) {
+        } else if (
+          errorMsg.includes("not found") ||
+          errorMsg.includes("does not exist")
+        ) {
           const error = `Game session "${sessionCode}" not found. The session may have ended or the code is invalid.`;
           console.error(error);
           this.onError?.(error);
           return false;
-        } else if (errorMsg.includes("full") ||
-                   errorMsg.includes("maximum")) {
+        } else if (errorMsg.includes("full") || errorMsg.includes("maximum")) {
           const error = "Game session is full. Cannot join.";
           console.error(error);
           this.onError?.(error);
           return false;
-        } else if (errorMsg.includes("started") ||
-                   errorMsg.includes("in progress")) {
+        } else if (
+          errorMsg.includes("started") ||
+          errorMsg.includes("in progress")
+        ) {
           const error = "Game has already started. Cannot join at this time.";
           console.error(error);
           this.onError?.(error);
           return false;
         } else {
-          const error = `Unable to join game: ${joinResponse.message || "Unknown error"}`;
+          const error = `Unable to join game: ${
+            joinResponse.message || "Unknown error"
+          }`;
           console.error(error);
           console.error("Full join response:", joinResponse);
           this.onError?.(error);
@@ -217,7 +249,9 @@ export class GameWebSocketService {
       });
 
       if (!joinInfoResponse.isSuccess) {
-        const error = `Could not get session info: ${joinInfoResponse.message || "Unknown error"}`;
+        const error = `Could not get session info: ${
+          joinInfoResponse.message || "Unknown error"
+        }`;
         console.error(error);
         this.onError?.(error);
         return false;
@@ -370,13 +404,19 @@ export class GameWebSocketService {
       let userMessage = "Failed to connect";
 
       if (error.message) {
-        if (error.message.includes("Network request failed") ||
-            error.message.includes("Unable to connect")) {
-          userMessage = "Network error. Please check your internet connection and try again.";
+        if (
+          error.message.includes("Network request failed") ||
+          error.message.includes("Unable to connect")
+        ) {
+          userMessage =
+            "Network error. Please check your internet connection and try again.";
         } else if (error.message.includes("timeout")) {
-          userMessage = "Connection timeout. Please check your internet connection and try again.";
-        } else if (error.message.includes("not found") ||
-                   error.message.includes("does not exist")) {
+          userMessage =
+            "Connection timeout. Please check your internet connection and try again.";
+        } else if (
+          error.message.includes("not found") ||
+          error.message.includes("does not exist")
+        ) {
           userMessage = `Game session "${sessionCode}" not found. The session may have ended.`;
         } else {
           userMessage = `Failed to connect: ${error.message}`;

@@ -50,7 +50,10 @@ export interface GameQuestion {
   question: string;
   genre: string;
   options?: string[]; // For multiple choice questions
+  display_options?: string[]; // Randomized options from backend
+  correct_index?: number; // Index of correct answer in display_options
   correct_answer?: string;
+  answer?: string; // Original correct answer (for reference)
   ui_mode?: "multiple_choice" | "buzzer" | "text_input";
 }
 
