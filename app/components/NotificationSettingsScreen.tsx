@@ -1,5 +1,6 @@
 import { colors, layoutStyles, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { openSettings } from "expo-linking";
 import { useState } from "react";
 import {
   Alert,
@@ -72,7 +73,7 @@ export default function NotificationSettingsScreen({
         {
           text: "Open Settings",
           onPress: () => {
-            // TODO: Open system notification settings
+            openSettings();
           },
         },
       ]
