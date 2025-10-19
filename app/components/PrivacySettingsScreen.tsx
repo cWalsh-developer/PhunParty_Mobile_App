@@ -79,7 +79,6 @@ export default function PrivacySettingsScreen({
       );
       return;
     }
-
     Alert.alert(
       "Email Data Report",
       `Send your data privacy report to ${user.player_email}?`,

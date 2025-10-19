@@ -19,7 +19,11 @@ const config: ExpoConfig = {
   slug: "PhunParty_Mobile_App",
   version: "1.0.0",
   extra: extra,
-  plugins: ["expo-mail-composer"],
+  plugins: [
+    "expo-dev-client",
+    "expo-mail-composer",
+    "./plugins/react-native-html-to-pdf",
+  ],
 };
 
 export default ({ config: existingConfig }: { config: ExpoConfig }) => ({
