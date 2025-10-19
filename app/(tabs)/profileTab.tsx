@@ -85,7 +85,7 @@ export default function ProfileTab() {
               await removeToken();
               router.replace("/login");
             } catch (error) {
-              console.error("Delete account error:", error);
+
               Alert.alert(
                 "Error",
                 "Failed to delete account. Please try again."
@@ -122,7 +122,7 @@ export default function ProfileTab() {
       setUser((prev: any) => ({ ...prev, ...data }));
       setEditVisible(false);
     } catch (error) {
-      console.error("Update profile error:", error);
+
       Alert.alert("Error", "Failed to update profile. Please try again.");
     } finally {
       setLoading(false);

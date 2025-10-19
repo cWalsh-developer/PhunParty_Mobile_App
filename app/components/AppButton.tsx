@@ -50,6 +50,5 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     backgroundColor: "#cccccc",
-    // Optionally, you can add color: '#888' for text if needed
   },
 });

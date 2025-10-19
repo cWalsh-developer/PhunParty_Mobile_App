@@ -1,6 +1,8 @@
+import { generateDataPrivacyPDF } from "@/assets/api/generatePDF";
+import { UserContext } from "@/assets/authentication-storage/authContext";
 import { colors, layoutStyles, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import {
   Alert,
   Linking,
@@ -29,6 +31,7 @@ interface PrivacyPreferences {
 export default function PrivacySettingsScreen({
   onBack,
 }: PrivacySettingsScreenProps) {
+  const { user, setUser } = useContext(UserContext)!;
   const [preferences, setPreferences] = useState<PrivacyPreferences>({
     profileVisibility: "public",
     showOnlineStatus: true,
@@ -71,17 +74,66 @@ export default function PrivacySettingsScreen({
   const exportData = () => {
     Alert.alert(
       "Export Data",
-      "Request a copy of your personal data. You'll receive an email with your data within 30 days.",
+      "How would you like to receive your data privacy report?",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Request Export",
-          onPress: () => {
-            // TODO: Implement data export request
-            Alert.alert(
-              "Request Sent",
-              "We'll email you when your data export is ready."
-            );
+          text: "Email to Me",
+          onPress: async () => {
+            if (!user?.player_email) {
+              Alert.alert(
+                "No Email Address",
+                "We don't have an email address on file for your account. Please add an email address in your profile settings first, or choose the 'Share/Download' option."
+              );
+              return;
+            }
+
+            try {
+              const result = await generateDataPrivacyPDF(user, {
+                sendEmail: true,
+                shareOnly: false,
+              });
+
+              if (result.success) {
+                if (result.method === "email") {
+                  Alert.alert(
+                    "Email Sent",
+                    "Your data privacy report has been sent to your email address."
+                  );
+                } else if (result.method === "draft") {
+                  Alert.alert(
+                    "Email Draft Created",
+                    "An email draft with your data privacy report has been created. Please check your mail app to send it."
+                  );
+                } else if (result.method === "share") {
+                  Alert.alert(
+                    "Email Not Available",
+                    "Email is not available on this device. The report has been shared instead."
+                  );
+                }
+              }
+            } catch (error) {
+              Alert.alert(
+                "Error",
+                "Failed to generate or email your data export. Please try again."
+              );
+            }
+          },
+        },
+        {
+          text: "Share/Download",
+          onPress: async () => {
+            try {
+              await generateDataPrivacyPDF(user, {
+                sendEmail: false,
+                shareOnly: true,
+              });
+            } catch (error) {
+              Alert.alert(
+                "Error",
+                "Failed to generate data export. Please try again."
+              );
+            }
           },
         },
       ]
@@ -455,6 +507,88 @@ export default function PrivacySettingsScreen({
               />
             </TouchableOpacity>
           </Selector>
+
+          {/* Quick Email Option */}
+          {user?.player_email && (
+            <Selector
+              onPress={() => {
+                Alert.alert(
+                  "Email Data Report",
+                  `Send your data privacy report directly to ${user.player_email}?`,
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Send Email",
+                      onPress: async () => {
+                        try {
+                          const result = await generateDataPrivacyPDF(user, {
+                            sendEmail: true,
+                            shareOnly: false,
+                          });
+
+                          if (result.success) {
+                            if (result.method === "email") {
+                              Alert.alert(
+                                "Email Sent",
+                                "Your data privacy report has been sent to your email address."
+                              );
+                            } else if (result.method === "draft") {
+                              Alert.alert(
+                                "Email Draft Created",
+                                "An email draft with your data privacy report has been created. Please check your mail app to send it."
+                              );
+                            }
+                          }
+                        } catch (error) {
+                          Alert.alert(
+                            "Error",
+                            "Failed to email your data report. Please try the 'Export Data' option instead."
+                          );
+                        }
+                      },
+                    },
+                  ]
+                );
+              }}
+              label="Email Data Report"
+            >
+              <TouchableOpacity
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  backgroundColor: colors.ink[700],
+                  borderRadius: 12,
+                }}
+              >
+                <MaterialIcons
+                  name="email"
+                  size={20}
+                  color={colors.tea[400]}
+                  style={{ marginRight: 12 }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={[typography.body, { color: colors.stone[100] }]}>
+                    Email Data Report
+                  </Text>
+                  <Text
+                    style={[
+                      typography.small,
+                      { color: colors.stone[400], marginTop: 2 },
+                    ]}
+                  >
+                    Send to {user.player_email}
+                  </Text>
+                </View>
+                <MaterialIcons
+                  name="send"
+                  size={18}
+                  color={colors.stone[400]}
+                />
+              </TouchableOpacity>
+            </Selector>
+          )}
         </View>
       </AppCard>
     </ScrollView>

@@ -57,7 +57,7 @@ export default function PhotoUploadActionSheet({
       const avatars = await PhotoService.getAvailableAvatars();
       setAvailableAvatars(avatars);
     } catch (error) {
-      console.error("PhotoUploadActionSheet: Error loading avatars:", error);
+
       showToast("Failed to load avatars", "error");
     }
     setIsLoadingAvatars(false);
@@ -89,7 +89,7 @@ export default function PhotoUploadActionSheet({
         }
       }
     } catch (error) {
-      console.error("PhotoUploadActionSheet: Error with camera:", error);
+
       showToast("Camera error occurred", "error");
     }
     setIsUploading(false);
@@ -117,7 +117,7 @@ export default function PhotoUploadActionSheet({
         }
       }
     } catch (error) {
-      console.error("PhotoUploadActionSheet: Error with gallery:", error);
+
       showToast("Gallery error occurred", "error");
     }
     setIsUploading(false);
@@ -148,7 +148,7 @@ export default function PhotoUploadActionSheet({
         showToast("Failed to set avatar", "error");
       }
     } catch (error) {
-      console.error("Error setting avatar:", error);
+
       showToast("Failed to set avatar", "error");
     }
     setIsUploading(false);

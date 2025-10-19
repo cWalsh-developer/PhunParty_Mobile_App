@@ -94,7 +94,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       }
 
       // First, get the session status to determine game type and state
-      console.log("Getting session status for game type detection...");
+
       const API = (await import("../../assets/api/API")).default;
       const statusResponse = await API.gameSession.getStatus(sessionCode);
 
@@ -104,12 +104,12 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         }
 
         const status = statusResponse.result;
-        console.log("Session status:", status);
+
 
         // Determine game type from the session info but don't start the game yet
         if (status.current_question?.genre) {
           const gameType = status.current_question.genre.toLowerCase();
-          console.log("Detected game type:", gameType);
+
           setCurrentGameType(gameType);
         }
 
@@ -141,7 +141,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         throw new Error(statusResponse.message || "Failed to get session status");
       }
     } catch (error: any) {
-      console.error("Error getting session status:", error);
+
       console.error("Error details:", {
         message: error.message,
         sessionCode,
@@ -153,14 +153,14 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     // Setup WebSocket listeners
     gameWebSocket.onConnectionStatusChange = (connected: boolean) => {
-      console.log("🔗 WebSocket connection status changed:", connected);
+
       if (connected) {
         setIsConnecting(false);
         setConnectionError(null);
 
         // Request initial state when connected
         setTimeout(() => {
-          console.log("📡 Requesting session stats after connection");
+
           gameWebSocket.requestSessionStats();
         }, 1000);
 
@@ -188,7 +188,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
                 }
               }
             } catch (error) {
-              console.log("Status poll error:", error);
+
             }
           } else {
             clearInterval(statusPoll);
@@ -204,7 +204,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     };
 
     gameWebSocket.onGameStateUpdate = (state: GameState) => {
-      console.log("Game state updated:", state);
+
       setGameState(state);
       if (state.game_type !== currentGameType) {
         console.log(
@@ -215,14 +215,14 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     };
 
     gameWebSocket.onError = (error: string) => {
-      console.error("WebSocket error:", error);
+
       setConnectionError(error);
       setIsConnecting(false);
     };
 
     // Add missing event handlers for game flow
     gameWebSocket.onQuestionReceived = (question: any) => {
-      console.log("📝 Question received in GameContainer:", question);
+
 
       // If we receive a question but game isn't started yet, start it now
       // This handles cases where "Go to Quiz" was clicked and questions are sent
@@ -245,12 +245,12 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         "🚀 GAME STARTED EVENT RECEIVED FROM HOST! (Go to Quiz clicked)",
         data
       );
-      console.log("Current isGameStarted state:", isGameStarted);
+
       // Only transition if isstarted is true
       if (data && data.isstarted === true) {
         setIsGameStarted(true);
         // Optionally: setCurrentQuestion(data.current_question);
-        console.log("✅ Transitioning from lobby to active game");
+
       }
       if (data.game_type && data.game_type !== currentGameType) {
         setCurrentGameType(data.game_type);
@@ -265,15 +265,15 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     };
 
     gameWebSocket.onPlayerJoined = (playerInfo: any) => {
-      console.log("Player joined:", playerInfo);
+
     };
 
     gameWebSocket.onPlayerLeft = (playerInfo: any) => {
-      console.log("Player left:", playerInfo);
+
     };
 
     gameWebSocket.onGameEnded = (data: any) => {
-      console.log("Game ended:", data);
+
       // Handle game end if needed
     };
 
@@ -323,13 +323,13 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
   const checkGameStatus = async () => {
     try {
-      console.log("🔍 Manual game status check triggered");
+
       const API = (await import("../../assets/api/API")).default;
       const statusResponse = await API.gameSession.getStatus(sessionCode);
 
       if (statusResponse.isSuccess) {
         const status = statusResponse.result;
-        console.log("📊 Manual status check result:", status);
+
 
         Alert.alert(
           "Game Status",
@@ -343,7 +343,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
         // Game has started if it's active and has a current question
         if (!isGameStarted && status.is_active && status.current_question) {
-          console.log("🎮 Game started detected via manual check!");
+
           setIsGameStarted(true);
         }
       } else {
@@ -353,7 +353,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         );
       }
     } catch (error: any) {
-      console.error("Manual status check error:", error);
+
       Alert.alert("Error", error.message || "Failed to check game status");
     }
   };
@@ -412,7 +412,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     // Game has started - render the actual game component
     const gameType = currentGameType?.toLowerCase() || "trivia";
-    console.log("🎮 Game started - rendering game type:", gameType);
+
 
     switch (gameType) {
       case "trivia":

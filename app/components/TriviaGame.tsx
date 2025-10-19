@@ -52,7 +52,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     setupWebSocketListeners();
 
     // DON'T auto-fetch initial question - wait for host to start game via WebSocket
-    console.log("🎮 TriviaGame mounted - waiting for host to start game");
+
 
     return () => {
       // Cleanup handled by parent component
@@ -67,7 +67,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   }, [currentQuestion]);
 
   const setupWebSocketListeners = () => {
-    console.log("🔌 Setting up TriviaGame WebSocket listeners");
+
 
     gameWebSocket.onQuestionReceived = (question: GameQuestion) => {
       console.log("🎯 TriviaGame - Question received:", {
@@ -91,7 +91,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       }
 
       // Valid question received via WebSocket
-      console.log("✅ Valid question received via WebSocket - updating UI");
+
       setCurrentQuestion(question);
 
       // Use display_options (randomized) - no fallback to old options format
@@ -117,7 +117,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
     // Handle when the game starts - fetch initial question
     gameWebSocket.onGameStarted = (data: any) => {
-      console.log("🎮 TriviaGame - Game started event received:", data);
+
       // Small delay to ensure backend is ready
       setTimeout(() => {
         fetchInitialQuestion();
@@ -134,12 +134,12 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       if (data.is_correct !== undefined) {
         updateAnswerResults(data);
       } else {
-        console.log("⚠️ No is_correct field in answer submission response");
+
       }
     };
 
     gameWebSocket.onBuzzerUpdate = (data: any) => {
-      console.log("📢 Game update received:", data);
+
 
       if (data.type === "correct_answer" && data.correct_option) {
         showCorrectAnswer(data.correct_option);
@@ -208,18 +208,18 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
         setAnswers(answerOptions);
 
-        console.log("✅ Current question loaded successfully");
+
       } else {
-        console.log("⚠️ No current question available");
+
       }
     } catch (error) {
-      console.error("❌ Error fetching current question:", error);
+
     }
   };
 
   const fetchInitialQuestion = async () => {
     try {
-      console.log("🔍 Fetching initial question for session:", sessionCode);
+
       const API = (await import("../../assets/api/API")).default;
 
       // First check if game is already active
@@ -255,7 +255,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           );
           setAnswers(answerOptions);
 
-          console.log("✅ Initial question from status loaded");
+
           return;
         }
       }
@@ -263,15 +263,15 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       // Try to start the game if not active
       try {
         await API.put(`/game-logic/start-game/${sessionCode}`);
-        console.log("🎮 Game start attempted");
+
       } catch (startError) {
-        console.log("⚠️ Game may already be started or start failed");
+
       }
 
       // Get current question after starting
       await fetchCurrentQuestionNow();
     } catch (error) {
-      console.error("❌ Error in fetchInitialQuestion:", error);
+
     }
   };
 
@@ -338,7 +338,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     );
 
     if (!wsSuccess) {
-      console.log("⚠️ WebSocket submission failed, trying API fallback...");
+
 
       try {
         // Fallback to API submission
@@ -353,14 +353,14 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           return;
         }
 
-        console.log("✅ Answer submitted via API fallback");
+
       } catch (error) {
-        console.error("❌ Both WebSocket and API submission failed:", error);
+
         setHasSubmitted(false);
         onError("Failed to submit answer. Please check your connection.");
       }
     } else {
-      console.log("✅ Answer submitted via WebSocket");
+
     }
   };
 

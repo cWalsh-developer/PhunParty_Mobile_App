@@ -62,15 +62,12 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
   const setupWebSocketListeners = () => {
     gameWebSocket.onQuestionReceived = (question: GameQuestion) => {
-      console.log("New buzzer question received:", question);
       setCurrentQuestion(question);
       resetBuzzerState();
       startGlowAnimation();
     };
 
     gameWebSocket.onBuzzerUpdate = (data: any) => {
-      console.log("Buzzer update received:", data);
-
       if (data.type === "buzzer_winner") {
         handleBuzzerWinner(data.winner_name);
         Vibration.vibrate(500); // Haptic feedback
@@ -89,7 +86,6 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           fetchCurrentQuestion(); // Fetch next question after current one ends
         }, 3000);
       } else if (data.type === "next_question" && data.question) {
-        console.log("Next buzzer question:", data.question);
         setCurrentQuestion(data.question);
         resetBuzzerState();
         startGlowAnimation();
@@ -97,7 +93,6 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     };
 
     gameWebSocket.onGameEnded = (data: any) => {
-      console.log("Game ended:", data);
       setIsGameActive(false);
       Alert.alert("Game Over!", data.message || "Thanks for playing!", [
         { text: "OK", onPress: onGameEnd },
@@ -106,25 +101,20 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
     // Handle when the game starts - fetch the first question
     gameWebSocket.onGameStarted = (data: any) => {
-      console.log("Game started in BuzzerGame:", data);
       fetchCurrentQuestion(); // Now fetch the first question
     };
 
     gameWebSocket.onError = (error: string) => {
-      console.error("Game error:", error);
       onError(error);
     };
   };
 
   const fetchCurrentQuestion = async () => {
     try {
-      console.log("Fetching current question for buzzer game:", sessionCode);
       const API = (await import("../../assets/api/API")).default;
       const response = await API.gameSession.getCurrentQuestion(sessionCode);
 
       if (response.isSuccess && response.result) {
-        console.log("Current buzzer question fetched:", response.result);
-
         const questionData = response.result;
         const question: GameQuestion = {
           question_id: questionData.question_id,
@@ -137,11 +127,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         resetBuzzerState();
         startGlowAnimation();
       } else {
-        console.log("No current question available for buzzer game");
       }
-    } catch (error) {
-      console.error("Error fetching current buzzer question:", error);
-    }
+    } catch (error) {}
   };
 
   const resetBuzzerState = () => {
@@ -310,16 +297,6 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         <AppCard style={styles.questionCard}>
           <Text style={styles.questionText}>{currentQuestion.question}</Text>
         </AppCard>
-
-        <View style={styles.debugInfo}>
-          <Text style={styles.debugText}>
-            Question ID: {currentQuestion.question_id}
-          </Text>
-          <Text style={styles.debugText}>
-            Buzzer Active: {buzzerState.isActive ? "Yes" : "No"} | Can Buzz:{" "}
-            {buzzerState.canBuzz ? "Yes" : "No"}
-          </Text>
-        </View>
 
         {buzzerState.winner && (
           <Animated.View
@@ -526,20 +503,6 @@ const styles = StyleSheet.create({
   actionButton: {
     paddingVertical: 12,
     paddingHorizontal: 24,
-  },
-  debugInfo: {
-    backgroundColor: colors.ink[800],
-    padding: 12,
-    marginVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.ink[700],
-  },
-  debugText: {
-    ...typography.caption,
-    color: colors.stone[400],
-    fontSize: 12,
-    textAlign: "center",
   },
 });
 

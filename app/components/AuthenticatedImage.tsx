@@ -93,7 +93,7 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
 
         setImageSource(dataUri);
       } catch (error) {
-        console.error("AuthenticatedImage: Failed to load image:", error);
+
         setImageSource(null);
       } finally {
         setLoading(false);

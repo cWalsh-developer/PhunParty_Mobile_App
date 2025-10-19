@@ -107,7 +107,7 @@ export default function GameSession() {
         return;
       }
     } catch (error) {
-      console.error("Error loading player info:", error);
+
       Alert.alert(
         "Error",
         "Failed to load player information. Please try again.",
@@ -143,13 +143,13 @@ export default function GameSession() {
 
       // Call leave API and navigate
       await dataAccess.leaveGameSession(playerId);
-      console.log(`Player ${playerId} has left the game session.`);
+
 
       // Clear the entire navigation stack and navigate to root
       router.dismissAll();
       router.replace("/(tabs)/scanQR");
     } catch (error) {
-      console.error("Error leaving game session:", error);
+
       // Still navigate away even if API call fails
       router.dismissAll();
       router.replace("/(tabs)/scanQR");

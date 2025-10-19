@@ -36,7 +36,6 @@ export const login = async (
     }
 
     if (!AuthenticationEndpoint) {
-      console.error("Authentication endpoint not configured");
       alert("Login failed: Configuration error");
       return false;
     }
@@ -56,7 +55,6 @@ export const login = async (
         await createUserContext(setUser);
         return true;
       } catch (storageError: any) {
-        console.error("Failed to store authentication token:", storageError);
         alert("Login failed: Unable to save session");
         return false;
       }
@@ -65,7 +63,6 @@ export const login = async (
       return false;
     }
   } catch (error: any) {
-    console.error("Login error:", error);
     alert("Login failed: " + (error.message || "An unexpected error occurred"));
     return false;
   }
@@ -85,7 +82,6 @@ export const signUp = async ({
     }
 
     if (!SignUpEndpoint) {
-      console.error("Sign up endpoint not configured");
       alert("Sign up failed: Configuration error");
       return false;
     }
@@ -104,12 +100,15 @@ export const signUp = async ({
     if (result.isSuccess) {
       return true;
     } else {
-      alert("Sign up failed: " + (result.message || "Unable to create account"));
+      alert(
+        "Sign up failed: " + (result.message || "Unable to create account")
+      );
       return false;
     }
   } catch (error: any) {
-    console.error("Sign up error:", error);
-    alert("Sign up failed: " + (error.message || "An unexpected error occurred"));
+    alert(
+      "Sign up failed: " + (error.message || "An unexpected error occurred")
+    );
     return false;
   }
 };
@@ -123,7 +122,6 @@ export const resetPassword = async (phone: string) => {
     }
 
     if (!PasswordResetEndpoint) {
-      console.error("Password reset endpoint not configured");
       alert("Password reset failed: Configuration error");
       return false;
     }
@@ -139,12 +137,17 @@ export const resetPassword = async (phone: string) => {
     if (result.isSuccess) {
       return true;
     } else {
-      alert("Password reset failed: " + (result.message || "Unable to send reset code"));
+      alert(
+        "Password reset failed: " +
+          (result.message || "Unable to send reset code")
+      );
       return false;
     }
   } catch (error: any) {
-    console.error("Password reset error:", error);
-    alert("Password reset failed: " + (error.message || "An unexpected error occurred"));
+    alert(
+      "Password reset failed: " +
+        (error.message || "An unexpected error occurred")
+    );
     return false;
   }
 };
@@ -158,7 +161,6 @@ export const verifyResetCode = async (phone: string, code: string) => {
     }
 
     if (!PasswordResetVerificationEndpoint) {
-      console.error("Reset verification endpoint not configured");
       alert("Verification failed: Configuration error");
       return false;
     }
@@ -175,12 +177,16 @@ export const verifyResetCode = async (phone: string, code: string) => {
     if (result.isSuccess) {
       return true;
     } else {
-      alert("Reset code verification failed: " + (result.message || "Invalid code"));
+      alert(
+        "Reset code verification failed: " + (result.message || "Invalid code")
+      );
       return false;
     }
   } catch (error: any) {
-    console.error("Reset code verification error:", error);
-    alert("Verification failed: " + (error.message || "An unexpected error occurred"));
+    alert(
+      "Verification failed: " +
+        (error.message || "An unexpected error occurred")
+    );
     return false;
   }
 };
@@ -198,7 +204,6 @@ export const updatePassword = async (
     }
 
     if (!PasswordUpdateEndpoint) {
-      console.error("Password update endpoint not configured");
       alert("Password update failed: Configuration error");
       return false;
     }
@@ -214,7 +219,6 @@ export const updatePassword = async (
 
     if (result.isSuccess) {
       if (!result.result?.access_token) {
-        console.error("No access token in password update response");
         alert("Password update failed: Invalid server response");
         return false;
       }
@@ -224,17 +228,21 @@ export const updatePassword = async (
         await createUserContext(setUser);
         return true;
       } catch (storageError: any) {
-        console.error("Failed to store new token:", storageError);
         alert("Password update failed: Unable to save session");
         return false;
       }
     } else {
-      alert("Password update failed: " + (result.message || "Unable to update password"));
+      alert(
+        "Password update failed: " +
+          (result.message || "Unable to update password")
+      );
       return false;
     }
   } catch (error: any) {
-    console.error("Password update error:", error);
-    alert("Password update failed: " + (error.message || "An unexpected error occurred"));
+    alert(
+      "Password update failed: " +
+        (error.message || "An unexpected error occurred")
+    );
     return false;
   }
 };
@@ -246,12 +254,10 @@ const verifyCurrentPassword = async (
   try {
     // Validate inputs
     if (!email || !password) {
-      console.error("Missing email or password for verification");
       return false;
     }
 
     if (!AuthenticationEndpoint) {
-      console.error("Authentication endpoint not configured");
       return false;
     }
 
@@ -266,7 +272,6 @@ const verifyCurrentPassword = async (
 
     return result.isSuccess;
   } catch (error: any) {
-    console.error("Password verification error:", error);
     return false;
   }
 };
@@ -287,7 +292,6 @@ export const changePassword = async (
     }
 
     if (!PasswordUpdateEndpoint) {
-      console.error("Password update endpoint not configured");
       return {
         success: false,
         message: "Configuration error",
@@ -314,7 +318,6 @@ export const changePassword = async (
     try {
       currentUser = await dataAccess.getPlayerById(decodedToken.sub);
     } catch (error: any) {
-      console.error("Failed to get player data:", error);
       return {
         success: false,
         message: "Unable to retrieve user information",
@@ -356,7 +359,6 @@ export const changePassword = async (
         try {
           await SecureStore.setItemAsync("jwt", result.result.access_token);
         } catch (storageError: any) {
-          console.error("Failed to store new token:", storageError);
           return {
             success: false,
             message: "Password changed but unable to save session",
@@ -367,7 +369,6 @@ export const changePassword = async (
       try {
         await createUserContext(setUser);
       } catch (contextError: any) {
-        console.error("Failed to update user context:", contextError);
         // Password was changed, so still return success
       }
 
@@ -379,7 +380,6 @@ export const changePassword = async (
       };
     }
   } catch (error: any) {
-    console.error("Change password error:", error);
     return {
       success: false,
       message: error.message || "An unexpected error occurred",
@@ -391,20 +391,17 @@ export const createUserContext = async (setUser: (user: any) => void) => {
   try {
     const token = await getToken();
     if (!token) {
-      console.log("No token found, cannot create user context");
       return;
     }
 
     const decodedToken = decodeToken(token);
     if (!decodedToken?.sub) {
-      console.log("Invalid token or missing user ID");
       return;
     }
 
     const currentUser = await dataAccess.getPlayerById(decodedToken.sub);
 
     if (!currentUser) {
-      console.log("User not found in database for ID:", decodedToken.sub);
       console.log("Token details:", {
         sub: decodedToken.sub,
         exp: decodedToken.exp,
@@ -412,11 +409,8 @@ export const createUserContext = async (setUser: (user: any) => void) => {
       return;
     }
 
-    console.log("Retrieved user from database:", currentUser);
-
     // Ensure all required fields exist
     if (!currentUser.player_id) {
-      console.error("User data missing player_id:", currentUser);
       return;
     }
 
@@ -427,7 +421,5 @@ export const createUserContext = async (setUser: (user: any) => void) => {
       player_email: currentUser.player_email || "",
       profile_photo_url: currentUser.profile_photo_url || null,
     });
-  } catch (error) {
-    console.error("Error creating user context:", error);
-  }
+  } catch (error) {}
 };

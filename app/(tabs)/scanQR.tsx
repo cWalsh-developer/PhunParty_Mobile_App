@@ -41,24 +41,24 @@ export default function QRScannerScreen() {
       // Extract session code from QR data
       let sessionCode = data;
 
-      console.log("Processing QR code data:", data);
+
 
       if (data.includes("/join/")) {
         // Handle both #/join/ and /join/ patterns
         const match = data.match(/#?\/join\/([A-Z0-9]{9})/i);
         sessionCode = match ? match[1] : data;
-        console.log("Extracted session code from URL:", sessionCode);
+
       } else if (data.includes("session_code")) {
         try {
           const parsed = JSON.parse(data);
           sessionCode = parsed.session_code || data;
-          console.log("Extracted session code from JSON:", sessionCode);
+
         } catch (parseError) {
-          console.error("Failed to parse JSON QR data:", parseError);
+
           // Keep original data if parsing fails
         }
       } else {
-        console.log("Using direct session code:", sessionCode);
+
       }
 
       // Validate session code format
@@ -96,20 +96,20 @@ export default function QRScannerScreen() {
       try {
         setIsJoiningSession(true);
 
-        console.log("Attempting to join session with code:", sessionCode);
-        console.log("Original QR data:", data);
-        console.log("User active game code:", user.active_game_code);
+
+
+
 
         // Check if user is trying to rejoin the same session they're already in
         if (user.active_game_code === sessionCode) {
-          console.log("✅ Player is already in this session, allowing rejoin");
+
           // Allow rejoin - just navigate to the game session
         }
 
         // Get session join info first to validate the session
         const joinInfoResponse = await API.gameSession.getJoinInfo(sessionCode);
 
-        console.log("Join info response:", joinInfoResponse);
+
 
         if (!joinInfoResponse.isSuccess) {
           console.error(
@@ -139,7 +139,7 @@ export default function QRScannerScreen() {
         });
 
         if (!joinResponse.isSuccess) {
-          console.error("❌ Join API call failed:", joinResponse.message);
+
 
           // Handle specific error cases
           const errorMsg = joinResponse.message?.toLowerCase() || "";
@@ -149,18 +149,18 @@ export default function QRScannerScreen() {
 
             // Check if they're trying to rejoin the same session
             if (user.active_game_code === sessionCode) {
-              console.log("⚠️ Player already in this session, allowing rejoin anyway");
+
               // Continue to navigation - they're rejoining the same session
             } else {
               // They're in a different session - try to leave it first
-              console.warn("⚠️ Player is in a different session, attempting to leave and retry...");
+
 
               try {
                 const dataAccess = (await import("@/databaseAccess/dataAccess")).default;
                 const leaveResult = await dataAccess.leaveGameSession(user.player_id);
 
                 if (leaveResult) {
-                  console.log("✅ Left previous session, retrying join...");
+
 
                   // Retry join
                   const retryJoinResponse = await API.gameSession.join(
@@ -169,7 +169,7 @@ export default function QRScannerScreen() {
                   );
 
                   if (retryJoinResponse.isSuccess) {
-                    console.log("✅ Successfully joined after leaving previous session");
+
                     // Continue to navigation
                   } else {
                     // Still failed - show alert
@@ -207,7 +207,7 @@ export default function QRScannerScreen() {
                   return;
                 }
               } catch (leaveError: any) {
-                console.error("Error leaving previous session:", leaveError);
+
                 Alert.alert(
                   "Error",
                   "Could not leave previous session. Please try again.",
@@ -230,10 +230,10 @@ export default function QRScannerScreen() {
             throw new Error(joinResponse.message || "Failed to join session");
           }
         } else {
-          console.log("✅ Successfully joined session via API");
+
         }
 
-        console.log("Successfully joined session:", sessionInfo);
+
 
         // Navigate to game session with session info and user data
         router.push({
@@ -250,8 +250,8 @@ export default function QRScannerScreen() {
           },
         });
       } catch (error: any) {
-        console.error("Error joining session:", error);
-        console.error("Session code attempted:", sessionCode);
+
+
         console.error("User context:", {
           player_id: user?.player_id,
           player_name: user?.player_name,

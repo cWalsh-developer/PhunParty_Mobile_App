@@ -27,7 +27,7 @@ export default function SplashScreen() {
         router.replace("/login");
       }
     } catch (error) {
-      console.error("Auth check error:", error);
+
       // If there's an error, default to login
       router.replace("/login");
     } finally {
