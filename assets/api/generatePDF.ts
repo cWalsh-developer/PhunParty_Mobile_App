@@ -1,23 +1,7 @@
 import * as MailComposer from "expo-mail-composer";
 import { printToFileAsync } from "expo-print";
-import { shareAsync } from "expo-sharing";
 
-export async function generatePDF(content: string) {
-  const { uri } = await printToFileAsync({
-    html: content,
-    base64: false,
-  });
-  await shareAsync(uri);
-}
-
-export async function generatePDFWithEmail(
-  content: string,
-  userEmail: string,
-  options?: {
-    shareOnly?: boolean;
-    emailOnly?: boolean;
-  }
-) {
+export async function generatePDFWithEmail(content: string, userEmail: string) {
   try {
     // Generate PDF
     const { uri } = await printToFileAsync({
@@ -28,16 +12,15 @@ export async function generatePDFWithEmail(
     // Check if email is available on device
     const isMailAvailable = await MailComposer.isAvailableAsync();
 
-    if (!isMailAvailable && options?.emailOnly) {
+    if (!isMailAvailable) {
       throw new Error("Email is not available on this device");
     }
 
-    // Send email if requested and available
-    if (!options?.shareOnly && isMailAvailable) {
-      const emailResult = await MailComposer.composeAsync({
-        recipients: [userEmail],
-        subject: `Your Data Privacy Report - ${new Date().toLocaleDateString()}`,
-        body: `
+    // Send email
+    const emailResult = await MailComposer.composeAsync({
+      recipients: [userEmail],
+      subject: `Your Data Privacy Report - ${new Date().toLocaleDateString()}`,
+      body: `
 Hi there,
 
 Please find your requested data privacy report attached to this email.
@@ -52,38 +35,17 @@ If you have any questions about your data or this report, please don't hesitate 
 
 Best regards,
 The PhunParty Team
-        `,
-        attachments: [uri],
-      });
+      `,
+      attachments: [uri],
+    });
 
-      if (emailResult.status === MailComposer.MailComposerStatus.SENT) {
-        return { success: true, method: "email", uri };
-      } else if (emailResult.status === MailComposer.MailComposerStatus.SAVED) {
-        return { success: true, method: "draft", uri };
-      } else {
-        // Fall back to sharing if email was cancelled
-        if (!options?.emailOnly) {
-          await shareAsync(uri, {
-            mimeType: "application/pdf",
-            UTI: "com.adobe.pdf",
-          });
-          return { success: true, method: "share", uri };
-        }
-        return { success: false, method: "cancelled", uri };
-      }
+    if (emailResult.status === MailComposer.MailComposerStatus.SENT) {
+      return { success: true, method: "email", uri };
+    } else if (emailResult.status === MailComposer.MailComposerStatus.SAVED) {
+      return { success: true, method: "draft", uri };
+    } else {
+      return { success: false, method: "cancelled", uri };
     }
-
-    // Share the file if email is not available or shareOnly is requested
-    if (!options?.emailOnly) {
-      await shareAsync(uri, {
-        mimeType: "application/pdf",
-        UTI: "com.adobe.pdf",
-      });
-
-      return { success: true, method: "share", uri };
-    }
-
-    return { success: true, method: "generated", uri };
   } catch (error) {
     throw error;
   }
@@ -94,7 +56,6 @@ export const generateDataPrivacyPDF = async (
   userData: any,
   options?: {
     sendEmail?: boolean;
-    shareOnly?: boolean;
   }
 ) => {
   const content = `
@@ -155,16 +116,17 @@ export const generateDataPrivacyPDF = async (
             ? `Profile Photo: Yes`
             : "Profile Photo: No"
         }</p>
-        
         <h2>How We Use Your Data</h2>
         <ul>
           <li><strong>Name:</strong> Used to identify you in games and on your profile</li>
           <li><strong>Email:</strong> Used for account verification, password resets, and important notifications</li>
           <li><strong>Mobile:</strong> Used for account security and optional SMS notifications</li>
-          <li><strong>Profile Photo:</strong> Displayed on your profile and in games for identification</li>
+          <li><strong>Profile Photo:</strong> Displayed on your profile and in games for identification if permitted by you. Your photos are securely stored and not shared without your consent.</li>
           <li><strong>Game Data:</strong> Used to track your game statistics and progress</li>
+          <li><strong>Password:</strong> Your password is hashed and stored securely. Your password is not accessible to anyone, including us.</li>
+          <li><strong>Login Tokens:</strong> Used to maintain your logged-in session securely as it is saved directly on your device.</li>
         </ul>
-        
+        <hr>
         <h2>Data Retention</h2>
         <p>We retain your personal data for as long as your account is active. You can request deletion of your account and all associated data at any time through the app settings.</p>
         
@@ -176,24 +138,18 @@ export const generateDataPrivacyPDF = async (
           <li>Right to restrict processing</li>
           <li>Right to data portability</li>
         </ul>
-        
         <h2>Contact Information</h2>
-        <p>If you have any questions about your data or this privacy report, please contact us through the app or visit our privacy policy.</p>
+        <p>If you have any questions about your data or this privacy report, please contact us through the app or visit our <a href="https://terms-and-privacy.nexusgit.info/websites/phun-party/privacy">privacy policy</a>.</p>
         
         <p><small>Generated on: ${new Date().toLocaleDateString()}</small></p>
         </body>
     </html>
   `;
 
-  // Use email functionality if user has email and sendEmail option is enabled
+  // Send email if user has email and sendEmail option is enabled
   if (options?.sendEmail && userData.player_email) {
-    return await generatePDFWithEmail(content, userData.player_email, {
-      shareOnly: options?.shareOnly,
-      emailOnly: !options?.shareOnly,
-    });
+    return await generatePDFWithEmail(content, userData.player_email);
   } else {
-    // Fall back to original sharing method
-    await generatePDF(content);
-    return { success: true, method: "share" };
+    throw new Error("Email is required for data export");
   }
 };
