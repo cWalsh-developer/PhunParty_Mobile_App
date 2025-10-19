@@ -2,7 +2,7 @@ import * as MailComposer from "expo-mail-composer";
 import { printToFileAsync } from "expo-print";
 import { shareAsync } from "expo-sharing";
 
-export async function generatePDF(content: string, fileName: string) {
+export async function generatePDF(content: string) {
   const { uri } = await printToFileAsync({
     html: content,
     base64: false,
@@ -12,7 +12,6 @@ export async function generatePDF(content: string, fileName: string) {
 
 export async function generatePDFWithEmail(
   content: string,
-  fileName: string,
   userEmail: string,
   options?: {
     shareOnly?: boolean;
@@ -20,36 +19,9 @@ export async function generatePDFWithEmail(
   }
 ) {
   try {
-    // Sanitize filename to remove invalid characters
-    const sanitizedFileName = fileName
-      .replace(/[<>:"/\\|?*]/g, "_")
-      .replace(/\s+/g, "_");
-
-    // Ensure .pdf extension
-    const finalFileName = sanitizedFileName.endsWith(".pdf")
-      ? sanitizedFileName
-      : `${sanitizedFileName}.pdf`;
-
-    // Create HTML content with document title and better metadata
-    const htmlWithTitle = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>${finalFileName.replace(".pdf", "")}</title>
-        <meta charset="utf-8">
-        <meta name="description" content="Data Privacy Report">
-        <meta name="author" content="PhunParty">
-        <meta name="subject" content="${finalFileName.replace(".pdf", "")}">
-      </head>
-      <body>
-        ${content}
-      </body>
-      </html>
-    `;
-
     // Generate PDF
     const { uri } = await printToFileAsync({
-      html: htmlWithTitle,
+      html: content,
       base64: false,
     });
 
@@ -93,7 +65,6 @@ The PhunParty Team
         if (!options?.emailOnly) {
           await shareAsync(uri, {
             mimeType: "application/pdf",
-            dialogTitle: `Share ${finalFileName}`,
             UTI: "com.adobe.pdf",
           });
           return { success: true, method: "share", uri };
@@ -106,7 +77,6 @@ The PhunParty Team
     if (!options?.emailOnly) {
       await shareAsync(uri, {
         mimeType: "application/pdf",
-        dialogTitle: `Share ${finalFileName}`,
         UTI: "com.adobe.pdf",
       });
 
@@ -123,31 +93,15 @@ The PhunParty Team
 export const generateDataPrivacyPDF = async (
   userData: any,
   options?: {
-    fileName?: string;
     sendEmail?: boolean;
     shareOnly?: boolean;
   }
 ) => {
-  // Generate a custom filename with timestamp if not provided
-  const cleanPlayerName = (userData.player_name || "User")
-    .replace(/[^a-zA-Z0-9\-_]/g, "_") // Replace invalid chars with underscore
-    .substring(0, 20); // Limit length
-
-  const defaultFileName = `PhunParty_DataPrivacy_${cleanPlayerName}_${
-    new Date().toISOString().split("T")[0]
-  }.pdf`;
-  const fileName = options?.fileName || defaultFileName;
-
-  // Clean the custom filename as well
-  const cleanFileName = fileName
-    .replace(/[^a-zA-Z0-9\-_\.]/g, "_") // Replace invalid chars with underscore
-    .replace(/_{2,}/g, "_"); // Replace multiple underscores with single
-
   const content = `
     <html>
       <head>
         <meta charset="utf-8" />
-        <title>${cleanFileName.replace(".pdf", "")}</title>
+        <title>PhunParty Data Privacy Report</title>
         <style>
           body {
             font-family: Arial, sans-serif;
@@ -233,18 +187,13 @@ export const generateDataPrivacyPDF = async (
 
   // Use email functionality if user has email and sendEmail option is enabled
   if (options?.sendEmail && userData.player_email) {
-    return await generatePDFWithEmail(
-      content,
-      cleanFileName,
-      userData.player_email,
-      {
-        shareOnly: options?.shareOnly,
-        emailOnly: !options?.shareOnly,
-      }
-    );
+    return await generatePDFWithEmail(content, userData.player_email, {
+      shareOnly: options?.shareOnly,
+      emailOnly: !options?.shareOnly,
+    });
   } else {
     // Fall back to original sharing method
-    await generatePDF(content, cleanFileName);
+    await generatePDF(content);
     return { success: true, method: "share" };
   }
 };
