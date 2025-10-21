@@ -18,7 +18,6 @@ export default function Login() {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [name, setName] = useState<string>("");
-  const [username, setUsername] = useState<string>("");
   const [mobile, setMobile] = useState<string>("");
   const { setUser } = useContext(UserContext)!;
   const [termsAccepted, setTermsAccepted] = useState<boolean>(false);
@@ -53,7 +52,7 @@ export default function Login() {
       alert("You must accept the terms and conditions to sign up.");
       return;
     }
-    const result = await signUp({ name, email, password, mobile, username });
+    const result = await signUp({ name, email, password, mobile });
     if (result) {
       toggleForm();
     }
@@ -71,8 +70,6 @@ export default function Login() {
       setPassword={setPassword}
       name={name}
       setName={setName}
-      username={username}
-      setUsername={setUsername}
       mobile={mobile}
       setMobile={setMobile}
       isSignUp={isSignUp}
