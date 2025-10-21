@@ -19,6 +19,8 @@ interface LoginFormProps {
   setPassword: (v: string) => void;
   name: string;
   setName: (v: string) => void;
+  username: string;
+  setUsername: (v: string) => void;
   mobile: string;
   setMobile: (v: string) => void;
   isSignUp: boolean;
@@ -37,6 +39,8 @@ export default function LoginForm({
   setPassword,
   name,
   setName,
+  username,
+  setUsername,
   mobile,
   setMobile,
   isSignUp,
@@ -93,6 +97,19 @@ export default function LoginForm({
                   value={name}
                   onChangeText={setName}
                   placeholder="Enter your name"
+                  style={{ marginBottom: 16 }}
+                  horizontalScrollEnabled={true}
+                  maxWidth={320}
+                />
+                <AppInput
+                  label="Username (optional)"
+                  value={username}
+                  onChangeText={(text) => {
+                    // Basic sanitization: trim spaces
+                    setUsername(text.trimStart());
+                  }}
+                  autoCapitalize="none"
+                  placeholder="Choose a unique username"
                   style={{ marginBottom: 16 }}
                   horizontalScrollEnabled={true}
                   maxWidth={320}

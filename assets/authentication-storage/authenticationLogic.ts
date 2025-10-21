@@ -13,6 +13,7 @@ export interface SignUpRequest {
   email: string;
   password: string;
   mobile: string;
+  username?: string;
 }
 
 const {
@@ -73,6 +74,7 @@ export const signUp = async ({
   email,
   password,
   mobile,
+  username,
 }: SignUpRequest): Promise<boolean> => {
   try {
     // Validate inputs
@@ -93,6 +95,8 @@ export const signUp = async ({
         player_email: email,
         hashed_password: password,
         player_mobile: mobile,
+        // Send username if provided (backend may ignore if unsupported)
+        username: username?.trim() || undefined,
       },
       false
     );
