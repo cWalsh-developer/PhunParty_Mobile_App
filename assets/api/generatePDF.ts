@@ -58,7 +58,6 @@ export const generateDataPrivacyPDF = async (
     sendEmail?: boolean;
   }
 ) => {
-  console.log("Generating content");
   const content = `
     <html>
       <head>
