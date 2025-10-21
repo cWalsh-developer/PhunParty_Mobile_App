@@ -130,7 +130,7 @@ export const generateDataPrivacyPDF = async (
         <h2>Data Retention</h2>
         <p>We retain your personal data for as long as your account is active. You can request deletion of your account and all associated data at any time through the app settings.</p>
         
-        <h2>Your Data Privacy Rights</h2>
+        <h2>Your Rights</h2>
         <ul>
           <li>Right to access your personal data</li>
           <li>Right to rectify inaccurate data</li>
