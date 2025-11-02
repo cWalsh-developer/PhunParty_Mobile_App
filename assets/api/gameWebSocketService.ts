@@ -31,12 +31,20 @@ export interface GameQuestion {
   ui_mode: "multiple_choice" | "buzzer" | "text_input";
 }
 
+export type ConnectionState =
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "reconnecting";
+
 export class GameWebSocketService {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectTimeout: any = null;
   private heartbeatInterval: any = null;
+  private connectionState: ConnectionState = "disconnected";
+  private wsId: string | null = null; // WebSocket ID from backend
 
   public isConnected = false;
   public sessionCode: string | null = null;
@@ -44,6 +52,8 @@ export class GameWebSocketService {
 
   // Event callbacks
   public onConnectionStatusChange: ((connected: boolean) => void) | null = null;
+  public onConnectionStateChange: ((state: ConnectionState) => void) | null =
+    null;
   public onGameStateUpdate: ((gameState: GameState) => void) | null = null;
   public onQuestionReceived: ((question: GameQuestion) => void) | null = null;
   public onPlayerJoined: ((playerInfo: any) => void) | null = null;
@@ -54,14 +64,29 @@ export class GameWebSocketService {
   public onBuzzerUpdate: ((data: any) => void) | null = null;
   public onError: ((error: string) => void) | null = null;
 
+  // Get current connection state
+  public getConnectionState(): ConnectionState {
+    return this.connectionState;
+  }
+
+  // Update connection state and notify listeners
+  private setConnectionState(state: ConnectionState): void {
+    if (this.connectionState !== state) {
+      this.connectionState = state;
+      console.log(`🔌 Connection state changed: ${state}`);
+      this.onConnectionStateChange?.(state);
+
+      // Also maintain backward compatibility with old status callback
+      this.onConnectionStatusChange?.(state === "connected");
+    }
+  }
+
   private getWebSocketUrl(): string {
     // Try multiple possible API URL configurations
     const baseUrl =
       Constants.expoConfig?.extra?.API_BASE_URL ||
       Constants.expoConfig?.extra?.API_URL ||
       "https://api.phun.party";
-
-
 
     // Convert HTTP(S) to WebSocket URL
     let wsUrl;
@@ -74,7 +99,6 @@ export class GameWebSocketService {
       wsUrl = `wss://${baseUrl.replace(/^\/+/, "")}`;
     }
 
-
     return wsUrl;
   }
 
@@ -85,13 +109,11 @@ export class GameWebSocketService {
 
     // Validate inputs
     if (!sessionCode || sessionCode.trim().length === 0) {
-
       this.onError?.("Invalid session code. Please scan a valid game QR code.");
       return false;
     }
 
     if (!playerInfo || !playerInfo.player_name || !playerInfo.player_id) {
-
       this.onError?.("Invalid player information. Please check your profile.");
       return false;
     }
@@ -106,7 +128,6 @@ export class GameWebSocketService {
     try {
       // First, ensure player is properly joined to the session via API
       const API = (await import("./API")).default;
-
 
       const joinResponse = await API.gameSession.join(
         sessionCode,
@@ -159,8 +180,6 @@ export class GameWebSocketService {
               );
 
               if (leaveResult) {
-
-
                 // Retry the join after leaving
                 const retryJoinResponse = await API.gameSession.join(
                   sessionCode,
@@ -226,17 +245,14 @@ export class GameWebSocketService {
             joinResponse.message || "Unknown error"
           }`;
 
-
           this.onError?.(error);
           return false;
         }
       } else {
-
         joinSuccessful = true;
       }
 
       if (joinSuccessful) {
-
       }
 
       // Get session join info to get the correct WebSocket URL
@@ -296,7 +312,6 @@ export class GameWebSocketService {
       // Add API key for get_api_key dependency (required by your backend routes)
       if (apiKey) {
         params.append("api_key", apiKey);
-
       }
 
       // Add additional parameters
@@ -314,14 +329,13 @@ export class GameWebSocketService {
         finalWsUrl.replace(/(api_key|token)=[^&]+/g, "$1=***")
       );
 
+      this.setConnectionState("connecting");
       this.ws = new WebSocket(finalWsUrl);
 
       this.ws.onopen = () => {
-
-        this.isConnected = true;
+        console.log("✅ WebSocket opened - waiting for connection_established");
+        // Don't set to connected yet - wait for connection_established message
         this.reconnectAttempts = 0;
-        this.onConnectionStatusChange?.(true);
-        this.startHeartbeat();
       };
 
       this.ws.onmessage = (event) => {
@@ -329,7 +343,7 @@ export class GameWebSocketService {
           const message: GameWebSocketMessage = JSON.parse(event.data);
           this.handleMessage(message);
         } catch (error) {
-
+          console.error("❌ Failed to parse WebSocket message:", error);
         }
       };
 
@@ -348,15 +362,12 @@ export class GameWebSocketService {
           console.error(
             "- Server rejected connection (authentication failure)"
           );
-
-
-
         } else if (event.code === 1002) {
           console.error(
             "WebSocket protocol error (1002) - Invalid request format"
           );
         } else if (event.code === 1003) {
-
+          console.error("WebSocket unsupported data (1003)");
         } else if (event.code === 1011) {
           console.error(
             "WebSocket server error (1011) - Internal server error"
@@ -364,7 +375,6 @@ export class GameWebSocketService {
         }
 
         this.isConnected = false;
-        this.onConnectionStatusChange?.(false);
         this.stopHeartbeat();
 
         // Auto-reconnect unless it was a deliberate disconnect
@@ -373,16 +383,20 @@ export class GameWebSocketService {
           this.reconnectAttempts < this.maxReconnectAttempts
         ) {
           console.log(
-            `Scheduling reconnect attempt ${this.reconnectAttempts + 1}/${
+            `🔄 Scheduling reconnect attempt ${this.reconnectAttempts + 1}/${
               this.maxReconnectAttempts
             }`
           );
+          this.setConnectionState("reconnecting");
           this.scheduleReconnect();
+        } else {
+          this.setConnectionState("disconnected");
         }
       };
 
       this.ws.onerror = (error) => {
-
+        console.error("❌ WebSocket error occurred:", error);
+        this.setConnectionState("disconnected");
 
         // Provide more specific error guidance
         this.onError?.(
@@ -392,7 +406,6 @@ export class GameWebSocketService {
 
       return true;
     } catch (error: any) {
-
       console.error("Connection error details:", {
         name: error.name,
         message: error.message,
@@ -442,22 +455,28 @@ export class GameWebSocketService {
     }
 
     this.isConnected = false;
+    this.wsId = null;
     this.sessionCode = null;
     this.playerInfo = null;
-    this.onConnectionStatusChange?.(false);
+    this.setConnectionState("disconnected");
   }
 
   private scheduleReconnect(): void {
     if (this.reconnectTimeout) return;
 
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+    // Exponential backoff with max delay of 10 seconds
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
     this.reconnectAttempts++;
+
+    console.log(
+      `🔄 Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+    );
 
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
       if (this.sessionCode && this.playerInfo) {
         console.log(
-          `Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+          `🔄 Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
         );
         this.connect(this.sessionCode, this.playerInfo);
       }
@@ -465,11 +484,18 @@ export class GameWebSocketService {
   }
 
   private startHeartbeat(): void {
+    this.stopHeartbeat(); // Clear any existing interval
+
     this.heartbeatInterval = setInterval(() => {
-      if (this.isConnected && this.ws) {
+      if (
+        this.isConnected &&
+        this.ws &&
+        this.ws.readyState === WebSocket.OPEN
+      ) {
+        console.log("💓 Sending heartbeat ping");
         this.sendMessage({ type: "ping" });
       }
-    }, 30000); // Send ping every 30 seconds
+    }, 15000); // Send ping every 15 seconds (matches backend recommendation)
   }
 
   private stopHeartbeat(): void {
@@ -487,8 +513,20 @@ export class GameWebSocketService {
     });
 
     switch (message.type) {
-      case "initial_state":
+      case "connection_established":
+        console.log(
+          "✅ WebSocket connection_established received:",
+          message.data
+        );
+        this.wsId = message.data?.ws_id || null;
+        this.isConnected = true;
+        this.setConnectionState("connected");
+        this.startHeartbeat();
+        // Notify connection status change after proper handshake
+        break;
 
+      case "initial_state":
+        console.log("📋 Initial state received");
         this.handleInitialState(message.data);
         break;
 
@@ -523,12 +561,10 @@ export class GameWebSocketService {
         break;
 
       case "player_joined":
-
         this.onPlayerJoined?.(message.data);
         break;
 
       case "player_left":
-
         this.onPlayerLeft?.(message.data);
         break;
 
@@ -536,17 +572,14 @@ export class GameWebSocketService {
       case "quiz_started":
       case "start_game":
       case "begin_quiz":
-
         this.onGameStarted?.(message.data);
         break;
 
       case "game_ended":
-
         this.onGameEnded?.(message.data);
         break;
 
       case "answer_submitted":
-
         this.onAnswerSubmitted?.(message.data);
         break;
 
@@ -554,45 +587,46 @@ export class GameWebSocketService {
       case "buzzer_winner":
       case "correct_answer":
       case "incorrect_answer":
-
         this.onBuzzerUpdate?.(message.data);
         break;
 
       case "pong":
-        // Heartbeat response - do nothing but log
-
+        // Heartbeat response - connection is alive
+        console.log("💓 Heartbeat pong received - connection alive");
         break;
 
       case "error":
-
         this.onError?.(message.data?.message || "An error occurred");
         break;
 
       default:
-
     }
   }
 
   private handleInitialState(data: any): void {
-
-
     if (data.game_state) {
-
       this.onGameStateUpdate?.(data.game_state);
     }
 
     if (data.current_question) {
-
       this.onQuestionReceived?.(data.current_question);
     } else if (data.question) {
-
       this.onQuestionReceived?.(data.question);
     }
   }
 
   sendMessage(message: GameWebSocketMessage): boolean {
-    if (!this.isConnected || !this.ws) {
-
+    if (
+      !this.isConnected ||
+      !this.ws ||
+      this.ws.readyState !== WebSocket.OPEN
+    ) {
+      console.warn("❌ Cannot send message - WebSocket not ready:", {
+        isConnected: this.isConnected,
+        hasWs: !!this.ws,
+        readyState: this.ws?.readyState,
+        messageType: message.type,
+      });
       return false;
     }
 
@@ -600,7 +634,7 @@ export class GameWebSocketService {
       this.ws.send(JSON.stringify(message));
       return true;
     } catch (error) {
-
+      console.error("❌ Failed to send message:", error);
       return false;
     }
   }
@@ -641,7 +675,6 @@ export class GameWebSocketService {
   async submitAnswerViaAPI(questionId: string, answer: string): Promise<any> {
     try {
       if (!this.sessionCode || !this.playerInfo?.player_id) {
-
         return {
           isSuccess: false,
           message: "Not connected to a session",
@@ -649,7 +682,6 @@ export class GameWebSocketService {
       }
 
       if (!questionId || !answer) {
-
         return {
           isSuccess: false,
           message: "Invalid question or answer",
@@ -664,7 +696,6 @@ export class GameWebSocketService {
         answer
       );
     } catch (error: any) {
-
       return {
         isSuccess: false,
         message: error.message || "Failed to submit answer",
@@ -675,7 +706,6 @@ export class GameWebSocketService {
   async getSessionStatus(): Promise<any> {
     try {
       if (!this.sessionCode) {
-
         return {
           isSuccess: false,
           message: "Not connected to a session",
@@ -685,7 +715,6 @@ export class GameWebSocketService {
       const API = (await import("./API")).default;
       return await API.gameSession.getStatus(this.sessionCode);
     } catch (error: any) {
-
       return {
         isSuccess: false,
         message: error.message || "Failed to get session status",
@@ -696,7 +725,6 @@ export class GameWebSocketService {
   async getCurrentQuestion(): Promise<any> {
     try {
       if (!this.sessionCode) {
-
         return {
           isSuccess: false,
           message: "Not connected to a session",
@@ -706,7 +734,6 @@ export class GameWebSocketService {
       const API = (await import("./API")).default;
       return await API.gameSession.getCurrentQuestion(this.sessionCode);
     } catch (error: any) {
-
       return {
         isSuccess: false,
         message: error.message || "Failed to get current question",

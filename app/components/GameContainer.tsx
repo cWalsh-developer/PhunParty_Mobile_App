@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import {
+  ConnectionState,
   GameState,
   gameWebSocket,
   PlayerInfo,
@@ -33,6 +34,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   onLeaveGame,
 }) => {
   const [isConnecting, setIsConnecting] = useState(true);
+  const [connectionState, setConnectionState] =
+    useState<ConnectionState>("connecting");
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [currentGameType, setCurrentGameType] = useState<string | null>(null);
@@ -105,7 +108,6 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
         const status = statusResponse.result;
 
-
         // Determine game type from the session info but don't start the game yet
         if (status.current_question?.genre) {
           const gameType = status.current_question.genre.toLowerCase();
@@ -138,29 +140,30 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
         setIsGameStarted(hasActuallyStarted);
       } else {
-        throw new Error(statusResponse.message || "Failed to get session status");
+        throw new Error(
+          statusResponse.message || "Failed to get session status"
+        );
       }
     } catch (error: any) {
-
       console.error("Error details:", {
         message: error.message,
         sessionCode,
       });
-      setConnectionError(
-        error.message || "Failed to connect to game session"
-      );
+      setConnectionError(error.message || "Failed to connect to game session");
     }
 
-    // Setup WebSocket listeners
-    gameWebSocket.onConnectionStatusChange = (connected: boolean) => {
+    // Setup WebSocket listeners - New connection state handler
+    gameWebSocket.onConnectionStateChange = (state: ConnectionState) => {
+      console.log("🔌 Connection state changed:", state);
+      setConnectionState(state);
 
-      if (connected) {
+      if (state === "connected") {
         setIsConnecting(false);
         setConnectionError(null);
 
         // Request initial state when connected
         setTimeout(() => {
-
+          console.log("📊 Requesting session stats after connection");
           gameWebSocket.requestSessionStats();
         }, 1000);
 
@@ -188,7 +191,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
                 }
               }
             } catch (error) {
-
+              console.error("Error polling game status:", error);
             }
           } else {
             clearInterval(statusPoll);
@@ -197,14 +200,26 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
         // Clean up polling after 60 seconds
         setTimeout(() => clearInterval(statusPoll), 60000);
-      } else if (!isConnecting) {
+      } else if (state === "reconnecting") {
+        console.log("🔄 WebSocket reconnecting...");
+      } else if (state === "disconnected" && !isConnecting) {
         // Only show error if we were previously connected
         setConnectionError("Lost connection to game session");
       }
     };
 
-    gameWebSocket.onGameStateUpdate = (state: GameState) => {
+    // Maintain backward compatibility with old callback
+    gameWebSocket.onConnectionStatusChange = (connected: boolean) => {
+      console.log("🔌 Connection status (legacy):", connected);
+      if (connected) {
+        setIsConnecting(false);
+        setConnectionError(null);
+      } else if (!isConnecting) {
+        setConnectionError("Lost connection to game session");
+      }
+    };
 
+    gameWebSocket.onGameStateUpdate = (state: GameState) => {
       setGameState(state);
       if (state.game_type !== currentGameType) {
         console.log(
@@ -215,15 +230,12 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     };
 
     gameWebSocket.onError = (error: string) => {
-
       setConnectionError(error);
       setIsConnecting(false);
     };
 
     // Add missing event handlers for game flow
     gameWebSocket.onQuestionReceived = (question: any) => {
-
-
       // If we receive a question but game isn't started yet, start it now
       // This handles cases where "Go to Quiz" was clicked and questions are sent
       if (
@@ -250,7 +262,6 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       if (data && data.isstarted === true) {
         setIsGameStarted(true);
         // Optionally: setCurrentQuestion(data.current_question);
-
       }
       if (data.game_type && data.game_type !== currentGameType) {
         setCurrentGameType(data.game_type);
@@ -264,16 +275,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       }
     };
 
-    gameWebSocket.onPlayerJoined = (playerInfo: any) => {
+    gameWebSocket.onPlayerJoined = (playerInfo: any) => {};
 
-    };
-
-    gameWebSocket.onPlayerLeft = (playerInfo: any) => {
-
-    };
+    gameWebSocket.onPlayerLeft = (playerInfo: any) => {};
 
     gameWebSocket.onGameEnded = (data: any) => {
-
       // Handle game end if needed
     };
 
@@ -323,13 +329,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
   const checkGameStatus = async () => {
     try {
-
       const API = (await import("../../assets/api/API")).default;
       const statusResponse = await API.gameSession.getStatus(sessionCode);
 
       if (statusResponse.isSuccess) {
         const status = statusResponse.result;
-
 
         Alert.alert(
           "Game Status",
@@ -343,7 +347,6 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
         // Game has started if it's active and has a current question
         if (!isGameStarted && status.is_active && status.current_question) {
-
           setIsGameStarted(true);
         }
       } else {
@@ -353,7 +356,6 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         );
       }
     } catch (error: any) {
-
       Alert.alert("Error", error.message || "Failed to check game status");
     }
   };
@@ -412,7 +414,6 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     // Game has started - render the actual game component
     const gameType = currentGameType?.toLowerCase() || "trivia";
-
 
     switch (gameType) {
       case "trivia":
@@ -502,6 +503,23 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
+
+      {/* Connection status banner */}
+      {connectionState === "reconnecting" && (
+        <View style={styles.reconnectingBanner}>
+          <MaterialIcons name="sync" size={16} color={colors.ink[900]} />
+          <Text style={styles.reconnectingText}>🔄 Reconnecting...</Text>
+        </View>
+      )}
+
+      {connectionState === "disconnected" && !isConnecting && (
+        <View style={styles.disconnectedBanner}>
+          <MaterialIcons name="wifi-off" size={16} color={colors.stone[100]} />
+          <Text style={styles.disconnectedText}>
+            ❌ Connection lost. Please refresh.
+          </Text>
+        </View>
+      )}
 
       {/* Header with session info and leave button */}
       <View style={styles.header}>
@@ -665,6 +683,32 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     marginTop: 12,
+  },
+  reconnectingBanner: {
+    backgroundColor: colors.tea[500],
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  reconnectingText: {
+    ...typography.body,
+    color: colors.ink[900],
+    fontWeight: "600",
+  },
+  disconnectedBanner: {
+    backgroundColor: colors.red[500],
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  disconnectedText: {
+    ...typography.body,
+    color: colors.stone[100],
+    fontWeight: "600",
   },
 });
 
