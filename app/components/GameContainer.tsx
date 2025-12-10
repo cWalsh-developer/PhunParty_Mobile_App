@@ -1,6 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -40,7 +40,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [currentGameType, setCurrentGameType] = useState<string | null>(null);
   const [isGameStarted, setIsGameStarted] = useState(false);
+  const [isWaitingForQuestion, setIsWaitingForQuestion] = useState(false);
   const [pulseAnimation] = useState(new Animated.Value(1));
+
+  // Use ref to track game started state synchronously (avoids race condition)
+  const gameStartedRef = useRef(false);
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -166,40 +170,6 @@ export const GameContainer: React.FC<GameContainerProps> = ({
           console.log("📊 Requesting session stats after connection");
           gameWebSocket.requestSessionStats();
         }, 1000);
-
-        // Also poll game status periodically to catch state changes
-        const statusPoll = setInterval(async () => {
-          if (!isGameStarted) {
-            try {
-              const API = (await import("../../assets/api/API")).default;
-              const statusResponse = await API.gameSession.getStatus(
-                sessionCode
-              );
-              if (statusResponse.isSuccess) {
-                const status = statusResponse.result;
-                // Check if host has started the game (Go to Quiz was clicked)
-                if (
-                  status.is_active &&
-                  status.current_question &&
-                  !status.is_waiting_for_players
-                ) {
-                  console.log(
-                    "🚀 Detected game start via status polling - Go to Quiz was clicked!"
-                  );
-                  setIsGameStarted(true);
-                  clearInterval(statusPoll);
-                }
-              }
-            } catch (error) {
-              console.error("Error polling game status:", error);
-            }
-          } else {
-            clearInterval(statusPoll);
-          }
-        }, 2000); // Poll every 2 seconds
-
-        // Clean up polling after 60 seconds
-        setTimeout(() => clearInterval(statusPoll), 60000);
       } else if (state === "reconnecting") {
         console.log("🔄 WebSocket reconnecting...");
       } else if (state === "disconnected" && !isConnecting) {
@@ -233,36 +203,51 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       setConnectionError(error);
       setIsConnecting(false);
     };
+    const fetchQuestionFromAPI = async () => {
+      console.log("🔄 Fetching current question from API...");
+      try {
+        const API = (await import("../../assets/api/API")).default;
+        const response = await API.gameSession.getCurrentQuestion(sessionCode);
 
-    // Add missing event handlers for game flow
-    gameWebSocket.onQuestionReceived = (question: any) => {
-      // If we receive a question but game isn't started yet, start it now
-      // This handles cases where "Go to Quiz" was clicked and questions are sent
-      if (
-        !isGameStarted &&
-        question &&
-        (question.question_id || question.question)
-      ) {
-        console.log(
-          "🎯 Question received - auto-starting game from lobby (Go to Quiz detected)"
-        );
-        setIsGameStarted(true);
+        if (response.isSuccess && response.result) {
+          console.log("✅ Question fetched successfully from API");
+          setIsWaitingForQuestion(false);
+          // The TriviaGame component will pick this up
+        } else {
+          console.error("❌ Failed to fetch question:", response.message);
+          // Keep waiting - might arrive via WebSocket still
+          setTimeout(fetchQuestionFromAPI, 1000); // Retry in 1 second
+        }
+      } catch (error) {
+        console.error("❌ Error fetching question:", error);
+        setTimeout(fetchQuestionFromAPI, 1000); // Retry in 1 second
       }
-
-      // The individual game components (TriviaGame, BuzzerGame) will handle the question
     };
 
     gameWebSocket.onGameStarted = (data: any) => {
       console.log(
-        "🚀 GAME STARTED EVENT RECEIVED FROM HOST! (Go to Quiz clicked)",
-        data
+        "🚀 GAME STARTED EVENT RECEIVED - Intro beginning, waiting for synchronized question reveal"
       );
+      console.log("📦 Game started data:", JSON.stringify(data, null, 2));
 
-      // Only transition if isstarted is true
+      // Transition from lobby to game screen
       if (data && data.isstarted === true) {
+        console.log("🎮 Game started - Intro beginning");
+        console.log("📍 Setting isGameStarted = true");
+
+        gameStartedRef.current = true; // Mark game as started
         setIsGameStarted(true);
-        // Optionally: setCurrentQuestion(data.current_question);
+
+        // Set ready for questions so they can be delivered when question_started arrives
+        gameWebSocket.setReadyForQuestions(true);
+
+        // DO NOT extract or display question here
+        // The question will arrive via question_started with start_at timing
+        console.log(
+          "⏳ Waiting for synchronized question reveal (question_started + start_at)..."
+        );
       }
+
       if (data.game_type && data.game_type !== currentGameType) {
         setCurrentGameType(data.game_type);
       }
@@ -270,20 +255,25 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         setGameState({
           ...gameState,
           is_active: true,
-          current_question: data.current_question || gameState.current_question,
+          // DO NOT set current_question here - let synchronized reveal handle it
         });
       }
     };
 
-    gameWebSocket.onPlayerJoined = (playerInfo: any) => {};
+    gameWebSocket.onPlayerJoined = (playerInfo: any) => {
+      console.log("👤 Player joined or roster updated:", playerInfo);
+      // Handle both individual player_joined and roster_update messages
+      // You can add state management here if you want to track connected players
+    };
 
-    gameWebSocket.onPlayerLeft = (playerInfo: any) => {};
+    gameWebSocket.onPlayerLeft = (playerInfo: any) => {
+      console.log("👋 Player left:", playerInfo);
+      // Handle player leaving
+    };
 
     gameWebSocket.onGameEnded = (data: any) => {
       // Handle game end if needed
-    };
-
-    // Attempt connection
+    }; // Attempt connection
     const success = await gameWebSocket.connect(sessionCode, playerInfo);
 
     if (!success) {
@@ -311,6 +301,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   };
 
   const handleLeaveGame = () => {
+    console.log("📺 Resetting WebSocket: UI no longer ready for questions");
+    gameWebSocket.setReadyForQuestions(false); // Reset ready state
     gameWebSocket.disconnect();
     onLeaveGame();
   };
@@ -365,6 +357,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       currentGameType,
       gameState,
       isGameStarted,
+      isWaitingForQuestion,
       isConnecting,
       connectionError,
     });
@@ -412,7 +405,36 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       );
     }
 
-    // Game has started - render the actual game component
+    // Game has started - show loading while waiting for first question
+    // NOTE: We don't actually wait here - TriviaGame handles showing "waiting" state
+    // Just render the game component which will show its own waiting UI if needed
+    if (isWaitingForQuestion) {
+      // This state is only used for explicit API polling scenarios
+      // In normal flow, we go straight to rendering the game component
+      return (
+        <View style={styles.centerContainer}>
+          <AppCard style={styles.loadingCard}>
+            <MaterialIcons
+              name="hourglass-empty"
+              size={64}
+              color={colors.tea[500]}
+            />
+            <Text style={styles.loadingTitle}>
+              Waiting for next question...
+            </Text>
+            <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
+            <View style={styles.statusIndicator}>
+              <Animated.View
+                style={[styles.pulsingDot, { opacity: pulseAnimation }]}
+              />
+              <Text style={styles.statusText}>Syncing</Text>
+            </View>
+          </AppCard>
+        </View>
+      );
+    }
+
+    // Game has started and question received - render the actual game component
     const gameType = currentGameType?.toLowerCase() || "trivia";
 
     switch (gameType) {
@@ -600,6 +622,13 @@ const styles = StyleSheet.create({
     borderColor: colors.tea[500],
     borderWidth: 1,
   },
+  loadingCard: {
+    alignItems: "center",
+    padding: 40,
+    maxWidth: 380,
+    borderColor: colors.tea[500],
+    borderWidth: 1,
+  },
   errorCard: {
     alignItems: "center",
     padding: 32,
@@ -620,6 +649,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "bold",
   },
+  loadingTitle: {
+    ...typography.h2,
+    color: colors.tea[400],
+    marginTop: 16,
+    textAlign: "center",
+    fontWeight: "bold",
+  },
   errorTitle: {
     ...typography.h3,
     color: colors.red[500],
@@ -634,6 +670,13 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   lobbyText: {
+    ...typography.h3,
+    color: colors.stone[300],
+    marginTop: 12,
+    textAlign: "center",
+    lineHeight: 24,
+  },
+  loadingText: {
     ...typography.h3,
     color: colors.stone[300],
     marginTop: 12,

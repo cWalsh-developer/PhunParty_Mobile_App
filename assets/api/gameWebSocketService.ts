@@ -4,7 +4,7 @@ import * as SecureStore from "expo-secure-store";
 export interface GameWebSocketMessage {
   type: string;
   data?: any;
-  timestamp?: number;
+  timestamp?: number | string;
 }
 
 export interface PlayerInfo {
@@ -29,6 +29,7 @@ export interface GameQuestion {
   answer?: string; // Original correct answer (for reference)
   game_type: string;
   ui_mode: "multiple_choice" | "buzzer" | "text_input";
+  start_at?: string; // ISO timestamp for synchronized display
 }
 
 export type ConnectionState =
@@ -44,25 +45,141 @@ export class GameWebSocketService {
   private reconnectTimeout: any = null;
   private heartbeatInterval: any = null;
   private connectionState: ConnectionState = "disconnected";
+  private clockOffset: number = 0; // ms offset from server time for synchronized reveals
   private wsId: string | null = null; // WebSocket ID from backend
 
   public isConnected = false;
   public sessionCode: string | null = null;
   public playerInfo: PlayerInfo | null = null;
 
+  // Message buffers to hold events that arrive before handlers are ready
+  private pendingQuestions: GameQuestion[] = [];
+  private pendingGameStarted: any[] = [];
+  private isReadyForQuestions: boolean = false; // Track if UI is ready to display questions
+  private waitingForQueueResponse: boolean = false; // Track if we requested question from queue
+
+  // Private callback storage
+  private _onQuestionReceived: ((question: GameQuestion) => void) | null = null;
+  private _onGameStarted: ((data: any) => void) | null = null;
+
   // Event callbacks
   public onConnectionStatusChange: ((connected: boolean) => void) | null = null;
   public onConnectionStateChange: ((state: ConnectionState) => void) | null =
     null;
   public onGameStateUpdate: ((gameState: GameState) => void) | null = null;
-  public onQuestionReceived: ((question: GameQuestion) => void) | null = null;
   public onPlayerJoined: ((playerInfo: any) => void) | null = null;
   public onPlayerLeft: ((playerInfo: any) => void) | null = null;
-  public onGameStarted: ((data: any) => void) | null = null;
   public onGameEnded: ((data: any) => void) | null = null;
   public onAnswerSubmitted: ((data: any) => void) | null = null;
   public onBuzzerUpdate: ((data: any) => void) | null = null;
   public onError: ((error: string) => void) | null = null;
+
+  // Buffered callback setters/getters
+  public set onQuestionReceived(
+    handler: ((question: GameQuestion) => void) | null
+  ) {
+    console.log("📝 Setting onQuestionReceived handler", {
+      hadHandler: !!this._onQuestionReceived,
+      hasNewHandler: !!handler,
+      pendingCount: this.pendingQuestions.length,
+    });
+
+    this._onQuestionReceived = handler;
+
+    // Deliver buffered questions ONLY if UI is ready
+    if (
+      handler &&
+      this.pendingQuestions.length > 0 &&
+      this.isReadyForQuestions
+    ) {
+      console.log(
+        `📬 Delivering ${this.pendingQuestions.length} buffered questions (handler set, UI ready)`
+      );
+      const buffered = [...this.pendingQuestions];
+      this.pendingQuestions = [];
+      buffered.forEach((q) => {
+        console.log("📤 Delivering buffered question:", q.question_id);
+        handler(q);
+      });
+    } else if (
+      handler &&
+      this.pendingQuestions.length > 0 &&
+      !this.isReadyForQuestions
+    ) {
+      console.log(
+        `⏸️ Handler set but UI not ready - keeping ${this.pendingQuestions.length} questions buffered`
+      );
+    }
+  }
+
+  public get onQuestionReceived() {
+    return this._onQuestionReceived;
+  }
+
+  public set onGameStarted(handler: ((data: any) => void) | null) {
+    console.log("📝 Setting onGameStarted handler", {
+      hadHandler: !!this._onGameStarted,
+      hasNewHandler: !!handler,
+      pendingCount: this.pendingGameStarted.length,
+    });
+
+    this._onGameStarted = handler;
+
+    // Deliver any buffered game started events
+    if (handler && this.pendingGameStarted.length > 0) {
+      console.log(
+        `📬 Delivering ${this.pendingGameStarted.length} buffered game started events`
+      );
+      const buffered = [...this.pendingGameStarted];
+      this.pendingGameStarted = [];
+      buffered.forEach((data) => {
+        console.log("📤 Delivering buffered game started event");
+        handler(data);
+      });
+    }
+  }
+
+  public get onGameStarted() {
+    return this._onGameStarted;
+  }
+
+  // Get the current clock offset from server time
+  public getClockOffset(): number {
+    return this.clockOffset;
+  }
+
+  // Call this when the intro finishes and game is ready to show questions
+  public setReadyForQuestions(ready: boolean): void {
+    console.log(`📺 UI ready state changed: ${ready}`, {
+      wasReady: this.isReadyForQuestions,
+      nowReady: ready,
+      pendingCount: this.pendingQuestions.length,
+      hasHandler: !!this._onQuestionReceived,
+    });
+
+    this.isReadyForQuestions = ready;
+
+    // Deliver buffered questions only when ready
+    if (ready && this.pendingQuestions.length > 0 && this._onQuestionReceived) {
+      console.log(
+        `📬 UI ready - delivering ${this.pendingQuestions.length} buffered questions`
+      );
+      const buffered = [...this.pendingQuestions];
+      this.pendingQuestions = [];
+      buffered.forEach((q) => {
+        console.log("📤 Delivering buffered question:", q.question_id);
+        this._onQuestionReceived!(q);
+      });
+    }
+
+    // Clear buffer when not ready (e.g., leaving game)
+    if (!ready && this.pendingQuestions.length > 0) {
+      console.log(
+        `🗑️ UI not ready - clearing ${this.pendingQuestions.length} buffered questions`
+      );
+      this.pendingQuestions = [];
+    }
+  }
 
   // Get current connection state
   public getConnectionState(): ConnectionState {
@@ -151,7 +268,7 @@ export class GameWebSocketService {
         ) {
           // Player is already in a session - check if we can get session info to verify
           console.log(
-            "ℹ️ Backend reports player already in a session, verifying..."
+            "Backend reports player already in a session, verifying..."
           );
 
           // First check if player is in THIS session by trying to get session info
@@ -163,13 +280,13 @@ export class GameWebSocketService {
             if (joinInfoResponse.isSuccess) {
               // Session exists and we can get info - player might already be in it
               console.log(
-                "✅ Session is accessible, player likely already joined - continuing"
+                "Session is accessible, player likely already joined - continuing"
               );
               joinSuccessful = true;
             } else {
               // Can't get session info - try to leave and retry
               console.log(
-                "⚠️ Cannot access session, attempting to leave previous session..."
+                "Cannot access session, attempting to leave previous session..."
               );
 
               const dataAccess = (
@@ -188,25 +305,25 @@ export class GameWebSocketService {
 
                 if (retryJoinResponse.isSuccess) {
                   console.log(
-                    "✅ Successfully joined after leaving previous session"
+                    "Successfully joined after leaving previous session"
                   );
                   joinSuccessful = true;
                 } else {
                   console.log(
-                    "ℹ️ Retry join returned error, but continuing to attempt connection"
+                    "Retry join returned error, but continuing to attempt connection"
                   );
                   joinSuccessful = true; // Continue anyway - WebSocket might still work
                 }
               } else {
                 console.log(
-                  "ℹ️ Leave operation unsuccessful, but continuing to attempt connection"
+                  "Leave operation unsuccessful, but continuing to attempt connection"
                 );
                 joinSuccessful = true; // Continue anyway
               }
             }
           } catch (verifyError: any) {
             console.log(
-              "ℹ️ Could not verify session state, continuing to attempt connection"
+              "Could not verify session state, continuing to attempt connection"
             );
             joinSuccessful = true; // Continue anyway
           }
@@ -333,7 +450,7 @@ export class GameWebSocketService {
       this.ws = new WebSocket(finalWsUrl);
 
       this.ws.onopen = () => {
-        console.log("✅ WebSocket opened - waiting for connection_established");
+        console.log("WebSocket opened - waiting for connection_established");
         // Don't set to connected yet - wait for connection_established message
         this.reconnectAttempts = 0;
       };
@@ -343,7 +460,7 @@ export class GameWebSocketService {
           const message: GameWebSocketMessage = JSON.parse(event.data);
           this.handleMessage(message);
         } catch (error) {
-          console.error("❌ Failed to parse WebSocket message:", error);
+          console.error("Failed to parse WebSocket message:", error);
         }
       };
 
@@ -383,7 +500,7 @@ export class GameWebSocketService {
           this.reconnectAttempts < this.maxReconnectAttempts
         ) {
           console.log(
-            `🔄 Scheduling reconnect attempt ${this.reconnectAttempts + 1}/${
+            `Scheduling reconnect attempt ${this.reconnectAttempts + 1}/${
               this.maxReconnectAttempts
             }`
           );
@@ -395,7 +512,7 @@ export class GameWebSocketService {
       };
 
       this.ws.onerror = (error) => {
-        console.error("❌ WebSocket error occurred:", error);
+        console.error("WebSocket error occurred:", error);
         this.setConnectionState("disconnected");
 
         // Provide more specific error guidance
@@ -469,14 +586,14 @@ export class GameWebSocketService {
     this.reconnectAttempts++;
 
     console.log(
-      `🔄 Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+      `Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
     );
 
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
       if (this.sessionCode && this.playerInfo) {
         console.log(
-          `🔄 Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+          `Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
         );
         this.connect(this.sessionCode, this.playerInfo);
       }
@@ -492,8 +609,13 @@ export class GameWebSocketService {
         this.ws &&
         this.ws.readyState === WebSocket.OPEN
       ) {
-        console.log("💓 Sending heartbeat ping");
-        this.sendMessage({ type: "ping" });
+        const clientSentAt = Date.now();
+        console.log("Sending heartbeat ping with timestamp:", clientSentAt);
+        this.sendMessage({
+          type: "ping",
+          data: { clientSentAt },
+          timestamp: new Date().toISOString(),
+        });
       }
     }, 15000); // Send ping every 15 seconds (matches backend recommendation)
   }
@@ -506,7 +628,7 @@ export class GameWebSocketService {
   }
 
   private handleMessage(message: GameWebSocketMessage): void {
-    console.log("🔔 WebSocket message received:", {
+    console.log("WebSocket message received:", {
       type: message.type,
       hasData: !!message.data,
       timestamp: message.timestamp || Date.now(),
@@ -522,16 +644,29 @@ export class GameWebSocketService {
         this.isConnected = true;
         this.setConnectionState("connected");
         this.startHeartbeat();
-        // Notify connection status change after proper handshake
+
+        // CRITICAL: Send connection acknowledgment immediately
+        console.log("📤 Sending connection_ack to backend...");
+        this.sendMessage({
+          type: "connection_ack",
+          data: {
+            ws_id: this.wsId,
+            player_id: this.playerInfo?.player_id,
+            session_code: this.sessionCode,
+            timestamp: new Date().toISOString(),
+          },
+        });
+        console.log("✅ Connection acknowledgment sent successfully");
         break;
 
       case "initial_state":
-        console.log("📋 Initial state received");
+        console.log("Initial state received");
         this.handleInitialState(message.data);
         break;
 
       case "question_started":
       case "new_question":
+      case "question_with_options":
       case "question_update":
       case "next_question":
       case "question_changed":
@@ -542,45 +677,196 @@ export class GameWebSocketService {
         console.log(
           "🎯 Question/Quiz event received:",
           message.type,
-          message.data
+          "hasData:",
+          !!message.data
         );
+
+        // CRITICAL: question_started means intro is FINISHED
+        if (message.type === "question_started") {
+          console.log("🎬 question_started received - intro finished");
+
+          // Set ready state immediately when question_started arrives
+          if (!this.isReadyForQuestions) {
+            console.log("✅ Setting UI ready for questions (intro finished)");
+            this.isReadyForQuestions = true;
+          }
+
+          // If question_started has no data, request from queue
+          if (!message.data) {
+            console.log(
+              "📬 No data in question_started - requesting from queue"
+            );
+            this.requestCurrentQuestion();
+            break;
+          }
+          // If it has data, process it below (fall through to normal handling)
+          console.log("📦 question_started has data - processing it");
+        }
+
+        // Log the full structure to debug what backend is actually sending
         if (message.data) {
-          this.onQuestionReceived?.(message.data);
+          console.log("📋 Question data structure:", {
+            keys: Object.keys(message.data),
+            has_question: !!message.data.question,
+            has_options: !!message.data.options,
+            has_display_options: !!message.data.display_options,
+            has_question_id: !!message.data.question_id,
+            has_ui_mode: !!message.data.ui_mode,
+            game_type: message.data.game_type,
+          });
+
+          // CRITICAL: Check if handler AND UI are ready, otherwise buffer
+          if (this.isReadyForQuestions && this._onQuestionReceived) {
+            console.log(
+              "✅ UI ready and handler exists - delivering question immediately"
+            );
+            this._onQuestionReceived(message.data);
+            console.log("✅ onQuestionReceived callback invoked");
+          } else {
+            console.log(
+              "📦 Buffering question - UI ready:",
+              this.isReadyForQuestions,
+              "Handler exists:",
+              !!this._onQuestionReceived
+            );
+            this.pendingQuestions.push(message.data);
+          }
         } else {
           console.warn(
             "⚠️ Question event received but no data - triggering fetch"
           );
           // Trigger a manual question fetch if no data in WebSocket event
-          this.onQuestionReceived?.({
+          const emptyQuestion = {
             question_id: "",
             question: "",
             game_type: "trivia",
-            ui_mode: "multiple_choice",
-          });
+            ui_mode: "multiple_choice" as const,
+          };
+
+          if (this.isReadyForQuestions && this._onQuestionReceived) {
+            this._onQuestionReceived(emptyQuestion);
+          } else {
+            this.pendingQuestions.push(emptyQuestion);
+          }
+        }
+        break;
+
+      case "broadcast_state":
+        console.log("📊 Broadcast state received:", message.type);
+        // broadcast_state might contain question data - check and extract
+        if (message.data?.current_question || message.data?.question) {
+          const questionData =
+            message.data.current_question || message.data.question;
+          console.log("🎯 Question found in broadcast_state, extracting...");
+
+          if (this.isReadyForQuestions && this._onQuestionReceived) {
+            this._onQuestionReceived(questionData);
+          } else {
+            console.log(
+              "📦 Buffering question from broadcast_state - UI ready:",
+              this.isReadyForQuestions
+            );
+            this.pendingQuestions.push(questionData);
+          }
+        }
+        // Also update game state if present
+        if (message.data?.game_state) {
+          this.onGameStateUpdate?.(message.data.game_state);
         }
         break;
 
       case "player_joined":
+        console.log("Player joined:", message.data);
         this.onPlayerJoined?.(message.data);
         break;
 
       case "player_left":
+        console.log("Player left:", message.data);
         this.onPlayerLeft?.(message.data);
+        break;
+
+      case "roster_update":
+        console.log("Roster update received:", message.data);
+        // Update complete player list
+        if (message.data?.players) {
+          this.onPlayerJoined?.(message.data); // Reuse callback for roster updates
+        }
         break;
 
       case "game_started":
       case "quiz_started":
       case "start_game":
       case "begin_quiz":
-        this.onGameStarted?.(message.data);
+        console.log("🎮 Game started event:", message.type);
+        console.log(
+          "📦 Game started data:",
+          JSON.stringify(message.data, null, 2)
+        );
+
+        // DON'T trigger onQuestionReceived here - wait for question_started event
+        // game_started = rules introduction begins (mobile should show "Listen to instructions")
+        // question_started = rules finished, NOW show question (comes later via WebSocket)
+        if (message.data?.currentQuestion) {
+          console.log(
+            "ℹ️ First question included in game_started (metadata only):",
+            {
+              question_id: message.data.currentQuestion.question_id,
+              question: message.data.currentQuestion.question?.substring(0, 50),
+              ui_mode: message.data.currentQuestion.ui_mode,
+              has_options: !!message.data.currentQuestion.display_options,
+            }
+          );
+          console.log(
+            "⏳ Waiting for question_started event to display question..."
+          );
+        } else {
+          console.log(
+            "ℹ️ No question in game_started - will wait for question_started event"
+          );
+        }
+
+        // Trigger game started with buffering support
+        if (this._onGameStarted) {
+          console.log("✅ Handler ready - calling onGameStarted immediately");
+          this._onGameStarted(message.data);
+        } else {
+          console.log("⚠️ No handler yet - buffering game started event");
+          this.pendingGameStarted.push(message.data);
+        }
         break;
 
       case "game_ended":
+        console.log("Game ended:", message.data);
         this.onGameEnded?.(message.data);
         break;
 
       case "answer_submitted":
+      case "player_answered":
+        console.log("Answer submitted:", message.data);
         this.onAnswerSubmitted?.(message.data);
+        break;
+
+      case "game_status_update":
+        console.log("Game status update:", message.data);
+        // Treat as game state update
+        if (message.data) {
+          this.onGameStateUpdate?.(message.data);
+        }
+        break;
+
+      case "countdown_complete":
+        console.log("⏱️ Countdown complete - Game synchronized!");
+        console.log("📦 Countdown data:", message.data);
+
+        // Mark game as ready for questions
+        if (message.data?.ready_for_question) {
+          console.log("✅ Mobile client synchronized - Ready for questions");
+          console.log(
+            "🎯 Expecting question_started message to arrive next..."
+          );
+          // The question_started message will arrive right after this
+          // This sync pulse ensures mobile is ready to receive and display it
+        }
         break;
 
       case "ui_update":
@@ -591,8 +877,23 @@ export class GameWebSocketService {
         break;
 
       case "pong":
-        // Heartbeat response - connection is alive
-        console.log("💓 Heartbeat pong received - connection alive");
+        // Heartbeat response - connection is alive and sync clock
+        console.log("Heartbeat pong received - connection alive");
+
+        const clientRecvAt = Date.now();
+        const serverTime = message.data?.serverTime;
+        const clientSentAt = message.data?.clientSentAt;
+
+        if (serverTime && clientSentAt) {
+          // Estimate server clock offset using round-trip time
+          const rtt = clientRecvAt - clientSentAt;
+          const serverTimeAtMidpoint = serverTime + rtt / 2;
+          this.clockOffset = serverTimeAtMidpoint - clientRecvAt;
+
+          console.log(
+            `⏰ Clock sync: offset=${this.clockOffset}ms, RTT=${rtt}ms`
+          );
+        }
         break;
 
       case "error":
@@ -621,7 +922,7 @@ export class GameWebSocketService {
       !this.ws ||
       this.ws.readyState !== WebSocket.OPEN
     ) {
-      console.warn("❌ Cannot send message - WebSocket not ready:", {
+      console.warn("Cannot send message - WebSocket not ready:", {
         isConnected: this.isConnected,
         hasWs: !!this.ws,
         readyState: this.ws?.readyState,
@@ -634,7 +935,7 @@ export class GameWebSocketService {
       this.ws.send(JSON.stringify(message));
       return true;
     } catch (error) {
-      console.error("❌ Failed to send message:", error);
+      console.error("Failed to send message:", error);
       return false;
     }
   }
@@ -667,6 +968,20 @@ export class GameWebSocketService {
       type: "get_session_stats",
       data: {
         session_code: this.sessionCode,
+      },
+    });
+  }
+
+  // Request current question from server's queue (called when intro finishes)
+  requestCurrentQuestion(): boolean {
+    console.log("📬 Requesting current question from server queue");
+    this.waitingForQueueResponse = true; // Mark that we're waiting for the queue response
+    return this.sendMessage({
+      type: "request_current_question",
+      data: {
+        session_code: this.sessionCode,
+        player_id: this.playerInfo?.player_id,
+        timestamp: new Date().toISOString(),
       },
     });
   }

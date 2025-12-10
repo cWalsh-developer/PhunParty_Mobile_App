@@ -21,7 +21,8 @@ import { typography } from "../../assets/theme/typography";
 interface TriviaGameProps {
   sessionCode: string;
   onGameEnd: () => void;
-  onError: (error: string) => void;
+  onError: (message: string) => void;
+  onAnswerSubmitted?: () => void;
 }
 
 interface Answer {
@@ -30,15 +31,23 @@ interface Answer {
   isSelected: boolean;
 }
 
+interface GameState {
+  currentQuestion: GameQuestion | null;
+  answers: Answer[];
+}
+
 export const TriviaGame: React.FC<TriviaGameProps> = ({
   sessionCode,
   onGameEnd,
   onError,
+  onAnswerSubmitted,
 }) => {
-  const [currentQuestion, setCurrentQuestion] = useState<GameQuestion | null>(
-    null
-  );
-  const [answers, setAnswers] = useState<Answer[]>([]);
+  // Use single atomic state for question + answers to prevent race conditions
+  const [gameState, setGameState] = useState<GameState>({
+    currentQuestion: null,
+    answers: [],
+  });
+
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [showResults, setShowResults] = useState(false);
@@ -48,11 +57,18 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   const [pulseAnimation] = useState(new Animated.Value(1));
   const [fadeAnimation] = useState(new Animated.Value(0));
 
+  // Derived values for backward compatibility
+  const currentQuestion = gameState.currentQuestion;
+  const answers = gameState.answers;
+
+  // Track question ID to detect actual question changes (not just state updates)
+  const currentQuestionId = gameState.currentQuestion?.question_id;
+
   useEffect(() => {
     setupWebSocketListeners();
 
-    // DON'T auto-fetch initial question - wait for host to start game via WebSocket
-
+    // Don't auto-fetch - wait for question_started event from backend
+    // This ensures we respect the intro timing
 
     return () => {
       // Cleanup handled by parent component
@@ -60,25 +76,47 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   }, []);
 
   useEffect(() => {
-    if (currentQuestion) {
+    console.log("📌 TriviaGame question ID changed:", {
+      hasQuestion: !!gameState.currentQuestion,
+      question_id: currentQuestionId,
+      question_text: gameState.currentQuestion?.question?.substring(0, 50),
+      has_display_options: !!gameState.currentQuestion?.display_options,
+      options_count: gameState.currentQuestion?.display_options?.length,
+      answers_count: gameState.answers.length,
+      state_synced: gameState.currentQuestion
+        ? gameState.answers.length > 0
+        : true,
+    });
+
+    if (gameState.currentQuestion && currentQuestionId) {
       resetForNewQuestion();
       animateQuestionEntry();
     }
-  }, [currentQuestion]);
+  }, [currentQuestionId]); // Only reset when question ID changes
 
   const setupWebSocketListeners = () => {
-
-
     gameWebSocket.onQuestionReceived = (question: GameQuestion) => {
       console.log("🎯 TriviaGame - Question received:", {
         hasQuestionId: !!question.question_id,
         hasQuestion: !!question.question,
+        ui_mode: question.ui_mode,
         hasOptions: !!question.options,
         hasDisplayOptions: !!question.display_options,
+        hasStartAt: !!question.start_at,
         questionText: question.question?.substring(0, 50) + "...",
         display_options: question.display_options,
         correct_index: question.correct_index,
+        start_at: question.start_at,
         raw_question: question,
+      });
+
+      // Log what questionOptions will be
+      const questionsOptions = question.display_options;
+      console.log("🔍 questionOptions extracted:", {
+        questionsOptions,
+        isArray: Array.isArray(questionsOptions),
+        length: questionsOptions?.length,
+        type: typeof questionsOptions,
       });
 
       // If this is an empty event (WebSocket notification without data)
@@ -90,9 +128,18 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         return;
       }
 
-      // Valid question received via WebSocket
+      // Verify this is a multiple choice question (not buzzer or text input)
+      if (question.ui_mode && question.ui_mode !== "multiple_choice") {
+        console.warn(
+          `⚠️ TriviaGame received question with ui_mode: ${question.ui_mode} - this should be handled by a different component`
+        );
+        // Still process it but log the warning
+      }
 
-      setCurrentQuestion(question);
+      // Valid question received via WebSocket
+      console.log(
+        `✅ Processing ${question.ui_mode || "multiple_choice"} question`
+      );
 
       // Use display_options (randomized) - no fallback to old options format
       const questionOptions = question.display_options;
@@ -106,18 +153,80 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           option,
           isSelected: false,
         }));
-        setAnswers(answerOptions);
+
+        // Check if question has synchronized start time
+        const startAt = question.start_at;
+
+        if (startAt) {
+          // Parse server timestamp and apply clock offset
+          const startTime =
+            new Date(startAt).getTime() + gameWebSocket.getClockOffset();
+          const now = Date.now();
+          const delay = Math.max(0, startTime - now);
+
+          console.log(
+            `⏰ Question scheduled to display in ${delay}ms at ${new Date(
+              startTime
+            ).toISOString()}`
+          );
+          console.log(`   Server start_at: ${startAt}`);
+          console.log(`   Clock offset: ${gameWebSocket.getClockOffset()}ms`);
+          console.log(
+            `   Adjusted start time: ${new Date(startTime).toISOString()}`
+          );
+          console.log(`   Current time: ${new Date(now).toISOString()}`);
+
+          // Schedule display at synchronized time
+          setTimeout(() => {
+            console.log("✅ Synchronized reveal - displaying question NOW");
+            console.log("🔧 Setting question and answers atomically:", {
+              question_id: question.question_id,
+              question_text: question.question?.substring(0, 50),
+              answers_count: answerOptions.length,
+            });
+
+            setGameState({
+              currentQuestion: question,
+              answers: answerOptions,
+            });
+
+            console.log(
+              `✅ Atomic state update complete - ${answerOptions.length} MCQ options set`
+            );
+          }, delay);
+        } else {
+          // No start_at - display immediately (fallback for late joiners or legacy)
+          console.log(
+            "⚡ No start_at - displaying immediately (fallback mode)"
+          );
+          console.log("🔧 Setting question and answers atomically:", {
+            question_id: question.question_id,
+            question_text: question.question?.substring(0, 50),
+            answers_count: answerOptions.length,
+          });
+
+          setGameState({
+            currentQuestion: question,
+            answers: answerOptions,
+          });
+
+          console.log(
+            `✅ Atomic state update complete - ${answerOptions.length} MCQ options set`
+          );
+        }
       } else {
         console.log(
-          "⚠️ No valid options received from WebSocket - clearing answers"
+          "⚠️ No valid options received from WebSocket - clearing state"
         );
-        setAnswers([]);
+        setGameState({
+          currentQuestion: question,
+          answers: [],
+        });
       }
     };
 
     // Handle when the game starts - fetch initial question
     gameWebSocket.onGameStarted = (data: any) => {
-
       // Small delay to ensure backend is ready
       setTimeout(() => {
         fetchInitialQuestion();
@@ -134,13 +243,10 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       if (data.is_correct !== undefined) {
         updateAnswerResults(data);
       } else {
-
       }
     };
 
     gameWebSocket.onBuzzerUpdate = (data: any) => {
-
-
       if (data.type === "correct_answer" && data.correct_option) {
         showCorrectAnswer(data.correct_option);
       } else if (data.type === "question_ended") {
@@ -172,9 +278,10 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       if (response.isSuccess && response.result) {
         const questionData = response.result;
 
-        console.log("🐛 DEBUG - Question data received:", {
+        console.log("🐛 DEBUG - Question data received from API:", {
           question_id: questionData.question_id,
           question: questionData.question,
+          ui_mode: questionData.ui_mode,
           display_options: questionData.display_options,
           correct_index: questionData.correct_index,
           answer: questionData.answer,
@@ -185,13 +292,17 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           question_id: questionData.question_id,
           question: questionData.question || "Loading question...",
           game_type: "trivia",
-          ui_mode: "multiple_choice",
+          ui_mode: questionData.ui_mode || "multiple_choice", // Use backend ui_mode
           display_options: questionData.display_options,
           correct_index: questionData.correct_index,
           answer: questionData.answer,
         };
 
-        setCurrentQuestion(question);
+        console.log(
+          `✅ API returned ${question.ui_mode} question with ${
+            question.display_options?.length || 0
+          } options`
+        );
 
         const answerOptions = (question.display_options || []).map(
           (option) => ({
@@ -206,20 +317,20 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           options: answerOptions.map((a) => a.option),
         });
 
-        setAnswers(answerOptions);
-
-
+        // ATOMIC UPDATE: Set both question AND answers together
+        console.log("🔧 API fetch: Setting question and answers atomically");
+        setGameState({
+          currentQuestion: question,
+          answers: answerOptions,
+        });
+        console.log("✅ API fetch: Atomic state update complete");
       } else {
-
       }
-    } catch (error) {
-
-    }
+    } catch (error) {}
   };
 
   const fetchInitialQuestion = async () => {
     try {
-
       const API = (await import("../../assets/api/API")).default;
 
       // First check if game is already active
@@ -229,6 +340,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         console.log("📊 Game status:", {
           is_active: status.is_active,
           has_question: !!status.current_question,
+          ui_mode: status.current_question?.ui_mode,
           current_question_data: status.current_question,
         });
 
@@ -239,13 +351,17 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
               status.current_question.question_id || Date.now().toString(),
             question: status.current_question.question || "Loading question...",
             game_type: "trivia",
-            ui_mode: "multiple_choice",
+            ui_mode: status.current_question.ui_mode || "multiple_choice", // Use backend ui_mode
             display_options: status.current_question.display_options,
             correct_index: status.current_question.correct_index,
             answer: status.current_question.answer,
           };
 
-          setCurrentQuestion(question);
+          console.log(
+            `✅ Status API returned ${question.ui_mode} question with ${
+              question.display_options?.length || 0
+            } options`
+          );
 
           const answerOptions = (question.display_options || []).map(
             (option) => ({
@@ -253,8 +369,14 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
               isSelected: false,
             })
           );
-          setAnswers(answerOptions);
 
+          // ATOMIC UPDATE: Set both question AND answers together
+          console.log("🔧 Status API: Setting question and answers atomically");
+          setGameState({
+            currentQuestion: question,
+            answers: answerOptions,
+          });
+          console.log("✅ Status API: Atomic state update complete");
 
           return;
         }
@@ -263,16 +385,11 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       // Try to start the game if not active
       try {
         await API.put(`/game-logic/start-game/${sessionCode}`);
-
-      } catch (startError) {
-
-      }
+      } catch (startError) {}
 
       // Get current question after starting
       await fetchCurrentQuestionNow();
-    } catch (error) {
-
-    }
+    } catch (error) {}
   };
 
   const resetForNewQuestion = () => {
@@ -318,7 +435,12 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       ...answer,
       isSelected: answer.option === option,
     }));
-    setAnswers(updatedAnswers);
+
+    // Update answers in gameState
+    setGameState((prev) => ({
+      ...prev,
+      answers: updatedAnswers,
+    }));
   };
 
   const submitAnswer = async () => {
@@ -338,8 +460,6 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     );
 
     if (!wsSuccess) {
-
-
       try {
         // Fallback to API submission
         const apiResult = await gameWebSocket.submitAnswerViaAPI(
@@ -352,16 +472,15 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           onError("Failed to submit answer. Please check your connection.");
           return;
         }
-
-
       } catch (error) {
-
         setHasSubmitted(false);
         onError("Failed to submit answer. Please check your connection.");
+        return;
       }
-    } else {
-
     }
+
+    // Notify parent that answer was submitted - show waiting screen
+    onAnswerSubmitted?.();
   };
 
   const updateAnswerResults = (data: any) => {
@@ -377,7 +496,11 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         isCorrect,
       };
     });
-    setAnswers(updatedAnswers);
+
+    setGameState((prev) => ({
+      ...prev,
+      answers: updatedAnswers,
+    }));
     setShowResults(true);
   };
 
@@ -394,7 +517,11 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         isCorrect,
       };
     });
-    setAnswers(updatedAnswers);
+
+    setGameState((prev) => ({
+      ...prev,
+      answers: updatedAnswers,
+    }));
     setShowResults(true);
   };
 
