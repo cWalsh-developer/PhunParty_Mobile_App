@@ -70,7 +70,18 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     // Don't auto-fetch - wait for question_started event from backend
     // This ensures we respect the intro timing
 
+    // Periodic debug logging (every 10 seconds for troubleshooting)
+    const debugInterval = setInterval(() => {
+      if (!currentQuestion) {
+        console.log("[DEBUG] Still waiting for question:", {
+          wsState: gameWebSocket.getConnectionState(),
+          isGameActive,
+        });
+      }
+    }, 10000);
+
     return () => {
+      clearInterval(debugInterval);
       // Cleanup handled by parent component
     };
   }, []);
@@ -96,19 +107,23 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
   const setupWebSocketListeners = () => {
     gameWebSocket.onQuestionReceived = (question: GameQuestion) => {
-      console.log("🎯 TriviaGame - Question received:", {
-        hasQuestionId: !!question.question_id,
-        hasQuestion: !!question.question,
-        ui_mode: question.ui_mode,
-        hasOptions: !!question.options,
-        hasDisplayOptions: !!question.display_options,
-        hasStartAt: !!question.start_at,
-        questionText: question.question?.substring(0, 50) + "...",
-        display_options: question.display_options,
-        correct_index: question.correct_index,
-        start_at: question.start_at,
-        raw_question: question,
-      });
+      const receiveTime = Date.now();
+      console.log(
+        "🎯 TriviaGame - Question received at",
+        new Date(receiveTime).toISOString(),
+        {
+          hasQuestionId: !!question.question_id,
+          hasQuestion: !!question.question,
+          ui_mode: question.ui_mode,
+          hasOptions: !!question.options,
+          hasDisplayOptions: !!question.display_options,
+          hasStartAt: !!question.start_at,
+          questionText: question.question?.substring(0, 50) + "...",
+          display_options: question.display_options,
+          correct_index: question.correct_index,
+          start_at: question.start_at,
+        }
+      );
 
       // Log what questionOptions will be
       const questionsOptions = question.display_options;
@@ -164,36 +179,46 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           const now = Date.now();
           const delay = Math.max(0, startTime - now);
 
-          console.log(
-            `⏰ Question scheduled to display in ${delay}ms at ${new Date(
-              startTime
-            ).toISOString()}`
-          );
+          console.log(`⏰ Question has start_at - delay: ${delay}ms`);
           console.log(`   Server start_at: ${startAt}`);
           console.log(`   Clock offset: ${gameWebSocket.getClockOffset()}ms`);
           console.log(
-            `   Adjusted start time: ${new Date(startTime).toISOString()}`
+            `   Calculated start time: ${new Date(startTime).toISOString()}`
           );
           console.log(`   Current time: ${new Date(now).toISOString()}`);
+          console.log(`   Time until display: ${delay}ms`);
 
-          // Schedule display at synchronized time
-          setTimeout(() => {
-            console.log("✅ Synchronized reveal - displaying question NOW");
-            console.log("🔧 Setting question and answers atomically:", {
-              question_id: question.question_id,
-              question_text: question.question?.substring(0, 50),
-              answers_count: answerOptions.length,
-            });
-
+          // If delay is very small (< 100ms) or negative, display immediately
+          if (delay < 100) {
+            console.log("⚡ Delay too small - displaying immediately instead");
             setGameState({
               currentQuestion: question,
               answers: answerOptions,
             });
-
             console.log(
               `✅ Atomic state update complete - ${answerOptions.length} MCQ options set`
             );
-          }, delay);
+          } else {
+            // Schedule display at synchronized time
+            console.log(`⏱️ Scheduling display in ${delay}ms`);
+            setTimeout(() => {
+              console.log("✅ Synchronized reveal - displaying question NOW");
+              console.log("🔧 Setting question and answers atomically:", {
+                question_id: question.question_id,
+                question_text: question.question?.substring(0, 50),
+                answers_count: answerOptions.length,
+              });
+
+              setGameState({
+                currentQuestion: question,
+                answers: answerOptions,
+              });
+
+              console.log(
+                `✅ Atomic state update complete - ${answerOptions.length} MCQ options set`
+              );
+            }, delay);
+          }
         } else {
           // No start_at - display immediately (fallback for late joiners or legacy)
           console.log(

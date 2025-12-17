@@ -69,6 +69,8 @@ export class GameWebSocketService {
   private pendingGameStarted: any[] = [];
   private isReadyForQuestions: boolean = false; // Track if UI is ready to display questions
   private waitingForQueueResponse: boolean = false; // Track if we requested question from queue
+  private countdownTimeout: any = null; // Timeout to auto-request question after countdown
+  private questionReceived: boolean = false; // Track if question was received for current round
 
   // Private callback storage
   private _onQuestionReceived: ((question: GameQuestion) => void) | null = null;
@@ -677,6 +679,11 @@ export class GameWebSocketService {
       this.reconnectTimeout = null;
     }
 
+    if (this.countdownTimeout) {
+      clearTimeout(this.countdownTimeout);
+      this.countdownTimeout = null;
+    }
+
     this.stopHeartbeat();
 
     if (this.ws) {
@@ -703,6 +710,7 @@ export class GameWebSocketService {
     this.pendingGameStarted = [];
     this.isReadyForQuestions = false;
     this.waitingForQueueResponse = false;
+    this.questionReceived = false;
 
     console.log("✅ Disconnect complete - all state cleared");
   }
@@ -839,10 +847,23 @@ export class GameWebSocketService {
         if (message.type === "question_started") {
           console.log("🎬 question_started received - intro finished");
 
-          // Set ready state immediately when question_started arrives
+          // Mark question as received (cancels auto-request timeout)
+          this.questionReceived = true;
+          if (this.countdownTimeout) {
+            clearTimeout(this.countdownTimeout);
+            this.countdownTimeout = null;
+          }
+
+          // Verify UI is ready (should already be set by onGameStarted)
           if (!this.isReadyForQuestions) {
-            console.log("✅ Setting UI ready for questions (intro finished)");
+            console.warn(
+              "⚠️ UI not ready when question_started arrived - setting now (this should have been set earlier)"
+            );
             this.isReadyForQuestions = true;
+          } else {
+            console.log(
+              "✅ UI already ready - will deliver question immediately"
+            );
           }
 
           // If question_started has no data, request from queue
@@ -868,6 +889,39 @@ export class GameWebSocketService {
             has_ui_mode: !!message.data.ui_mode,
             game_type: message.data.game_type,
           });
+
+          // CRITICAL: Validate game_type
+          if (!message.data.game_type || message.data.game_type !== "trivia") {
+            console.error(
+              "[QUESTION] Invalid game_type:",
+              message.data.game_type,
+              "- Expected 'trivia'"
+            );
+            // Don't return - log and continue to help debug
+          }
+
+          // CRITICAL: Validate required fields
+          if (!message.data.question_id || !message.data.question) {
+            console.error("[QUESTION] Missing required fields:", {
+              has_question_id: !!message.data.question_id,
+              has_question: !!message.data.question,
+            });
+          }
+
+          // Validate MCQ has options
+          if (message.data.ui_mode === "multiple_choice") {
+            const options =
+              message.data.display_options || message.data.options;
+            if (!options || options.length === 0) {
+              console.error(
+                "[QUESTION] Multiple choice question missing display_options"
+              );
+            } else {
+              console.log(
+                `[QUESTION] Valid MCQ with ${options.length} options`
+              );
+            }
+          }
 
           // CRITICAL: Check if handler AND UI are ready, otherwise buffer
           if (this.isReadyForQuestions && this._onQuestionReceived) {
@@ -1020,6 +1074,20 @@ export class GameWebSocketService {
           );
           // The question_started message will arrive right after this
           // This sync pulse ensures mobile is ready to receive and display it
+
+          // Safety net: Auto-request question if not received within 500ms
+          this.questionReceived = false;
+          if (this.countdownTimeout) {
+            clearTimeout(this.countdownTimeout);
+          }
+          this.countdownTimeout = setTimeout(() => {
+            if (!this.questionReceived) {
+              console.warn(
+                "⚠️ Question not received 500ms after countdown - auto-requesting"
+              );
+              this.requestCurrentQuestion();
+            }
+          }, 500);
         }
         break;
 
