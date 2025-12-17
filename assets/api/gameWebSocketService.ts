@@ -48,6 +48,18 @@ export class GameWebSocketService {
   private clockOffset: number = 0; // ms offset from server time for synchronized reveals
   private wsId: string | null = null; // WebSocket ID from backend
 
+  // Heartbeat health tracking
+  private lastPongReceived: number = Date.now();
+  private readonly HEARTBEAT_TIMEOUT = 60000; // 60 seconds - disconnect if no pong received
+
+  // Connection deduplication tracking
+  private isConnecting: boolean = false; // Prevent simultaneous connection attempts
+  private connectionAttemptCount: number = 0;
+  private readonly MAX_CONNECTION_ATTEMPTS = 3;
+  private readonly ATTEMPT_RESET_MS = 5000; // Reset counter after 5 seconds
+  private lastAttemptTime: number = 0;
+  private shouldReconnect: boolean = true; // Flag to control reconnection behavior
+
   public isConnected = false;
   public sessionCode: string | null = null;
   public playerInfo: PlayerInfo | null = null;
@@ -220,23 +232,76 @@ export class GameWebSocketService {
   }
 
   async connect(sessionCode: string, playerInfo: PlayerInfo): Promise<boolean> {
+    // CRITICAL: Prevent duplicate connections
+    const now = Date.now();
+
+    // Reset attempt counter if enough time has passed
+    if (now - this.lastAttemptTime > this.ATTEMPT_RESET_MS) {
+      this.connectionAttemptCount = 0;
+      console.log("🔄 Connection attempt counter reset");
+    }
+
+    // Check if already connecting
+    if (this.isConnecting) {
+      console.warn("⚠️ Already connecting, ignoring duplicate connect() call");
+      return false;
+    }
+
+    // Check if already connected to the same session
+    if (this.ws && this.isConnected && this.sessionCode === sessionCode) {
+      console.warn(
+        "⚠️ Already connected to this session, ignoring duplicate connect() call"
+      );
+      return true;
+    }
+
+    // Check connection attempt limit
+    if (this.connectionAttemptCount >= this.MAX_CONNECTION_ATTEMPTS) {
+      console.error(
+        `❌ Connection attempt limit exceeded (${this.MAX_CONNECTION_ATTEMPTS}). Please wait before trying again.`
+      );
+      this.onError?.(
+        `Too many connection attempts. Please wait ${Math.ceil(
+          this.ATTEMPT_RESET_MS / 1000
+        )} seconds and try again.`
+      );
+      return false;
+    }
+
+    // Increment attempt counter
+    this.connectionAttemptCount++;
+    this.lastAttemptTime = now;
+    this.isConnecting = true;
+
+    console.log(
+      `🔌 Connection attempt ${this.connectionAttemptCount}/${this.MAX_CONNECTION_ATTEMPTS}`
+    );
+
+    // If we have an existing connection, disconnect it first
     if (this.ws && this.isConnected) {
+      console.warn("⚠️ Already connected, disconnecting old connection first");
       this.disconnect();
+
+      // Wait for old connection to close
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
     // Validate inputs
     if (!sessionCode || sessionCode.trim().length === 0) {
+      this.isConnecting = false;
       this.onError?.("Invalid session code. Please scan a valid game QR code.");
       return false;
     }
 
     if (!playerInfo || !playerInfo.player_name || !playerInfo.player_id) {
+      this.isConnecting = false;
       this.onError?.("Invalid player information. Please check your profile.");
       return false;
     }
 
     this.sessionCode = sessionCode;
     this.playerInfo = playerInfo;
+    this.shouldReconnect = true; // Re-enable reconnection for new connection
 
     console.log(
       `Connecting to session: ${sessionCode} as player: ${playerInfo.player_name}`
@@ -450,9 +515,11 @@ export class GameWebSocketService {
       this.ws = new WebSocket(finalWsUrl);
 
       this.ws.onopen = () => {
-        console.log("WebSocket opened - waiting for connection_established");
+        console.log("✅ WebSocket opened - waiting for connection_established");
         // Don't set to connected yet - wait for connection_established message
         this.reconnectAttempts = 0;
+        this.connectionAttemptCount = 0; // Reset on successful connection
+        this.isConnecting = false; // Connection attempt complete
       };
 
       this.ws.onmessage = (event) => {
@@ -465,11 +532,48 @@ export class GameWebSocketService {
       };
 
       this.ws.onclose = (event) => {
-        console.log("WebSocket connection closed:", {
+        console.log("🔌 WebSocket connection closed:", {
           code: event.code,
           reason: event.reason,
-          wasClean: event.wasClean,
         });
+
+        this.isConnecting = false; // Connection attempt complete
+
+        // Handle forced closure due to duplicate connection (code 1000 with specific reason)
+        if (
+          event.code === 1000 &&
+          event.reason === "New connection established"
+        ) {
+          console.log(
+            "🔄 Connection replaced by newer connection from same player"
+          );
+          this.shouldReconnect = false; // Don't auto-reconnect when replaced
+          this.isConnected = false;
+          this.setConnectionState("disconnected");
+          this.onError?.("Your account connected from another device");
+          return;
+        }
+
+        // Handle connection limit exceeded (code 1008)
+        if (event.code === 1008) {
+          console.error("❌ Connection limit exceeded:", event.reason);
+          this.shouldReconnect = false; // Don't retry when limit exceeded
+          this.isConnected = false;
+          this.setConnectionState("disconnected");
+          this.onError?.(
+            "Connection limit exceeded. Please try again in a moment."
+          );
+          return;
+        }
+
+        console.log(
+          "🔌 WebSocket connection closed (continuing with normal handling):",
+          {
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean,
+          }
+        );
 
         // Log specific error codes for debugging
         if (event.code === 1006) {
@@ -497,10 +601,11 @@ export class GameWebSocketService {
         // Auto-reconnect unless it was a deliberate disconnect
         if (
           event.code !== 1000 &&
-          this.reconnectAttempts < this.maxReconnectAttempts
+          this.reconnectAttempts < this.maxReconnectAttempts &&
+          this.shouldReconnect
         ) {
           console.log(
-            `Scheduling reconnect attempt ${this.reconnectAttempts + 1}/${
+            `🔄 Scheduling reconnect attempt ${this.reconnectAttempts + 1}/${
               this.maxReconnectAttempts
             }`
           );
@@ -512,7 +617,8 @@ export class GameWebSocketService {
       };
 
       this.ws.onerror = (error) => {
-        console.error("WebSocket error occurred:", error);
+        console.error("❌ WebSocket error occurred:", error);
+        this.isConnecting = false; // Connection attempt failed
         this.setConnectionState("disconnected");
 
         // Provide more specific error guidance
@@ -559,6 +665,13 @@ export class GameWebSocketService {
   }
 
   disconnect(): void {
+    console.log("🚫 User initiated disconnect");
+
+    // Prevent auto-reconnection
+    this.shouldReconnect = false;
+    this.isConnecting = false;
+    this.reconnectAttempts = 0;
+
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
@@ -567,7 +680,11 @@ export class GameWebSocketService {
     this.stopHeartbeat();
 
     if (this.ws) {
-      this.ws.close(1000, "User disconnect");
+      try {
+        this.ws.close(1000, "User disconnect");
+      } catch (error) {
+        console.error("Error closing WebSocket:", error);
+      }
       this.ws = null;
     }
 
@@ -576,24 +693,42 @@ export class GameWebSocketService {
     this.sessionCode = null;
     this.playerInfo = null;
     this.setConnectionState("disconnected");
+
+    // Reset connection tracking
+    this.connectionAttemptCount = 0;
+    this.lastAttemptTime = 0;
+
+    // Clear all buffered events
+    this.pendingQuestions = [];
+    this.pendingGameStarted = [];
+    this.isReadyForQuestions = false;
+    this.waitingForQueueResponse = false;
+
+    console.log("✅ Disconnect complete - all state cleared");
   }
 
   private scheduleReconnect(): void {
     if (this.reconnectTimeout) return;
+
+    // Don't reconnect if flag is set to false (user disconnect or connection replaced)
+    if (!this.shouldReconnect) {
+      console.log("⚠️ Reconnection disabled, skipping reconnect");
+      return;
+    }
 
     // Exponential backoff with max delay of 10 seconds
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
     this.reconnectAttempts++;
 
     console.log(
-      `Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+      `🔄 Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
     );
 
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
-      if (this.sessionCode && this.playerInfo) {
+      if (this.sessionCode && this.playerInfo && this.shouldReconnect) {
         console.log(
-          `Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+          `🔄 Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
         );
         this.connect(this.sessionCode, this.playerInfo);
       }
@@ -603,21 +738,40 @@ export class GameWebSocketService {
   private startHeartbeat(): void {
     this.stopHeartbeat(); // Clear any existing interval
 
+    // Reset pong tracking
+    this.lastPongReceived = Date.now();
+
     this.heartbeatInterval = setInterval(() => {
       if (
         this.isConnected &&
         this.ws &&
         this.ws.readyState === WebSocket.OPEN
       ) {
+        // Check if we've received a pong/ping recently (connection health check)
+        const timeSinceLastPong = Date.now() - this.lastPongReceived;
+
+        if (timeSinceLastPong > this.HEARTBEAT_TIMEOUT) {
+          console.warn(
+            `⚠️ No server activity for ${Math.round(
+              timeSinceLastPong / 1000
+            )}s - connection appears dead`
+          );
+          console.log("🔄 Disconnecting and attempting reconnect...");
+          this.disconnect();
+          this.scheduleReconnect();
+          return;
+        }
+
+        // Send client-initiated ping to server
         const clientSentAt = Date.now();
-        console.log("Sending heartbeat ping with timestamp:", clientSentAt);
+        console.log("💓 Sending heartbeat ping with timestamp:", clientSentAt);
         this.sendMessage({
           type: "ping",
           data: { clientSentAt },
           timestamp: new Date().toISOString(),
         });
       }
-    }, 15000); // Send ping every 15 seconds (matches backend recommendation)
+    }, 30000); // Send ping every 30 seconds (server sends every 15s, we send every 30s)
   }
 
   private stopHeartbeat(): void {
@@ -876,9 +1030,36 @@ export class GameWebSocketService {
         this.onBuzzerUpdate?.(message.data);
         break;
 
+      case "ping":
+        // CRITICAL: Server is checking if we're alive - respond immediately
+        console.log("📡 Server ping received - sending pong response");
+        this.sendMessage({
+          type: "pong",
+          data: {
+            clientTime: Date.now(),
+            serverTime: message.data?.serverTime, // Echo back for RTT calculation
+          },
+          timestamp: new Date().toISOString(),
+        });
+
+        // Update last pong received time (we sent pong, connection is active)
+        this.lastPongReceived = Date.now();
+
+        // If it's an automatic server ping, don't trigger other handlers
+        if (message.data?.auto) {
+          console.log(
+            "📡 Automatic server ping handled - connection kept alive"
+          );
+          return;
+        }
+        break;
+
       case "pong":
         // Heartbeat response - connection is alive and sync clock
-        console.log("Heartbeat pong received - connection alive");
+        console.log("💓 Heartbeat pong received - connection alive");
+
+        // Update last pong received time
+        this.lastPongReceived = Date.now();
 
         const clientRecvAt = Date.now();
         const serverTime = message.data?.serverTime;
@@ -1054,6 +1235,85 @@ export class GameWebSocketService {
         message: error.message || "Failed to get current question",
       };
     }
+  }
+
+  /**
+   * Get connection diagnostics for debugging
+   */
+  getConnectionDiagnostics(): {
+    isConnected: boolean;
+    connectionState: ConnectionState;
+    sessionCode: string | null;
+    playerId: string | null;
+    wsId: string | null;
+    reconnectAttempts: number;
+    isConnecting: boolean;
+    connectionAttemptCount: number;
+    lastAttemptTime: number;
+    shouldReconnect: boolean;
+    heartbeatHealth: {
+      lastPongReceived: number;
+      timeSinceLastPong: number;
+      isHealthy: boolean;
+    };
+  } {
+    const timeSinceLastPong = Date.now() - this.lastPongReceived;
+
+    return {
+      isConnected: this.isConnected,
+      connectionState: this.connectionState,
+      sessionCode: this.sessionCode,
+      playerId: this.playerInfo?.player_id || null,
+      wsId: this.wsId,
+      reconnectAttempts: this.reconnectAttempts,
+      isConnecting: this.isConnecting,
+      connectionAttemptCount: this.connectionAttemptCount,
+      lastAttemptTime: this.lastAttemptTime,
+      shouldReconnect: this.shouldReconnect,
+      heartbeatHealth: {
+        lastPongReceived: this.lastPongReceived,
+        timeSinceLastPong,
+        isHealthy: timeSinceLastPong < this.HEARTBEAT_TIMEOUT,
+      },
+    };
+  }
+
+  /**
+   * Log connection diagnostics to console
+   */
+  logConnectionDiagnostics(): void {
+    const diagnostics = this.getConnectionDiagnostics();
+    const heartbeat = diagnostics.heartbeatHealth;
+
+    console.log("🔍 WebSocket Connection Diagnostics:");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log(`  Connected: ${diagnostics.isConnected ? "✅" : "❌"}`);
+    console.log(`  State: ${diagnostics.connectionState}`);
+    console.log(`  Session Code: ${diagnostics.sessionCode || "None"}`);
+    console.log(`  Player ID: ${diagnostics.playerId || "None"}`);
+    console.log(`  WS ID: ${diagnostics.wsId || "None"}`);
+    console.log(`  Is Connecting: ${diagnostics.isConnecting ? "Yes" : "No"}`);
+    console.log(
+      `  Reconnect Attempts: ${diagnostics.reconnectAttempts}/${this.maxReconnectAttempts}`
+    );
+    console.log(
+      `  Connection Attempts: ${diagnostics.connectionAttemptCount}/${this.MAX_CONNECTION_ATTEMPTS}`
+    );
+    console.log(
+      `  Should Reconnect: ${diagnostics.shouldReconnect ? "Yes" : "No"}`
+    );
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("💓 Heartbeat Health:");
+    console.log(
+      `  Time Since Last Activity: ${Math.round(
+        heartbeat.timeSinceLastPong / 1000
+      )}s`
+    );
+    console.log(
+      `  Health Status: ${heartbeat.isHealthy ? "✅ Healthy" : "⚠️ Unhealthy"}`
+    );
+    console.log(`  Timeout Threshold: ${this.HEARTBEAT_TIMEOUT / 1000}s`);
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   }
 }
 

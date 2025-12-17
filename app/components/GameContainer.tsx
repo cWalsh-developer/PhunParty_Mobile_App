@@ -46,11 +46,29 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   // Use ref to track game started state synchronously (avoids race condition)
   const gameStartedRef = useRef(false);
 
-  useEffect(() => {
-    let cleanup: (() => void) | undefined;
+  // CRITICAL: Track connection attempts to prevent duplicates
+  const hasAttemptedConnection = useRef(false);
+  const isCurrentlyConnecting = useRef(false);
+  const cleanupRef = useRef<(() => void) | undefined>(undefined);
 
+  useEffect(() => {
     const initializeGame = async () => {
-      cleanup = await connectToGame();
+      // CRITICAL: Only connect once per component mount
+      if (hasAttemptedConnection.current || isCurrentlyConnecting.current) {
+        console.warn(
+          "[GameContainer] Connection already attempted/in progress, skipping"
+        );
+        return;
+      }
+
+      isCurrentlyConnecting.current = true;
+      hasAttemptedConnection.current = true;
+
+      try {
+        cleanupRef.current = await connectToGame();
+      } finally {
+        isCurrentlyConnecting.current = false;
+      }
     };
 
     initializeGame();
@@ -64,13 +82,22 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     startPulsingAnimation();
 
     return () => {
+      console.log("[GameContainer] Unmounting - cleaning up connections");
       backHandler.remove();
+
+      // CRITICAL: Always cleanup on unmount
       gameWebSocket.disconnect();
-      if (cleanup) {
-        cleanup();
+
+      if (cleanupRef.current) {
+        cleanupRef.current();
       }
+
+      // Reset refs for potential remount
+      hasAttemptedConnection.current = false;
+      isCurrentlyConnecting.current = false;
+      gameStartedRef.current = false;
     };
-  }, []);
+  }, []); // Empty dependency array - only run once on mount
 
   const startPulsingAnimation = () => {
     const pulse = () => {

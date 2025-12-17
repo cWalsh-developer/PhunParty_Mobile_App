@@ -19,7 +19,7 @@ const config: ExpoConfig = {
   slug: "PhunParty_Mobile_App",
   version: "1.0.0",
   extra: extra,
-  plugins: ["expo-dev-client", "expo-mail-composer"],
+  plugins: ["expo-mail-composer"],
 };
 
 export default ({ config: existingConfig }: { config: ExpoConfig }) => ({

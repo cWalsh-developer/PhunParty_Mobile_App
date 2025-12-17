@@ -238,11 +238,24 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         is_correct: data.is_correct,
         correct_answer: data.correct_answer,
         has_is_correct: data.is_correct !== undefined,
+        player_id: data.player_id,
+        my_player_id: gameWebSocket.playerInfo?.player_id,
+        is_my_answer: data.player_id === gameWebSocket.playerInfo?.player_id,
         full_data: data,
       });
-      if (data.is_correct !== undefined) {
+
+      // CRITICAL: Only update results if this is MY answer submission
+      // Other players' submissions shouldn't affect my screen
+      if (
+        data.player_id === gameWebSocket.playerInfo?.player_id &&
+        data.is_correct !== undefined
+      ) {
+        console.log("📊 This is MY answer result - updating display");
         updateAnswerResults(data);
+      } else if (data.player_id !== gameWebSocket.playerInfo?.player_id) {
+        console.log("👥 Another player's answer - ignoring (not my result)");
       } else {
+        console.log("⚠️ Answer event without is_correct flag - ignoring");
       }
     };
 
