@@ -1,4 +1,5 @@
 import API from "@/assets/api/API";
+import * as authStorage from "@/assets/authentication-storage/authStorage";
 import Constants from "expo-constants";
 
 const { RetrievePlayerEndpoint, PlayerLeaveEndpoint } =
@@ -24,9 +25,7 @@ const dataAccess = {
           response.message?.includes("Unable to retrieve player information")
         ) {
           console.warn("⚠️ Stale authentication detected, clearing token");
-          const { removeToken } = await import(
-            "@/assets/authentication-storage/authStorage"
-          );
+          const { removeToken } = authStorage;
           await removeToken();
         }
         return null;
