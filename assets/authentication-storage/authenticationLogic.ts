@@ -36,7 +36,9 @@ export const login = async (
     }
 
     if (!AuthenticationEndpoint) {
-      alert("Login failed: Configuration error");
+      alert(
+        `Login failed: Configuration error: ${AuthenticationEndpoint}, ${SignUpEndpoint}, ${PasswordResetEndpoint}, ${PasswordResetVerificationEndpoint}, ${PasswordUpdateEndpoint}, ${RetrievePlayerEndpoint}`
+      );
       return false;
     }
 

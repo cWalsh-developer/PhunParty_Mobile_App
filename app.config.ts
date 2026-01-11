@@ -11,7 +11,7 @@ const extra = {
   PlayerLeaveEndpoint: process.env.PLAYER_LEAVE_ENDPOINT,
   API_KEY: process.env.API_KEY,
   API_URL: process.env.API_URL,
-  API_BASE_URL: process.env.API_URL || process.env.API_BASE_URL, // Add this for WebSocket service
+  API_BASE_URL: process.env.API_URL || process.env.API_BASE_URL,
 };
 
 const config: ExpoConfig = {
@@ -19,7 +19,15 @@ const config: ExpoConfig = {
   slug: "PhunParty_Mobile_App",
   version: "1.0.0",
   extra: extra,
-  plugins: ["expo-mail-composer"],
+  plugins: ["expo-mail-composer", "expo-router"],
+  platforms: ["ios", "android", "web"],
+  ios: {
+    supportsTablet: true,
+    bundleIdentifier: "com.phunparty.mobileapp",
+  },
+  android: {
+    package: "com.phunparty.mobileapp",
+  },
 };
 
 export default ({ config: existingConfig }: { config: ExpoConfig }) => ({

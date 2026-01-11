@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as APIGame from "../../assets/api/API";
 import {
   GameQuestion,
   gameWebSocket,
@@ -309,7 +310,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
   const fetchCurrentQuestionNow = async () => {
     try {
-      const API = (await import("../../assets/api/API")).default;
+      const API = (await APIGame).default;
 
       const response = await API.gameSession.getCurrentQuestion(sessionCode);
 
@@ -369,7 +370,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
   const fetchInitialQuestion = async () => {
     try {
-      const API = (await import("../../assets/api/API")).default;
+      const API = (await APIGame).default;
 
       // First check if game is already active
       const statusResponse = await API.gameSession.getStatus(sessionCode);

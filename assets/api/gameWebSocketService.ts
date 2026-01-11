@@ -1,5 +1,7 @@
 import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
+import * as DataAccess from "../../databaseAccess/dataAccess";
+import * as APIGame from "./API";
 
 export interface GameWebSocketMessage {
   type: string;
@@ -311,7 +313,7 @@ export class GameWebSocketService {
 
     try {
       // First, ensure player is properly joined to the session via API
-      const API = (await import("./API")).default;
+      const API = (await APIGame).default;
 
       const joinResponse = await API.gameSession.join(
         sessionCode,
@@ -356,9 +358,7 @@ export class GameWebSocketService {
                 "Cannot access session, attempting to leave previous session..."
               );
 
-              const dataAccess = (
-                await import("../../databaseAccess/dataAccess")
-              ).default;
+              const dataAccess = (await DataAccess).default;
               const leaveResult = await dataAccess.leaveGameSession(
                 playerInfo.player_id
               );
@@ -1252,7 +1252,8 @@ export class GameWebSocketService {
         };
       }
 
-      const API = (await import("./API")).default;
+      const API = (await APIGame).default;
+
       return await API.gameSession.submitAnswer(
         this.sessionCode,
         this.playerInfo.player_id,
@@ -1276,7 +1277,8 @@ export class GameWebSocketService {
         };
       }
 
-      const API = (await import("./API")).default;
+      const API = (await APIGame).default;
+
       return await API.gameSession.getStatus(this.sessionCode);
     } catch (error: any) {
       return {
@@ -1295,7 +1297,8 @@ export class GameWebSocketService {
         };
       }
 
-      const API = (await import("./API")).default;
+      const API = (await APIGame).default;
+
       return await API.gameSession.getCurrentQuestion(this.sessionCode);
     } catch (error: any) {
       return {

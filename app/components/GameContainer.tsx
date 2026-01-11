@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
+import * as APIGame from "../../assets/api/API";
 import {
   ConnectionState,
   GameState,
@@ -129,7 +130,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
       // First, get the session status to determine game type and state
 
-      const API = (await import("../../assets/api/API")).default;
+      const API = (await APIGame).default;
       const statusResponse = await API.gameSession.getStatus(sessionCode);
 
       if (statusResponse.isSuccess) {
@@ -233,7 +234,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     const fetchQuestionFromAPI = async () => {
       console.log("🔄 Fetching current question from API...");
       try {
-        const API = (await import("../../assets/api/API")).default;
+        const API = (await APIGame).default;
         const response = await API.gameSession.getCurrentQuestion(sessionCode);
 
         if (response.isSuccess && response.result) {
@@ -348,7 +349,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
   const checkGameStatus = async () => {
     try {
-      const API = (await import("../../assets/api/API")).default;
+      const API = (await APIGame).default;
       const statusResponse = await API.gameSession.getStatus(sessionCode);
 
       if (statusResponse.isSuccess) {

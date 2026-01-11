@@ -10,6 +10,7 @@ import {
   Vibration,
   View,
 } from "react-native";
+import * as APIGame from "../../assets/api/API";
 import {
   GameQuestion,
   gameWebSocket,
@@ -111,7 +112,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
   const fetchCurrentQuestion = async () => {
     try {
-      const API = (await import("../../assets/api/API")).default;
+      const API = (await APIGame).default;
+
       const response = await API.gameSession.getCurrentQuestion(sessionCode);
 
       if (response.isSuccess && response.result) {

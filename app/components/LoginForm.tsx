@@ -1,6 +1,7 @@
 import { AppButton, AppCard, AppInput } from "@/assets/components";
 import { colors, layoutStyles, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import * as Linking from "expo-linking";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -173,11 +174,9 @@ export default function LoginForm({
                   <Text
                     onPress={() => {
                       // Open links in browser
-                      import("expo-linking").then((Linking) => {
-                        Linking.openURL(
-                          "https://terms-and-privacy.nexusgit.info/websites/phun-party/terms"
-                        );
-                      });
+                      Linking.openURL(
+                        "https://terms-and-privacy.nexusgit.info/websites/phun-party/terms"
+                      );
                     }}
                     style={{
                       color: colors.tea[400],
@@ -190,11 +189,9 @@ export default function LoginForm({
                   <Text
                     onPress={() => {
                       // Open links in browser
-                      import("expo-linking").then((Linking) => {
-                        Linking.openURL(
-                          "https://terms-and-privacy.nexusgit.info/websites/phun-party/privacy"
-                        );
-                      });
+                      Linking.openURL(
+                        "https://terms-and-privacy.nexusgit.info/websites/phun-party/privacy"
+                      );
                     }}
                     style={{
                       color: colors.tea[400],
