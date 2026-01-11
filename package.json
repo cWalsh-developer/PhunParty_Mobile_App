@@ -2,6 +2,13 @@
   "name": "phunparty_mobile_app",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cWalsh-developer/PhunParty_Mobile_App"
+  },
+  "author": {
+      "name": "cWalsh-developer"
+  },
   "scripts": {
     "start": "expo start --tunnel",
     "reset-project": "node ./scripts/reset-project.js",
