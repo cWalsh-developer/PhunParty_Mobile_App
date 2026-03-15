@@ -1,40 +1,72 @@
 import type { ExpoConfig } from "@expo/config";
 
 const extra = {
-  AuthenticationEndpoint: process.env.AUTHENTICATION_ENDPOINT,
-  SignUpEndpoint: process.env.SIGNUP_ENDPOINT,
-  PasswordResetEndpoint: process.env.PASSWORD_RESET_ENDPOINT,
+  AuthenticationEndpoint: process.env.EXPO_PUBLIC_AUTHENTICATION_ENDPOINT,
+  SignUpEndpoint: process.env.EXPO_PUBLIC_SIGNUP_ENDPOINT,
+  PasswordResetEndpoint: process.env.EXPO_PUBLIC_PASSWORD_RESET_ENDPOINT,
   PasswordResetVerificationEndpoint:
-    process.env.PASSWORD_RESET_VERIFICATION_ENDPOINT,
-  PasswordUpdateEndpoint: process.env.PASSWORD_UPDATE_ENDPOINT,
-  RetrievePlayerEndpoint: process.env.RETRIEVE_PLAYER_ENDPOINT,
-  PlayerLeaveEndpoint: process.env.PLAYER_LEAVE_ENDPOINT,
-  API_KEY: process.env.API_KEY,
-  API_URL: process.env.API_URL,
-  API_BASE_URL: process.env.API_URL || process.env.API_BASE_URL,
+    process.env.EXPO_PUBLIC_PASSWORD_RESET_VERIFICATION_ENDPOINT,
+  PasswordUpdateEndpoint: process.env.EXPO_PUBLIC_PASSWORD_UPDATE_ENDPOINT,
+  RetrievePlayerEndpoint: process.env.EXPO_PUBLIC_RETRIEVE_PLAYER_ENDPOINT,
+  PlayerLeaveEndpoint: process.env.EXPO_PUBLIC_PLAYER_LEAVE_ENDPOINT,
+  API_KEY: process.env.EXPO_API_KEY,
+  API_URL: process.env.EXPO_PUBLIC_API_URL,
+  API_BASE_URL:
+    process.env.EXPO_PUBLIC_API_URL || process.env.EXPO_PUBLIC_API_BASE_URL,
 };
 
 const config: ExpoConfig = {
   name: "PhunParty_Mobile_App",
   slug: "PhunParty_Mobile_App",
   version: "1.0.0",
-  extra: extra,
-  plugins: ["expo-mail-composer", "expo-router"],
+  orientation: "portrait",
+  icon: "./assets/images/icon.png",
+  scheme: "phunpartymobileapp",
+  userInterfaceStyle: "dark",
+  plugins: [
+    "expo-router",
+    [
+      "expo-splash-screen",
+      {
+        image: "./assets/images/splash-icon.png",
+        imageWidth: 200,
+        resizeMode: "contain",
+        backgroundColor: "#0a0a0a",
+      },
+    ],
+    "expo-secure-store",
+    "expo-mail-composer",
+  ],
   platforms: ["ios", "android", "web"],
   ios: {
     supportsTablet: true,
     bundleIdentifier: "com.phunparty.mobileapp",
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
+    },
   },
   android: {
     package: "com.phunparty.mobileapp",
+    adaptiveIcon: {
+      foregroundImage: "./assets/images/adaptive-icon.png",
+      backgroundColor: "#0a0a0a",
+    },
+    edgeToEdgeEnabled: true,
+  },
+  web: {
+    bundler: "metro",
+    output: "static",
+    favicon: "./assets/images/favicon.png",
+  },
+  experiments: {
+    typedRoutes: true,
+  },
+  extra: {
+    ...extra,
+    eas: {
+      projectId: "7b1a267b-a6e2-4c47-9e14-fed9298d0d88",
+    },
   },
 };
 
-export default ({ config: existingConfig }: { config: ExpoConfig }) => ({
-  ...existingConfig,
-  ...config,
-  extra: {
-    ...existingConfig.extra,
-    ...extra,
-  },
-});
+export default config;

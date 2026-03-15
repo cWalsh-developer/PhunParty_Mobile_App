@@ -49,7 +49,7 @@ export default function ProfileTab() {
   const handleDeleteAccount = async () => {
     Alert.alert(
       "Confirm Deletion",
-      "Are you sure you want to delete your account? This action cannot be undone.",
+      "Are you sure you want to deactivate your account? You will have 30 days to sign back in before your account is permanently deleted.",
       [
         {
           text: "Cancel",
@@ -63,7 +63,7 @@ export default function ProfileTab() {
               if (!playerId) {
                 Alert.alert(
                   "Error",
-                  "User ID not found. Please try logging out and back in."
+                  "User ID not found. Please try logging out and back in.",
                 );
                 return;
               }
@@ -71,7 +71,7 @@ export default function ProfileTab() {
               if (!success) {
                 Alert.alert(
                   "Error",
-                  "Failed to delete account. Please try again."
+                  "Failed to delete account. Please try again.",
                 );
                 return;
               }
@@ -81,19 +81,19 @@ export default function ProfileTab() {
                 player_mobile: null,
                 player_email: null,
                 profile_photo_url: null,
+                active_game_code: null,
               });
               await removeToken();
               router.replace("/login");
             } catch (error) {
-
               Alert.alert(
                 "Error",
-                "Failed to delete account. Please try again."
+                "Failed to delete account. Please try again.",
               );
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -108,7 +108,7 @@ export default function ProfileTab() {
       if (!playerId) {
         Alert.alert(
           "Error",
-          "User ID not found. Please try logging out and back in."
+          "User ID not found. Please try logging out and back in.",
         );
         setLoading(false);
         return;
@@ -122,7 +122,6 @@ export default function ProfileTab() {
       setUser((prev: any) => ({ ...prev, ...data }));
       setEditVisible(false);
     } catch (error) {
-
       Alert.alert("Error", "Failed to update profile. Please try again.");
     } finally {
       setLoading(false);
@@ -145,6 +144,7 @@ export default function ProfileTab() {
             player_mobile: null,
             player_email: null,
             profile_photo_url: null,
+            active_game_code: null,
           });
           router.replace("/login");
         },

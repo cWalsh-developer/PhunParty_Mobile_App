@@ -2,6 +2,8 @@ import Constants from "expo-constants";
 import * as ImagePicker from "expo-image-picker";
 import API from "./API";
 
+const { API_KEY, API_URL } = Constants.expoConfig?.extra || {};
+
 export interface PhotoUploadResponse {
   photo_url: string;
   player_id: string;
@@ -239,8 +241,7 @@ export class PhotoService {
         };
       }
 
-      const baseUrl =
-        process.env.API_URL || Constants.expoConfig?.extra?.API_URL;
+      const baseUrl = API_URL || Constants.expoConfig?.extra?.API_URL;
 
       if (!baseUrl) {
         console.error("PhotoService: API URL not configured");
@@ -270,8 +271,7 @@ export class PhotoService {
       }
 
       const headers: any = {
-        "X-API-Key":
-          process.env.API_KEY || Constants.expoConfig?.extra?.API_KEY || "",
+        "X-API-Key": API_KEY || Constants.expoConfig?.extra?.API_KEY || "",
       };
 
       if (token) {
