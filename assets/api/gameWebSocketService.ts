@@ -866,12 +866,14 @@ export class GameWebSocketService {
         });
         console.log("✅ Connection acknowledgment sent successfully");
 
-        // Recovery path: if a question is already active, ask for it after connect.
-        this.questionReceived = false;
-        this.scheduleQuestionRecovery(
-          "connection_established",
-          [1200, 3000, 6000],
-        );
+        // Recovery path: only when UI is already in question phase.
+        if (this.isReadyForQuestions) {
+          this.questionReceived = false;
+          this.scheduleQuestionRecovery(
+            "connection_established",
+            [1200, 3000, 6000],
+          );
+        }
         break;
 
       case "initial_state":
@@ -1062,9 +1064,8 @@ export class GameWebSocketService {
           this.pendingGameStarted.push(message.data);
         }
 
-        // Recovery path for race where question_started is missed during transition.
-        this.questionReceived = false;
-        this.scheduleQuestionRecovery("game_started", [1200, 2800, 5000]);
+        // Do not request question during game_started; wait for synchronized
+        // countdown_complete -> question_started flow.
         break;
 
       case "game_ended":
@@ -1179,7 +1180,11 @@ export class GameWebSocketService {
       this.deliverOrBufferQuestion(data.current_question, "initial_state");
     } else if (data.question) {
       this.deliverOrBufferQuestion(data.question, "initial_state");
-    } else if (data.game_state?.isstarted && data.game_state?.is_active) {
+    } else if (
+      data.game_state?.isstarted &&
+      data.game_state?.is_active &&
+      this.isReadyForQuestions
+    ) {
       // Reconnect scenario: game is active but initial_state does not include question payload.
       this.questionReceived = false;
       this.scheduleQuestionRecovery("initial_state_active", [500, 1500, 3200]);
