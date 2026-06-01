@@ -1,11 +1,12 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
   Dimensions,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   Vibration,
   View,
@@ -29,6 +30,7 @@ interface BuzzerState {
   isActive: boolean;
   winner: string | null;
   canBuzz: boolean;
+  canAnswer: boolean;
   playersBuzzed: string[];
   buttonState: "active" | "answer_mode" | "frozen" | "waiting" | "locked";
   statusText: string;
@@ -46,73 +48,21 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     isActive: false,
     winner: null,
     canBuzz: true,
+    canAnswer: false,
     playersBuzzed: [],
     buttonState: "waiting",
     statusText: "Waiting for the question...",
   });
+  const [answerOptions, setAnswerOptions] = useState<string[]>([]);
+  const [answerText, setAnswerText] = useState("");
+  const [hasSubmittedAnswer, setHasSubmittedAnswer] = useState(false);
   const [isGameActive, setIsGameActive] = useState(true);
 
-  const [scaleAnimation] = useState(new Animated.Value(1));
-  const [glowAnimation] = useState(new Animated.Value(0));
-  const [winnerAnimation] = useState(new Animated.Value(0));
-
-  useEffect(() => {
-    setupWebSocketListeners();
-    return () => {
-      // Cleanup handled by parent component
-    };
-  }, []);
-
-  const setupWebSocketListeners = () => {
-    gameWebSocket.onQuestionReceived = (question: GameQuestion) => {
-      setCurrentQuestion(question);
-      resetBuzzerState();
-      startGlowAnimation();
-    };
-
-    gameWebSocket.onBuzzerUpdate = (data: any) => {
-      if (data.type === "buzzer_winner") {
-        handleBuzzerWinner(data.winner_name);
-        Vibration.vibrate(500); // Haptic feedback
-      } else if (data.button_state || data.buttonState) {
-        applyBackendButtonState(data);
-      } else if (data.type === "buzzer_reset") {
-        resetBuzzerState();
-        startGlowAnimation();
-      } else if (data.type === "question_ended") {
-        setBuzzerState((prev) => ({
-          ...prev,
-          isActive: false,
-          canBuzz: false,
-          buttonState: "locked",
-          statusText: "Waiting for next question...",
-        }));
-        stopGlowAnimation();
-        setTimeout(() => {
-          resetBuzzerState();
-        }, 3000);
-      } else if (data.type === "next_question" && data.question) {
-        setCurrentQuestion(data.question);
-        resetBuzzerState();
-        startGlowAnimation();
-      }
-    };
-
-    gameWebSocket.onGameEnded = (data: any) => {
-      setIsGameActive(false);
-      Alert.alert("Game Over!", data.message || "Thanks for playing!", [
-        { text: "OK", onPress: onGameEnd },
-      ]);
-    };
-
-    gameWebSocket.onGameStarted = (data: any) => {
-      console.log("Game started; waiting for question_started.", data);
-    };
-
-    gameWebSocket.onError = (error: string) => {
-      onError(error);
-    };
-  };
+  const [scaleAnimation] = useState(() => new Animated.Value(1));
+  const [glowAnimation] = useState(() => new Animated.Value(0));
+  const [winnerAnimation] = useState(() => new Animated.Value(0));
+  const glowLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const winnerAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const fetchCurrentQuestion = async () => {
     try {
@@ -139,28 +89,39 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   void fetchCurrentQuestion;
 
   const resetBuzzerState = () => {
+    setAnswerOptions([]);
+    setAnswerText("");
+    setHasSubmittedAnswer(false);
     setBuzzerState({
       isActive: true,
       winner: null,
       canBuzz: true,
+      canAnswer: false,
       playersBuzzed: [],
       buttonState: "active",
       statusText: "Tap to buzz in first!",
     });
-    winnerAnimation.setValue(0);
+    stopWinnerAnimation();
   };
 
   const applyBackendButtonState = (data: any) => {
     const buttonState = (data.button_state ||
       data.buttonState ||
       "waiting") as BuzzerState["buttonState"];
+    const isCurrentPlayer = !!(data.is_current_player || data.isCurrentPlayer);
+
+    if (buttonState === "answer_mode" && isCurrentPlayer) {
+      applyQuestionAnswerData(data);
+      setHasSubmittedAnswer(false);
+    }
 
     setBuzzerState((prev) => ({
       ...prev,
       buttonState,
       winner: data.winner_name || data.winner || prev.winner,
-      isActive: buttonState === "active" || buttonState === "answer_mode",
+      isActive: buttonState === "active",
       canBuzz: buttonState === "active",
+      canAnswer: buttonState === "answer_mode" && isCurrentPlayer,
       statusText: getStatusTextForButtonState(buttonState, data),
     }));
 
@@ -180,7 +141,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         return "Tap to buzz in first!";
       case "answer_mode":
         return data?.is_current_player || data?.isCurrentPlayer
-          ? "You buzzed first. Answer on the host screen."
+          ? "You buzzed first. Choose your answer."
           : "Another player buzzed first.";
       case "frozen":
         return "You're frozen for this question.";
@@ -192,8 +153,32 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     }
   };
 
+  const applyQuestionAnswerData = (data: any) => {
+    const options = data.display_options || data.options || [];
+
+    if (data.question_id || data.question) {
+      setCurrentQuestion((prev) => ({
+        ...(prev ?? {
+          game_type: "buzzer",
+          ui_mode: data.ui_mode || "buzzer",
+          question_id: data.question_id,
+          question: data.question,
+        }),
+        ...data,
+        game_type: data.game_type || "buzzer",
+        ui_mode: data.ui_mode || prev?.ui_mode || "buzzer",
+      }));
+    }
+
+    setAnswerOptions(Array.isArray(options) ? options : []);
+  };
+
   const startGlowAnimation = () => {
-    Animated.loop(
+    glowLoopRef.current?.stop();
+    glowAnimation.stopAnimation();
+    glowAnimation.setValue(0);
+
+    glowLoopRef.current = Animated.loop(
       Animated.sequence([
         Animated.timing(glowAnimation, {
           toValue: 1,
@@ -206,12 +191,81 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           useNativeDriver: false,
         }),
       ]),
-    ).start();
+    );
+
+    glowLoopRef.current.start();
   };
 
   const stopGlowAnimation = () => {
+    glowLoopRef.current?.stop();
+    glowLoopRef.current = null;
     glowAnimation.stopAnimation();
     glowAnimation.setValue(0);
+  };
+
+  const stopWinnerAnimation = () => {
+    winnerAnimationRef.current?.stop();
+    winnerAnimationRef.current = null;
+    winnerAnimation.stopAnimation();
+    winnerAnimation.setValue(0);
+  };
+
+  const startWinnerAnimation = () => {
+    stopWinnerAnimation();
+
+    const introAnimation = Animated.timing(winnerAnimation, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    });
+
+    winnerAnimationRef.current = introAnimation;
+    introAnimation.start(({ finished }) => {
+      if (!finished) {
+        return;
+      }
+
+      const pulseAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(winnerAnimation, {
+            toValue: 0.8,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(winnerAnimation, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+
+      winnerAnimationRef.current = pulseAnimation;
+      pulseAnimation.start();
+    });
+  };
+
+  const submitBuzzerAnswer = (answer: string) => {
+    if (!currentQuestion?.question_id || !answer || hasSubmittedAnswer) {
+      return;
+    }
+
+    const sent = gameWebSocket.submitAnswer(answer, currentQuestion.question_id);
+
+    if (!sent) {
+      onError("Failed to submit answer. Please check your connection.");
+      return;
+    }
+
+    setHasSubmittedAnswer(true);
+    setBuzzerState((prev) => ({
+      ...prev,
+      buttonState: "locked",
+      isActive: false,
+      canBuzz: false,
+      canAnswer: false,
+      statusText: "Answer submitted. Waiting for result...",
+    }));
   };
 
   const handleBuzzerPress = () => {
@@ -254,35 +308,14 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       ...prev,
       winner: winnerName,
       canBuzz: false,
+      canAnswer: false,
       isActive: false,
       buttonState: "locked",
       statusText: `${winnerName} buzzed first!`,
     }));
 
     stopGlowAnimation();
-
-    // Winner celebration animation
-    Animated.sequence([
-      Animated.timing(winnerAnimation, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(winnerAnimation, {
-            toValue: 0.8,
-            duration: 300,
-            useNativeDriver: true,
-          }),
-          Animated.timing(winnerAnimation, {
-            toValue: 1,
-            duration: 300,
-            useNativeDriver: true,
-          }),
-        ]),
-      ),
-    ]).start();
+    startWinnerAnimation();
   };
 
   const getBuzzerButtonStyle = () => {
@@ -320,6 +353,70 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       }),
     };
   };
+
+  useEffect(() => {
+    gameWebSocket.onQuestionReceived = (question: GameQuestion) => {
+      setCurrentQuestion(question);
+      resetBuzzerState();
+      applyQuestionAnswerData(question);
+      if (question.button_state || question.buttonState) {
+        applyBackendButtonState(question);
+      } else {
+        startGlowAnimation();
+      }
+    };
+
+    gameWebSocket.onBuzzerUpdate = (data: any) => {
+      if (data.type === "buzzer_winner") {
+        handleBuzzerWinner(data.winner_name);
+        Vibration.vibrate(500); // Haptic feedback
+      } else if (data.button_state || data.buttonState) {
+        applyBackendButtonState(data);
+      } else if (data.type === "buzzer_reset") {
+        resetBuzzerState();
+        startGlowAnimation();
+      } else if (data.type === "question_ended") {
+        setBuzzerState((prev) => ({
+          ...prev,
+          isActive: false,
+          canBuzz: false,
+          canAnswer: false,
+          buttonState: "locked",
+          statusText: "Waiting for next question...",
+        }));
+        stopGlowAnimation();
+        setTimeout(() => {
+          resetBuzzerState();
+        }, 3000);
+      } else if (data.type === "next_question" && data.question) {
+        setCurrentQuestion(data.question);
+        resetBuzzerState();
+        applyQuestionAnswerData(data.question);
+        startGlowAnimation();
+      }
+    };
+
+    gameWebSocket.onGameEnded = (data: any) => {
+      setIsGameActive(false);
+      Alert.alert("Game Over!", data.message || "Thanks for playing!", [
+        { text: "OK", onPress: onGameEnd },
+      ]);
+    };
+
+    gameWebSocket.onGameStarted = (data: any) => {
+      console.log("Game started; waiting for question_started.", data);
+    };
+
+    gameWebSocket.onError = (error: string) => {
+      onError(error);
+    };
+
+    return () => {
+      stopGlowAnimation();
+      stopWinnerAnimation();
+      scaleAnimation.stopAnimation();
+    };
+  }, []);
 
   if (!currentQuestion) {
     return (
@@ -367,7 +464,53 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           </Animated.View>
         )}
 
-        <View style={styles.buzzerContainer}>
+        {buzzerState.canAnswer &&
+        (answerOptions.length > 0 || currentQuestion?.ui_mode === "text_input") ? (
+          <View style={styles.answerContainer}>
+            {answerOptions.length > 0 ? (
+              answerOptions.map((option, index) => (
+                <TouchableOpacity
+                  key={`${option}-${index}`}
+                  style={[
+                    styles.optionButton,
+                    hasSubmittedAnswer && styles.optionButtonDisabled,
+                  ]}
+                  onPress={() => submitBuzzerAnswer(option)}
+                  disabled={hasSubmittedAnswer}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.optionText}>
+                    {String.fromCharCode(65 + index)}. {option}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <>
+                <TextInput
+                  style={styles.answerInput}
+                  value={answerText}
+                  onChangeText={setAnswerText}
+                  placeholder="Type your answer"
+                  placeholderTextColor={colors.stone[400]}
+                  editable={!hasSubmittedAnswer}
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.submitAnswerButton,
+                    (!answerText.trim() || hasSubmittedAnswer) &&
+                      styles.optionButtonDisabled,
+                  ]}
+                  onPress={() => submitBuzzerAnswer(answerText.trim())}
+                  disabled={!answerText.trim() || hasSubmittedAnswer}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.submitAnswerText}>Submit Answer</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        ) : (
+          <View style={styles.buzzerContainer}>
           <Animated.View
             style={[
               getBuzzerGlowStyle(),
@@ -411,6 +554,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
             {buzzerState.statusText}
           </Text>
         </View>
+        )}
 
         <View style={styles.statusContainer}>
           <MaterialIcons name="timer" size={20} color={colors.stone[400]} />
@@ -425,7 +569,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   );
 };
 
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 const buzzerSize = Math.min(width * 0.6, 250);
 
 const styles = StyleSheet.create({
@@ -540,6 +684,50 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 20,
     marginTop: 20,
+  },
+  answerContainer: {
+    flex: 1,
+    justifyContent: "center",
+    gap: 12,
+  },
+  optionButton: {
+    backgroundColor: colors.ink[800],
+    borderColor: colors.tea[500],
+    borderWidth: 2,
+    borderRadius: 12,
+    padding: 16,
+    minHeight: 56,
+    justifyContent: "center",
+  },
+  optionButtonDisabled: {
+    opacity: 0.55,
+  },
+  optionText: {
+    ...typography.body,
+    color: colors.stone[100],
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  answerInput: {
+    ...typography.body,
+    backgroundColor: colors.ink[800],
+    borderColor: colors.ink[700],
+    borderWidth: 2,
+    borderRadius: 12,
+    color: colors.stone[100],
+    padding: 16,
+    minHeight: 56,
+  },
+  submitAnswerButton: {
+    backgroundColor: colors.tea[500],
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+  },
+  submitAnswerText: {
+    ...typography.body,
+    color: colors.ink[900],
+    fontWeight: "bold",
   },
   statusText: {
     ...typography.body,

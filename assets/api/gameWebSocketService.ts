@@ -45,6 +45,11 @@ export interface GameQuestion {
   answer?: string;
   game_type: string;
   ui_mode: "multiple_choice" | "buzzer" | "text_input";
+  button_state?: string;
+  buttonState?: string;
+  is_current_player?: boolean;
+  isCurrentPlayer?: boolean;
+  message?: string;
   start_at?: string;
 }
 
