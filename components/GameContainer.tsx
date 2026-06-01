@@ -60,6 +60,30 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const cleanupRef = useRef<(() => void) | undefined>(undefined);
   const countdownIntervalRef = useRef<any>(null);
 
+  const inferGameType = (data: any): string | null => {
+    const source = data?.current_question ?? data?.question ?? data;
+    const explicitType =
+      source?.game_type ||
+      source?.gameType ||
+      source?.genre ||
+      data?.game_type ||
+      data?.gameType ||
+      data?.genre;
+
+    const normalizedType =
+      typeof explicitType === "string" ? explicitType.toLowerCase() : null;
+
+    if (source?.ui_mode === "buzzer" || normalizedType === "buzzer") {
+      return "buzzer";
+    }
+
+    if (normalizedType) {
+      return normalizedType;
+    }
+
+    return null;
+  };
+
   useEffect(() => {
     const initializeGame = async () => {
       // CRITICAL: Only connect once per component mount
@@ -182,16 +206,16 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         const status = statusResponse.result;
 
         // Determine game type from the session info but don't start the game yet
-        if (status.current_question?.genre) {
-          const gameType = status.current_question.genre.toLowerCase();
+        const gameType = inferGameType(status);
 
+        if (gameType) {
           setCurrentGameType(gameType);
         }
 
         // Update game state - detect if game has already started
         const gameState: GameState = {
           session_code: sessionCode,
-          game_type: status.current_question?.genre?.toLowerCase() || "trivia",
+          game_type: inferGameType(status) || "trivia",
           is_active: status.is_active,
           current_question: status.current_question,
         };
@@ -260,11 +284,13 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     gameWebSocket.onGameStateUpdate = (state: GameState) => {
       setGameState(state);
-      if (state.game_type !== currentGameType) {
+      const nextGameType = inferGameType(state);
+
+      if (nextGameType && nextGameType !== currentGameType) {
         console.log(
-          `Game type changed from ${currentGameType} to ${state.game_type}`,
+          `Game type changed from ${currentGameType} to ${nextGameType}`,
         );
-        setCurrentGameType(state.game_type);
+        setCurrentGameType(nextGameType);
       }
     };
 
@@ -283,9 +309,9 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         setCountdownQuestionStartAt(null);
       }
 
-      const nextGameType = data?.game_type || data?.genre;
+      const nextGameType = inferGameType(data);
       if (nextGameType) {
-        setCurrentGameType(String(nextGameType).toLowerCase());
+        setCurrentGameType(nextGameType);
       }
     };
 
@@ -340,8 +366,9 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         );
       }
 
-      if (data.game_type && data.game_type !== currentGameType) {
-        setCurrentGameType(data.game_type);
+      const nextGameType = inferGameType(data);
+      if (nextGameType && nextGameType !== currentGameType) {
+        setCurrentGameType(nextGameType);
       }
       if (gameState && data.isstarted === true) {
         setGameState({

@@ -543,6 +543,7 @@ export class GameWebSocketService {
         this.setReadyForQuestions(true);
         this.setPhase("countdown", message.data);
         this.emitCountdownStarted(message.data);
+        this.scheduleQuestionRecoveryAfterCountdown(message.data);
         break;
 
       case "preload_question":
@@ -750,6 +751,18 @@ export class GameWebSocketService {
 
       this.questionRecoveryTimeouts.push(timeout);
     });
+  }
+
+  private scheduleQuestionRecoveryAfterCountdown(data: any): void {
+    const questionStartAt = data?.question_start_at;
+    const durationMs =
+      typeof data?.duration_ms === "number" ? data.duration_ms : 3000;
+    const delay =
+      typeof questionStartAt === "string"
+        ? this.getDelayUntilServerTime(questionStartAt)
+        : durationMs;
+
+    this.scheduleQuestionRecovery("countdown_started", [delay + 1000]);
   }
 
   private clearQuestionRecoveryTimeouts(): void {

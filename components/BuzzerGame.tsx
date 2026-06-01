@@ -30,6 +30,8 @@ interface BuzzerState {
   winner: string | null;
   canBuzz: boolean;
   playersBuzzed: string[];
+  buttonState: "active" | "answer_mode" | "frozen" | "waiting" | "locked";
+  statusText: string;
 }
 
 export const BuzzerGame: React.FC<BuzzerGameProps> = ({
@@ -45,6 +47,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     winner: null,
     canBuzz: true,
     playersBuzzed: [],
+    buttonState: "waiting",
+    statusText: "Waiting for the question...",
   });
   const [isGameActive, setIsGameActive] = useState(true);
 
@@ -70,6 +74,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       if (data.type === "buzzer_winner") {
         handleBuzzerWinner(data.winner_name);
         Vibration.vibrate(500); // Haptic feedback
+      } else if (data.button_state || data.buttonState) {
+        applyBackendButtonState(data);
       } else if (data.type === "buzzer_reset") {
         resetBuzzerState();
         startGlowAnimation();
@@ -78,6 +84,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           ...prev,
           isActive: false,
           canBuzz: false,
+          buttonState: "locked",
+          statusText: "Waiting for next question...",
         }));
         stopGlowAnimation();
         setTimeout(() => {
@@ -136,8 +144,52 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       winner: null,
       canBuzz: true,
       playersBuzzed: [],
+      buttonState: "active",
+      statusText: "Tap to buzz in first!",
     });
     winnerAnimation.setValue(0);
+  };
+
+  const applyBackendButtonState = (data: any) => {
+    const buttonState = (data.button_state ||
+      data.buttonState ||
+      "waiting") as BuzzerState["buttonState"];
+
+    setBuzzerState((prev) => ({
+      ...prev,
+      buttonState,
+      winner: data.winner_name || data.winner || prev.winner,
+      isActive: buttonState === "active" || buttonState === "answer_mode",
+      canBuzz: buttonState === "active",
+      statusText: getStatusTextForButtonState(buttonState, data),
+    }));
+
+    if (buttonState === "active") {
+      startGlowAnimation();
+    } else {
+      stopGlowAnimation();
+    }
+  };
+
+  const getStatusTextForButtonState = (
+    buttonState: BuzzerState["buttonState"],
+    data?: any,
+  ) => {
+    switch (buttonState) {
+      case "active":
+        return "Tap to buzz in first!";
+      case "answer_mode":
+        return data?.is_current_player || data?.isCurrentPlayer
+          ? "You buzzed first. Answer on the host screen."
+          : "Another player buzzed first.";
+      case "frozen":
+        return "You're frozen for this question.";
+      case "locked":
+        return "Buzzer locked.";
+      case "waiting":
+      default:
+        return "Waiting for the backend...";
+    }
   };
 
   const startGlowAnimation = () => {
@@ -203,6 +255,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       winner: winnerName,
       canBuzz: false,
       isActive: false,
+      buttonState: "locked",
+      statusText: `${winnerName} buzzed first!`,
     }));
 
     stopGlowAnimation();
@@ -236,6 +290,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
     if (buzzerState.winner) {
       buttonStyle = { ...buttonStyle, ...styles.buzzerButtonWinner };
+    } else if (buzzerState.buttonState === "frozen") {
+      buttonStyle = { ...buttonStyle, ...styles.buzzerButtonFrozen };
     } else if (!buzzerState.canBuzz) {
       buttonStyle = { ...buttonStyle, ...styles.buzzerButtonPressed };
     } else if (buzzerState.isActive) {
@@ -326,12 +382,20 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
             >
               <View style={styles.buzzerButtonContent}>
                 <MaterialIcons
-                  name={buzzerState.winner ? "check-circle" : "touch-app"}
+                  name={
+                    buzzerState.buttonState === "frozen"
+                      ? "block"
+                      : buzzerState.winner
+                        ? "check-circle"
+                        : "touch-app"
+                  }
                   size={64}
                   color={colors.white}
                 />
                 <Text style={styles.buzzerButtonText}>
-                  {buzzerState.winner
+                  {buzzerState.buttonState === "frozen"
+                    ? "Frozen"
+                    : buzzerState.winner
                     ? "Winner!"
                     : !buzzerState.canBuzz && !buzzerState.winner
                       ? "Buzzed!"
@@ -344,13 +408,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           </Animated.View>
 
           <Text style={styles.instructionText}>
-            {buzzerState.isActive && buzzerState.canBuzz
-              ? "Tap to buzz in first!"
-              : buzzerState.winner
-                ? `${buzzerState.winner} got it!`
-                : !buzzerState.canBuzz
-                  ? "You buzzed! Waiting for results..."
-                  : "Get ready..."}
+            {buzzerState.statusText}
           </Text>
         </View>
 
@@ -359,7 +417,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           <Text style={styles.statusText}>
             {buzzerState.isActive
               ? "Buzzer is LIVE!"
-              : "Waiting for next question..."}
+              : buzzerState.statusText}
           </Text>
         </View>
       </View>
@@ -449,6 +507,10 @@ const styles = StyleSheet.create({
   buzzerButtonWinner: {
     backgroundColor: colors.peach[500],
     borderColor: colors.peach[300],
+  },
+  buzzerButtonFrozen: {
+    backgroundColor: colors.red[500],
+    borderColor: colors.red[600],
   },
   buzzerButtonInactive: {
     backgroundColor: colors.ink[800],
