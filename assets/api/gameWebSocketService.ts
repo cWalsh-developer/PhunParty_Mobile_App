@@ -82,6 +82,7 @@ export class GameWebSocketService {
   private readonly HEARTBEAT_TIMEOUT = 60000;
 
   private pendingQuestions: GameQuestion[] = [];
+  private lastQuestion: GameQuestion | null = null;
   private pendingGameStarted: any[] = [];
   private isReadyForQuestions = false;
   private questionReceived = false;
@@ -114,7 +115,21 @@ export class GameWebSocketService {
     handler: ((question: GameQuestion) => void) | null,
   ) {
     this._onQuestionReceived = handler;
-    this.flushPendingQuestions();
+
+    if (
+      handler &&
+      this.isReadyForQuestions &&
+      this.currentPhase === "question" &&
+      this.lastQuestion
+    ) {
+      handler(this.lastQuestion);
+      this.pendingQuestions = [];
+      return;
+    }
+
+    if (this.currentPhase === "question") {
+      this.flushPendingQuestions();
+    }
   }
 
   public get onQuestionReceived() {
@@ -151,7 +166,6 @@ export class GameWebSocketService {
     this.isReadyForQuestions = ready;
 
     if (!ready) {
-      this.pendingQuestions = [];
       this.clearQuestionRecoveryTimeouts();
       return;
     }
@@ -528,6 +542,8 @@ export class GameWebSocketService {
 
       case "game_started":
         this.questionReceived = false;
+        this.lastQuestion = null;
+        this.pendingQuestions = [];
         this.setReadyForQuestions(false);
         this.setPhase("waiting_for_host_intro", message.data);
         this.emitGameStarted(message.data);
@@ -581,6 +597,8 @@ export class GameWebSocketService {
         break;
 
       case "game_ended":
+        this.lastQuestion = null;
+        this.pendingQuestions = [];
         this.setPhase("ended", message.data);
         this.onGameEnded?.(message.data);
         break;
@@ -651,7 +669,8 @@ export class GameWebSocketService {
         });
       } else {
         this.setPhase("question", gameState);
-        this.scheduleQuestionRecovery("sync_state_question");
+        this.requestCurrentQuestion();
+        this.scheduleQuestionRecovery("sync_state_question", [500, 1500, 3000]);
       }
     }
   }
@@ -715,13 +734,15 @@ export class GameWebSocketService {
       ...questionData,
     };
 
+    this.lastQuestion = question;
+
     if (this.isReadyForQuestions && this._onQuestionReceived) {
       this._onQuestionReceived(question);
       return;
     }
 
     console.log(`Buffering question from ${source}`);
-    this.pendingQuestions.push(question);
+    this.pendingQuestions = [question];
   }
 
   private flushPendingQuestions(): void {
@@ -956,6 +977,7 @@ export class GameWebSocketService {
     this.isConnected = false;
     this.clearScheduledQuestionStart();
     this.pendingQuestions = [];
+    this.lastQuestion = null;
     this.pendingGameStarted = [];
     this.isReadyForQuestions = false;
     this.questionReceived = false;
