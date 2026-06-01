@@ -38,17 +38,6 @@ interface GameState {
   answers: Answer[];
 }
 
-interface AnswerResult {
-  is_correct: boolean;
-  correct_answer?: string;
-  answer_match?: {
-    method?: string;
-    matched_answer?: string;
-    matchedAnswer?: string;
-    score?: number;
-  };
-}
-
 export const TriviaGame: React.FC<TriviaGameProps> = ({
   sessionCode,
   onGameEnd,
@@ -64,13 +53,13 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const [answerResult, setAnswerResult] = useState<AnswerResult | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [isGameActive, setIsGameActive] = useState(true);
 
   const [pulseAnimation] = useState(new Animated.Value(1));
   const [fadeAnimation] = useState(new Animated.Value(0));
   const revealTimeoutRef = useRef<any>(null);
+  const currentQuestionRef = useRef<GameQuestion | null>(null);
 
   // Derived values for backward compatibility
   const currentQuestion = gameState.currentQuestion;
@@ -78,6 +67,10 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
   // Track question ID to detect actual question changes (not just state updates)
   const currentQuestionId = gameState.currentQuestion?.question_id;
+
+  useEffect(() => {
+    currentQuestionRef.current = currentQuestion;
+  }, [currentQuestion]);
 
   useEffect(() => {
     setupWebSocketListeners();
@@ -288,6 +281,14 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         isMyAnswer &&
         data.is_correct !== undefined
       ) {
+        if (isTextInputResult(data)) {
+          console.log(
+            "📊 Text input answer result received - keeping mobile in waiting state",
+          );
+          setShowResults(false);
+          return;
+        }
+
         console.log("📊 This is MY answer result - updating display");
         updateAnswerResults(data);
       } else if (!isMyAnswer) {
@@ -298,9 +299,18 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     };
 
     gameWebSocket.onBuzzerUpdate = (data: any) => {
-      if (data.type === "correct_answer" && data.correct_option) {
+      if (
+        data.type === "correct_answer" &&
+        data.correct_option &&
+        !isTextInputResult(data)
+      ) {
         showCorrectAnswer(data.correct_option);
       } else if (data.type === "question_ended") {
+        if (isTextInputResult(data)) {
+          setShowResults(false);
+          return;
+        }
+
         setShowResults(true);
         setTimeout(() => {
           resetForNewQuestion();
@@ -458,7 +468,6 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     setSelectedAnswer(null);
     setHasSubmitted(false);
     setShowResults(false);
-    setAnswerResult(null);
     setTimeLeft(0);
     fadeAnimation.setValue(0);
   };
@@ -506,6 +515,14 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     }));
   };
 
+  const isTextInputResult = (data?: any) => {
+    return (
+      data?.ui_mode === "text_input" ||
+      data?.uiMode === "text_input" ||
+      currentQuestionRef.current?.ui_mode === "text_input"
+    );
+  };
+
   const submitAnswer = async () => {
     const answerToSubmit = selectedAnswer?.trim();
     if (!answerToSubmit || !currentQuestion || hasSubmitted) return;
@@ -548,7 +565,10 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   };
 
   const updateAnswerResults = (data: any) => {
-    setAnswerResult(data);
+    if (isTextInputResult(data)) {
+      setShowResults(false);
+      return;
+    }
 
     const updatedAnswers = answers.map((answer, index) => {
       // Use correct_index from backend if available, otherwise fall back to answer comparison
@@ -571,6 +591,11 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   };
 
   const showCorrectAnswer = (correctOption: string) => {
+    if (isTextInputResult()) {
+      setShowResults(false);
+      return;
+    }
+
     const updatedAnswers = answers.map((answer, index) => {
       // Use correct_index from backend if available, otherwise fall back to option comparison
       const isCorrect =
@@ -625,27 +650,6 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     return textStyle;
   };
 
-  const getAnswerMatchText = () => {
-    const match = answerResult?.answer_match;
-    if (!match) {
-      return null;
-    }
-
-    const matchedAnswer = match.matched_answer || match.matchedAnswer;
-    const score =
-      typeof match.score === "number" ? ` (${Math.round(match.score)}%)` : "";
-
-    if (matchedAnswer) {
-      return `Matched: ${matchedAnswer}${score}`;
-    }
-
-    if (match.method) {
-      return `Match method: ${match.method}${score}`;
-    }
-
-    return null;
-  };
-
   if (!currentQuestion) {
     return (
       <View style={styles.container}>
@@ -664,11 +668,6 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
   const isTextInputQuestion = currentQuestion.ui_mode === "text_input";
   const typedAnswer = selectedAnswer ?? "";
-  const answerMatchText = getAnswerMatchText();
-  const correctText =
-    answerResult?.correct_answer ||
-    currentQuestion.correct_answer ||
-    currentQuestion.answer;
 
   return (
     <View style={styles.container}>
@@ -686,57 +685,18 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         {isTextInputQuestion ? (
           <View style={styles.textAnswerContainer}>
             <TextInput
-              style={[
-                styles.textAnswerInput,
-                showResults &&
-                  (answerResult?.is_correct
-                    ? styles.correctAnswer
-                    : styles.incorrectAnswer),
-              ]}
+              style={styles.textAnswerInput}
               value={typedAnswer}
               onChangeText={setSelectedAnswer}
               placeholder="Type your answer"
               placeholderTextColor={colors.stone[400]}
-              editable={!hasSubmitted && !showResults}
+              editable={!hasSubmitted}
               autoCapitalize="none"
               autoCorrect
               returnKeyType="done"
               onSubmitEditing={submitAnswer}
             />
 
-            {showResults && answerResult && (
-              <View style={styles.textResultCard}>
-                <MaterialIcons
-                  name={answerResult.is_correct ? "check-circle" : "cancel"}
-                  size={28}
-                  color={
-                    answerResult.is_correct ? colors.tea[500] : colors.red[500]
-                  }
-                />
-                <View style={styles.textResultContent}>
-                  <Text
-                    style={[
-                      styles.textResultTitle,
-                      answerResult.is_correct
-                        ? styles.correctAnswerText
-                        : styles.incorrectAnswerText,
-                    ]}
-                  >
-                    {answerResult.is_correct ? "Correct" : "Not quite"}
-                  </Text>
-                  {!!correctText && (
-                    <Text style={styles.textResultDetail}>
-                      Answer: {correctText}
-                    </Text>
-                  )}
-                  {!!answerMatchText && (
-                    <Text style={styles.textResultDetail}>
-                      {answerMatchText}
-                    </Text>
-                  )}
-                </View>
-              </View>
-            )}
           </View>
         ) : (
           <View style={styles.answersContainer}>
