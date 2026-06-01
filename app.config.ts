@@ -24,6 +24,10 @@ const config: ExpoConfig = {
   scheme: "phunpartymobileapp",
   userInterfaceStyle: "dark",
   plugins: [
+    "expo-font",
+    "expo-image",
+    "expo-status-bar",
+    "expo-web-browser",
     "expo-router",
     [
       "expo-splash-screen",
@@ -51,7 +55,6 @@ const config: ExpoConfig = {
       foregroundImage: "./assets/images/adaptive-icon.png",
       backgroundColor: "#0a0a0a",
     },
-    edgeToEdgeEnabled: true,
   },
   web: {
     bundler: "metro",

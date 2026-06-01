@@ -1,7 +1,7 @@
 import { colors } from "@/assets/theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
+import { createMaterialTopTabNavigator } from "expo-router/js-top-tabs";
 import { withLayoutContext } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 

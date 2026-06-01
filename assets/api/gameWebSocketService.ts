@@ -81,6 +81,7 @@ export class GameWebSocketService {
   private isReadyForQuestions = false;
   private questionReceived = false;
   private questionRecoveryTimeouts: any[] = [];
+  private questionStartTimeout: any = null;
 
   private _onQuestionReceived: ((question: GameQuestion) => void) | null = null;
   private _onGameStarted: ((data: any) => void) | null = null;
@@ -100,8 +101,9 @@ export class GameWebSocketService {
   public onBuzzerUpdate: ((data: any) => void) | null = null;
   public onError: ((error: string) => void) | null = null;
   public onPhaseChange: ((phase: GamePhase, data?: any) => void) | null = null;
-  public onCountdownStarted: ((state: CountdownState, data?: any) => void) | null =
-    null;
+  public onCountdownStarted:
+    | ((state: CountdownState, data?: any) => void)
+    | null = null;
 
   public set onQuestionReceived(
     handler: ((question: GameQuestion) => void) | null,
@@ -185,7 +187,10 @@ export class GameWebSocketService {
         playerInfo.player_id,
       );
 
-      if (!joinResponse.isSuccess && !this.canContinueAfterJoinError(joinResponse.message)) {
+      if (
+        !joinResponse.isSuccess &&
+        !this.canContinueAfterJoinError(joinResponse.message)
+      ) {
         this.isConnecting = false;
         this.onError?.(joinResponse.message || "Unable to join game.");
         return false;
@@ -250,7 +255,11 @@ export class GameWebSocketService {
   }
 
   sendMessage(message: GameWebSocketMessage): boolean {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.isConnected) {
+    if (
+      !this.ws ||
+      this.ws.readyState !== WebSocket.OPEN ||
+      !this.isConnected
+    ) {
       return false;
     }
 
@@ -427,7 +436,10 @@ export class GameWebSocketService {
         return;
       }
 
-      if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+      if (
+        this.shouldReconnect &&
+        this.reconnectAttempts < this.maxReconnectAttempts
+      ) {
         this.setConnectionState("reconnecting");
         this.scheduleReconnect();
         return;
@@ -511,13 +523,13 @@ export class GameWebSocketService {
 
       case "game_started":
         this.questionReceived = false;
-        this.setReadyForQuestions(true);
+        this.setReadyForQuestions(false);
         this.setPhase("waiting_for_host_intro", message.data);
         this.emitGameStarted(message.data);
         break;
 
       case "intro_started":
-        this.setReadyForQuestions(true);
+        this.setReadyForQuestions(false);
         this.setPhase("waiting_for_host_intro", message.data);
         break;
 
@@ -538,9 +550,11 @@ export class GameWebSocketService {
 
       case "question_started":
         this.setReadyForQuestions(true);
-        this.setPhase("question", message.data);
         if (message.data) {
-          this.deliverOrBufferQuestion(message.data, "question_started");
+          this.scheduleAtServerTime(message.data.start_at, () => {
+            this.setPhase("question", message.data);
+            this.deliverOrBufferQuestion(message.data, "question_started");
+          });
         } else {
           this.scheduleQuestionRecovery("empty_question_started");
         }
@@ -600,10 +614,16 @@ export class GameWebSocketService {
     this.onGameStateUpdate?.(gameState);
 
     const phase = this.normalizePhase(gameState);
-    this.setPhase(phase, gameState);
 
     if (phase !== "lobby" && phase !== "waiting") {
       this.setReadyForQuestions(true);
+    } else {
+      this.setReadyForQuestions(false);
+    }
+
+    if (phase !== "question") {
+      this.clearScheduledQuestionStart();
+      this.setPhase(phase, gameState);
     }
 
     if (phase === "countdown") {
@@ -615,8 +635,12 @@ export class GameWebSocketService {
       const question = gameState.current_question ?? gameState.question;
 
       if (question) {
-        this.deliverOrBufferQuestion(question, "authoritative_state");
+        this.scheduleAtServerTime(question.start_at, () => {
+          this.setPhase("question", question);
+          this.deliverOrBufferQuestion(question, "authoritative_state");
+        });
       } else {
+        this.setPhase("question", gameState);
         this.scheduleQuestionRecovery("sync_state_question");
       }
     }
@@ -718,6 +742,33 @@ export class GameWebSocketService {
     this.questionRecoveryTimeouts = [];
   }
 
+  private scheduleAtServerTime(
+    startAtIso: string | undefined,
+    callback: () => void,
+  ): void {
+    this.clearScheduledQuestionStart();
+
+    if (!startAtIso) {
+      callback();
+      return;
+    }
+
+    const delay = this.getDelayUntilServerTime(startAtIso);
+    this.questionStartTimeout = setTimeout(() => {
+      this.questionStartTimeout = null;
+      callback();
+    }, delay);
+  }
+
+  private clearScheduledQuestionStart(): void {
+    if (!this.questionStartTimeout) {
+      return;
+    }
+
+    clearTimeout(this.questionStartTimeout);
+    this.questionStartTimeout = null;
+  }
+
   private sendAck(message: GameWebSocketMessage): void {
     const eventId = this.getEventId(message);
 
@@ -797,7 +848,11 @@ export class GameWebSocketService {
     this.stopHeartbeat();
     this.lastActivityAt = Date.now();
     this.heartbeatInterval = setInterval(() => {
-      if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      if (
+        !this.isConnected ||
+        !this.ws ||
+        this.ws.readyState !== WebSocket.OPEN
+      ) {
         return;
       }
 
@@ -866,6 +921,7 @@ export class GameWebSocketService {
     this.ws = null;
     this.wsId = null;
     this.isConnected = false;
+    this.clearScheduledQuestionStart();
     this.pendingQuestions = [];
     this.pendingGameStarted = [];
     this.isReadyForQuestions = false;
@@ -889,7 +945,8 @@ export class GameWebSocketService {
     sessionCode: string,
     playerInfo: PlayerInfo,
   ): string {
-    const baseUrl = backendUrl || `${this.getWebSocketBaseUrl()}/ws/session/${sessionCode}`;
+    const baseUrl =
+      backendUrl || `${this.getWebSocketBaseUrl()}/ws/session/${sessionCode}`;
     const params = new URLSearchParams();
     const apiKey = Constants.expoConfig?.extra?.API_KEY;
 
