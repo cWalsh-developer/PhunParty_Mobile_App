@@ -549,6 +549,7 @@ export class GameWebSocketService {
         break;
 
       case "question_started":
+        console.log("MOBILE RECEIVED question_started", message.data);
         this.setReadyForQuestions(true);
         if (message.data) {
           this.scheduleAtServerTime(message.data.start_at, () => {
@@ -610,7 +611,10 @@ export class GameWebSocketService {
 
     this.updateServerOffset(state.server_time_ms ?? state.serverTime);
 
-    const gameState = state.game_state ?? state;
+    const gameState = {
+      ...(state.game_state ?? {}),
+      ...state,
+    };
     this.onGameStateUpdate?.(gameState);
 
     const phase = this.normalizePhase(gameState);
@@ -634,7 +638,7 @@ export class GameWebSocketService {
     if (phase === "question") {
       const question = gameState.current_question ?? gameState.question;
 
-      if (question) {
+      if (this.hasQuestionPayload(question)) {
         this.scheduleAtServerTime(question.start_at, () => {
           this.setPhase("question", question);
           this.deliverOrBufferQuestion(question, "authoritative_state");
@@ -656,9 +660,20 @@ export class GameWebSocketService {
     if (phase === "ended") return "ended";
 
     if (state?.ended_at || state?.is_ended) return "ended";
-    if (state?.is_active || state?.isstarted) return "waiting_for_host_intro";
+    if (
+      this.hasQuestionPayload(state?.current_question) ||
+      this.hasQuestionPayload(state?.question)
+    ) {
+      return "question";
+    }
+    if (state?.question_start_at) return "countdown";
+    if (state?.is_active || state?.isstarted) return "waiting";
 
     return "lobby";
+  }
+
+  private hasQuestionPayload(question: any): boolean {
+    return !!question && (!!question.question_id || !!question.question);
   }
 
   private emitGameStarted(data: any): void {

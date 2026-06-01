@@ -333,9 +333,6 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         gameStartedRef.current = true; // Mark game as started
         setIsGameStarted(true);
 
-        // Set ready for questions so they can be delivered when question_started arrives
-        gameWebSocket.setReadyForQuestions(true);
-
         // DO NOT extract or display question here
         // The question will arrive via question_started with start_at timing
         console.log(
