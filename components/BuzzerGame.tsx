@@ -10,14 +10,14 @@ import {
   Vibration,
   View,
 } from "react-native";
-import * as APIGame from "../../assets/api/API";
+import * as APIGame from "../assets/api/API";
 import {
   GameQuestion,
   gameWebSocket,
-} from "../../assets/api/gameWebSocketService";
-import { AppCard } from "../../assets/components/AppCard";
-import { colors } from "../../assets/theme/colors";
-import { typography } from "../../assets/theme/typography";
+} from "../assets/api/gameWebSocketService";
+import { AppCard } from "../assets/components/AppCard";
+import { colors } from "../assets/theme/colors";
+import { typography } from "../assets/theme/typography";
 
 interface BuzzerGameProps {
   sessionCode: string;
@@ -38,7 +38,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   onError,
 }) => {
   const [currentQuestion, setCurrentQuestion] = useState<GameQuestion | null>(
-    null
+    null,
   );
   const [buzzerState, setBuzzerState] = useState<BuzzerState>({
     isActive: false,
@@ -153,7 +153,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           duration: 1000,
           useNativeDriver: false,
         }),
-      ])
+      ]),
     ).start();
   };
 
@@ -226,7 +226,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
             duration: 300,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       ),
     ]).start();
   };
@@ -334,10 +334,10 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
                   {buzzerState.winner
                     ? "Winner!"
                     : !buzzerState.canBuzz && !buzzerState.winner
-                    ? "Buzzed!"
-                    : buzzerState.isActive
-                    ? "BUZZ!"
-                    : "Wait..."}
+                      ? "Buzzed!"
+                      : buzzerState.isActive
+                        ? "BUZZ!"
+                        : "Wait..."}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -347,10 +347,10 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
             {buzzerState.isActive && buzzerState.canBuzz
               ? "Tap to buzz in first!"
               : buzzerState.winner
-              ? `${buzzerState.winner} got it!`
-              : !buzzerState.canBuzz
-              ? "You buzzed! Waiting for results..."
-              : "Get ready..."}
+                ? `${buzzerState.winner} got it!`
+                : !buzzerState.canBuzz
+                  ? "You buzzed! Waiting for results..."
+                  : "Get ready..."}
           </Text>
         </View>
 

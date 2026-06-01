@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { AppCard } from "../../assets/components";
+import { AppCard } from "../assets/components";
 import Selector from "./Selector";
 
 interface PrivacySettingsScreenProps {
@@ -43,7 +43,7 @@ export default function PrivacySettingsScreen({
 
   const updatePreference = (
     key: keyof PrivacyPreferences,
-    value: boolean | string
+    value: boolean | string,
   ) => {
     setPreferences((prev) => ({
       ...prev,
@@ -63,11 +63,11 @@ export default function PrivacySettingsScreen({
           onPress: () => {
             // TODO: Open privacy policy URL
             Linking.openURL(
-              "https://terms-and-privacy.nexusgit.info/websites/phun-party/privacy"
+              "https://terms-and-privacy.nexusgit.info/websites/phun-party/privacy",
             );
           },
         },
-      ]
+      ],
     );
   };
 
@@ -75,7 +75,7 @@ export default function PrivacySettingsScreen({
     if (!user?.player_email) {
       Alert.alert(
         "No Email Address",
-        "We don't have an email address on file for your account. Please add an email address in your profile settings first."
+        "We don't have an email address on file for your account. Please add an email address in your profile settings first.",
       );
       return;
     }
@@ -96,24 +96,24 @@ export default function PrivacySettingsScreen({
                 if (result.method === "email") {
                   Alert.alert(
                     "Email Sent",
-                    "Your data privacy report has been sent to your email address."
+                    "Your data privacy report has been sent to your email address.",
                   );
                 } else if (result.method === "draft") {
                   Alert.alert(
                     "Email Draft Created",
-                    "An email draft with your data privacy report has been created. Please check your mail app to send it."
+                    "An email draft with your data privacy report has been created. Please check your mail app to send it.",
                   );
                 }
               }
             } catch (error) {
               Alert.alert(
                 "Error",
-                "Failed to generate or email your data export. Please try again."
+                "Failed to generate or email your data export. Please try again.",
               );
             }
           },
         },
-      ]
+      ],
     );
   };
 

@@ -7,7 +7,7 @@ import { getToken } from "@/assets/authentication-storage/authStorage";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useState } from "react";
-import LoginForm from "./components/LoginForm";
+import LoginForm from "../components/LoginForm";
 
 export default function Login() {
   //Initialisation----------------------------------------------------------------------------------

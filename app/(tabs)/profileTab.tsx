@@ -3,13 +3,13 @@ import { removeToken } from "@/assets/authentication-storage/authStorage";
 import { useRouter } from "expo-router";
 import { useContext, useState } from "react";
 import { Alert } from "react-native";
+import ChangePasswordModal from "../../components/ChangePasswordModal";
+import EditProfileModal from "../../components/EditProfileModal";
+import NotificationSettingsScreen from "../../components/NotificationSettingsScreen";
+import PrivacySettingsScreen from "../../components/PrivacySettingsScreen";
+import ProfileScreen from "../../components/profile";
+import SettingsScreen from "../../components/SettingsScreen";
 import dataAccess from "../../databaseAccess/dataAccess";
-import ChangePasswordModal from "../components/ChangePasswordModal";
-import EditProfileModal from "../components/EditProfileModal";
-import NotificationSettingsScreen from "../components/NotificationSettingsScreen";
-import PrivacySettingsScreen from "../components/PrivacySettingsScreen";
-import ProfileScreen from "../components/profile";
-import SettingsScreen from "../components/SettingsScreen";
 
 type ScreenType = "profile" | "settings" | "notifications" | "privacy";
 

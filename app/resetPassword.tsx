@@ -4,7 +4,7 @@ import {
 } from "@/assets/authentication-storage/authenticationLogic";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import ResetPasswordForm from "./components/ResetPasswordForm";
+import ResetPasswordForm from "../components/ResetPasswordForm";
 
 export default function ResetPassword() {
   const [phone, setPhone] = useState<string>("");

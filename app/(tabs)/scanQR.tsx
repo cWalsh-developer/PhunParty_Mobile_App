@@ -7,7 +7,7 @@ import { Camera } from "expo-camera";
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useState } from "react";
 import { Alert } from "react-native";
-import QRScanner from "../components/QRScanner";
+import QRScanner from "../../components/QRScanner";
 
 export default function QRScannerScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
@@ -69,7 +69,7 @@ export default function QRScannerScreen() {
                 setShowCamera(true);
               },
             },
-          ]
+          ],
         );
         return;
       }
@@ -102,7 +102,7 @@ export default function QRScannerScreen() {
         if (!joinInfoResponse.isSuccess) {
           console.error(
             "Failed to get session info:",
-            joinInfoResponse.message
+            joinInfoResponse.message,
           );
           throw new Error(joinInfoResponse.message || "Session not found");
         }
@@ -117,7 +117,7 @@ export default function QRScannerScreen() {
 
         const joinResponse = await API.gameSession.join(
           sessionCode,
-          user.player_id
+          user.player_id,
         );
 
         console.log("📞 Join API response:", {
@@ -143,14 +143,14 @@ export default function QRScannerScreen() {
               try {
                 const dataAccess = (await DataAccess).default;
                 const leaveResult = await dataAccess.leaveGameSession(
-                  user.player_id
+                  user.player_id,
                 );
 
                 if (leaveResult) {
                   // Retry join
                   const retryJoinResponse = await API.gameSession.join(
                     sessionCode,
-                    user.player_id
+                    user.player_id,
                   );
 
                   if (retryJoinResponse.isSuccess) {
@@ -171,7 +171,7 @@ export default function QRScannerScreen() {
                             setIsJoiningSession(false);
                           },
                         },
-                      ]
+                      ],
                     );
                     return;
                   }
@@ -188,7 +188,7 @@ export default function QRScannerScreen() {
                           setIsJoiningSession(false);
                         },
                       },
-                    ]
+                    ],
                   );
                   return;
                 }
@@ -205,7 +205,7 @@ export default function QRScannerScreen() {
                         setIsJoiningSession(false);
                       },
                     },
-                  ]
+                  ],
                 );
                 return;
               }

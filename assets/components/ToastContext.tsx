@@ -1,11 +1,11 @@
 import React, { createContext, ReactNode, useContext, useState } from "react";
-import Toast, { ToastProps } from "../../app/components/Toast";
+import Toast, { ToastProps } from "../../components/Toast";
 
 interface ToastContextType {
   showToast: (
     message: string,
     type?: ToastProps["type"],
-    duration?: number
+    duration?: number,
   ) => void;
   hideToast: () => void;
 }
@@ -30,7 +30,7 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({
   const showToast = (
     message: string,
     type: ToastProps["type"] = "info",
-    duration = 3000
+    duration = 3000,
   ) => {
     setToast({
       visible: true,

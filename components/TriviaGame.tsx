@@ -9,15 +9,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import * as APIGame from "../../assets/api/API";
+import * as APIGame from "../assets/api/API";
 import {
   GameQuestion,
   gameWebSocket,
-} from "../../assets/api/gameWebSocketService";
-import { AppButton } from "../../assets/components/AppButton";
-import { AppCard } from "../../assets/components/AppCard";
-import { colors } from "../../assets/theme/colors";
-import { typography } from "../../assets/theme/typography";
+} from "../assets/api/gameWebSocketService";
+import { AppButton } from "../assets/components/AppButton";
+import { AppCard } from "../assets/components/AppCard";
+import { colors } from "../assets/theme/colors";
+import { typography } from "../assets/theme/typography";
 
 interface TriviaGameProps {
   sessionCode: string;
@@ -128,7 +128,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           display_options: question.display_options,
           correct_index: question.correct_index,
           start_at: question.start_at,
-        }
+        },
       );
 
       // Log what questionOptions will be
@@ -143,7 +143,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       // If this is an empty event (WebSocket notification without data)
       if (!question.question_id || !question.question) {
         console.log(
-          "⚡ Empty WebSocket event - fetching current question immediately"
+          "⚡ Empty WebSocket event - fetching current question immediately",
         );
         return;
       }
@@ -151,14 +151,14 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       // Verify this is a multiple choice question (not buzzer or text input)
       if (question.ui_mode && question.ui_mode !== "multiple_choice") {
         console.warn(
-          `⚠️ TriviaGame received question with ui_mode: ${question.ui_mode} - this should be handled by a different component`
+          `⚠️ TriviaGame received question with ui_mode: ${question.ui_mode} - this should be handled by a different component`,
         );
         // Still process it but log the warning
       }
 
       // Valid question received via WebSocket
       console.log(
-        `✅ Processing ${question.ui_mode || "multiple_choice"} question`
+        `✅ Processing ${question.ui_mode || "multiple_choice"} question`,
       );
 
       // Use display_options (randomized) - no fallback to old options format
@@ -196,7 +196,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
               answers: answerOptions,
             });
             console.log(
-              `✅ Atomic state update complete - ${answerOptions.length} MCQ options set`
+              `✅ Atomic state update complete - ${answerOptions.length} MCQ options set`,
             );
           } else {
             // Schedule display at synchronized time
@@ -220,14 +220,14 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
               });
 
               console.log(
-                `✅ Atomic state update complete - ${answerOptions.length} MCQ options set`
+                `✅ Atomic state update complete - ${answerOptions.length} MCQ options set`,
               );
             }, delay);
           }
         } else {
           // No start_at - display immediately (fallback for late joiners or legacy)
           console.log(
-            "⚡ No start_at - displaying immediately (fallback mode)"
+            "⚡ No start_at - displaying immediately (fallback mode)",
           );
           console.log("🔧 Setting question and answers atomically:", {
             question_id: question.question_id,
@@ -241,12 +241,12 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           });
 
           console.log(
-            `✅ Atomic state update complete - ${answerOptions.length} MCQ options set`
+            `✅ Atomic state update complete - ${answerOptions.length} MCQ options set`,
           );
         }
       } else {
         console.log(
-          "⚠️ No valid options received from WebSocket - clearing state"
+          "⚠️ No valid options received from WebSocket - clearing state",
         );
         setGameState({
           currentQuestion: question,
@@ -340,14 +340,14 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         console.log(
           `✅ API returned ${question.ui_mode} question with ${
             question.display_options?.length || 0
-          } options`
+          } options`,
         );
 
         const answerOptions = (question.display_options || []).map(
           (option) => ({
             option,
             isSelected: false,
-          })
+          }),
         );
 
         console.log("🐛 DEBUG - Answer options created:", {
@@ -399,14 +399,14 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           console.log(
             `✅ Status API returned ${question.ui_mode} question with ${
               question.display_options?.length || 0
-            } options`
+            } options`,
           );
 
           const answerOptions = (question.display_options || []).map(
             (option) => ({
               option,
               isSelected: false,
-            })
+            }),
           );
 
           // ATOMIC UPDATE: Set both question AND answers together
@@ -500,7 +500,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     // Try WebSocket first
     const wsSuccess = gameWebSocket.submitAnswer(
       selectedAnswer,
-      currentQuestion.question_id
+      currentQuestion.question_id,
     );
 
     if (!wsSuccess) {
@@ -508,7 +508,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         // Fallback to API submission
         const apiResult = await gameWebSocket.submitAnswerViaAPI(
           currentQuestion.question_id,
-          selectedAnswer
+          selectedAnswer,
         );
 
         if (!apiResult?.isSuccess) {

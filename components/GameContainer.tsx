@@ -9,19 +9,19 @@ import {
   Text,
   View,
 } from "react-native";
-import * as APIGame from "../../assets/api/API";
+import * as APIGame from "../assets/api/API";
 import {
-  CountdownState,
   ConnectionState,
+  CountdownState,
   GamePhase,
   GameState,
   gameWebSocket,
   PlayerInfo,
-} from "../../assets/api/gameWebSocketService";
-import { AppButton } from "../../assets/components/AppButton";
-import { AppCard } from "../../assets/components/AppCard";
-import { colors } from "../../assets/theme/colors";
-import { typography } from "../../assets/theme/typography";
+} from "../assets/api/gameWebSocketService";
+import { AppButton } from "../assets/components/AppButton";
+import { AppCard } from "../assets/components/AppCard";
+import { colors } from "../assets/theme/colors";
+import { typography } from "../assets/theme/typography";
 import BuzzerGame from "./BuzzerGame";
 import TriviaGame from "./TriviaGame";
 
@@ -65,7 +65,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       // CRITICAL: Only connect once per component mount
       if (hasAttemptedConnection.current || isCurrentlyConnecting.current) {
         console.warn(
-          "[GameContainer] Connection already attempted/in progress, skipping"
+          "[GameContainer] Connection already attempted/in progress, skipping",
         );
         return;
       }
@@ -84,7 +84,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     const backHandler = BackHandler.addEventListener(
       "hardwareBackPress",
-      handleBackPress
+      handleBackPress,
     );
 
     // Start pulsing animation for lobby
@@ -126,7 +126,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     const updateCountdown = () => {
       setCountdownRemainingMs(
-        gameWebSocket.getDelayUntilServerTime(countdownQuestionStartAt)
+        gameWebSocket.getDelayUntilServerTime(countdownQuestionStartAt),
       );
     };
 
@@ -214,7 +214,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         setIsGameStarted(false);
       } else {
         throw new Error(
-          statusResponse.message || "Failed to get session status"
+          statusResponse.message || "Failed to get session status",
         );
       }
     } catch (error: any) {
@@ -262,7 +262,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       setGameState(state);
       if (state.game_type !== currentGameType) {
         console.log(
-          `Game type changed from ${currentGameType} to ${state.game_type}`
+          `Game type changed from ${currentGameType} to ${state.game_type}`,
         );
         setCurrentGameType(state.game_type);
       }
@@ -321,7 +321,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     gameWebSocket.onGameStarted = (data: any) => {
       console.log(
-        "🚀 GAME STARTED EVENT RECEIVED - Intro beginning, waiting for synchronized question reveal"
+        "🚀 GAME STARTED EVENT RECEIVED - Intro beginning, waiting for synchronized question reveal",
       );
       console.log("📦 Game started data:", JSON.stringify(data, null, 2));
 
@@ -339,7 +339,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         // DO NOT extract or display question here
         // The question will arrive via question_started with start_at timing
         console.log(
-          "⏳ Waiting for synchronized question reveal (question_started + start_at)..."
+          "⏳ Waiting for synchronized question reveal (question_started + start_at)...",
         );
       }
 
@@ -391,7 +391,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       [
         { text: "Cancel", style: "cancel" },
         { text: "Leave", style: "destructive", onPress: handleLeaveGame },
-      ]
+      ],
     );
   };
 
@@ -428,14 +428,14 @@ export const GameContainer: React.FC<GameContainerProps> = ({
           }\nPlayers: ${
             status.players?.total || 0
           }\nHas Question: ${!!status.current_question}`,
-          [{ text: "OK" }]
+          [{ text: "OK" }],
         );
 
         // The WebSocket sync_state remains the source of truth for phase.
       } else {
         Alert.alert(
           "Error",
-          statusResponse.message || "Failed to check status"
+          statusResponse.message || "Failed to check status",
         );
       }
     } catch (error: any) {
@@ -509,11 +509,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       return (
         <View style={styles.centerContainer}>
           <AppCard style={styles.loadingCard}>
-            <MaterialIcons
-              name="campaign"
-              size={64}
-              color={colors.tea[500]}
-            />
+            <MaterialIcons name="campaign" size={64} color={colors.tea[500]} />
             <Text style={styles.loadingTitle}>{waitingText}</Text>
             <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
             <View style={styles.statusIndicator}>
@@ -533,11 +529,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       return (
         <View style={styles.centerContainer}>
           <AppCard style={styles.loadingCard}>
-            <MaterialIcons
-              name="timer"
-              size={64}
-              color={colors.tea[500]}
-            />
+            <MaterialIcons name="timer" size={64} color={colors.tea[500]} />
             <Text style={styles.countdownNumber}>{Math.max(0, seconds)}</Text>
             <Text style={styles.loadingTitle}>Get ready...</Text>
             <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>

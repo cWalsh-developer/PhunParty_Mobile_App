@@ -3,8 +3,8 @@ import { StyleSheet, Text, View } from "react-native";
 import {
   ConnectionState,
   gameWebSocket,
-} from "../../assets/api/gameWebSocketService";
-import { colors } from "../../assets/theme/colors";
+} from "../assets/api/gameWebSocketService";
+import { colors } from "../assets/theme/colors";
 
 /**
  * Development-only component to monitor WebSocket connection health
@@ -17,7 +17,6 @@ interface ConnectionMonitorProps {
   enabled?: boolean;
   position?: "top" | "bottom";
 }
-
 export const ConnectionMonitor: React.FC<ConnectionMonitorProps> = ({
   enabled = false,
   position = "bottom",

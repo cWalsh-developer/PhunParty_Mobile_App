@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { AppCard } from "../../assets/components";
+import { AppCard } from "../assets/components";
 import Selector from "./Selector";
 
 interface NotificationSettingsScreenProps {
@@ -48,7 +48,7 @@ export default function NotificationSettingsScreen({
 
   const updatePreference = (
     key: keyof NotificationPreferences,
-    value: boolean
+    value: boolean,
   ) => {
     setPreferences((prev) => ({
       ...prev,
@@ -76,7 +76,7 @@ export default function NotificationSettingsScreen({
             openSettings();
           },
         },
-      ]
+      ],
     );
   };
 

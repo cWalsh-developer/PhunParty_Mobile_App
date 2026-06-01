@@ -11,9 +11,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { AvatarOption, PhotoService } from "../../assets/api/photoService";
-import { UserContext } from "../../assets/authentication-storage/authContext";
-import { useToast } from "../../assets/components/ToastContext";
+import { AvatarOption, PhotoService } from "../assets/api/photoService";
+import { UserContext } from "../assets/authentication-storage/authContext";
+import { useToast } from "../assets/components/ToastContext";
 import AuthenticatedImage from "./AuthenticatedImage";
 
 interface PhotoUploadActionSheetProps {
@@ -57,7 +57,6 @@ export default function PhotoUploadActionSheet({
       const avatars = await PhotoService.getAvailableAvatars();
       setAvailableAvatars(avatars);
     } catch (error) {
-
       showToast("Failed to load avatars", "error");
     }
     setIsLoadingAvatars(false);
@@ -71,7 +70,7 @@ export default function PhotoUploadActionSheet({
 
     console.log(
       "PhotoUploadActionSheet: Taking photo for user:",
-      user.player_id
+      user.player_id,
     );
     setIsUploading(true);
     try {
@@ -89,7 +88,6 @@ export default function PhotoUploadActionSheet({
         }
       }
     } catch (error) {
-
       showToast("Camera error occurred", "error");
     }
     setIsUploading(false);
@@ -117,7 +115,6 @@ export default function PhotoUploadActionSheet({
         }
       }
     } catch (error) {
-
       showToast("Gallery error occurred", "error");
     }
     setIsUploading(false);
@@ -148,7 +145,6 @@ export default function PhotoUploadActionSheet({
         showToast("Failed to set avatar", "error");
       }
     } catch (error) {
-
       showToast("Failed to set avatar", "error");
     }
     setIsUploading(false);

@@ -7,8 +7,8 @@ import { useEffect, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { PlayerInfo } from "../assets/api/gameWebSocketService";
 import { colors } from "../assets/theme/colors";
-import { GameContainer } from "./components/GameContainer";
-import QRScanner from "./components/QRScanner";
+import { GameContainer } from "../components/GameContainer";
+import QRScanner from "../components/QRScanner";
 
 export default function GameSession() {
   const router = useRouter();
@@ -102,16 +102,15 @@ export default function GameSession() {
               onPress: () => router.replace("/(tabs)/profileTab"),
             },
             { text: "Cancel", onPress: () => router.replace("/(tabs)/scanQR") },
-          ]
+          ],
         );
         return;
       }
     } catch (error) {
-
       Alert.alert(
         "Error",
         "Failed to load player information. Please try again.",
-        [{ text: "OK", onPress: () => router.replace("/(tabs)/scanQR") }]
+        [{ text: "OK", onPress: () => router.replace("/(tabs)/scanQR") }],
       );
     }
   };
@@ -144,12 +143,10 @@ export default function GameSession() {
       // Call leave API and navigate
       await dataAccess.leaveGameSession(playerId);
 
-
       // Clear the entire navigation stack and navigate to root
       router.dismissAll();
       router.replace("/(tabs)/scanQR");
     } catch (error) {
-
       // Still navigate away even if API call fails
       router.dismissAll();
       router.replace("/(tabs)/scanQR");

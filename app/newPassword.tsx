@@ -3,7 +3,7 @@ import { updatePassword } from "@/assets/authentication-storage/authenticationLo
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useContext, useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
-import NewPasswordForm from "./components/NewPasswordForm";
+import NewPasswordForm from "../components/NewPasswordForm";
 //State--------------------------------------------------------------------------------------------
 export default function NewPassword() {
   //Initialisation----------------------------------------------------------------------------------
