@@ -16,7 +16,10 @@ export class ImageService {
       }
 
       // Get API key and token
-      const apiKey = Constants.expoConfig?.extra?.API_KEY || "";
+      const apiKey =
+        Constants.expoConfig?.extra?.API_KEY ||
+        process.env.EXPO_PUBLIC_API_KEY ||
+        "";
       let token = null;
 
       try {

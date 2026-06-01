@@ -2,7 +2,9 @@ import Constants from "expo-constants";
 import * as ImagePicker from "expo-image-picker";
 import API from "./API";
 
-const { API_KEY, API_URL } = Constants.expoConfig?.extra || {};
+const { API_URL } = Constants.expoConfig?.extra || {};
+const API_KEY =
+  Constants.expoConfig?.extra?.API_KEY || process.env.EXPO_PUBLIC_API_KEY || "";
 
 export interface PhotoUploadResponse {
   photo_url: string;

@@ -100,7 +100,8 @@ const callFetch = async <T = any>(
   dataObj: DataObject | null = null,
   withAuth: boolean = true
 ): Promise<APIResponse<T>> => {
-  const apiKey = Constants.expoConfig?.extra?.API_KEY || "";
+  const apiKey =
+    Constants.expoConfig?.extra?.API_KEY || process.env.EXPO_PUBLIC_API_KEY || "";
 
   const headers: HeadersInit = {
     "X-API-Key": apiKey,

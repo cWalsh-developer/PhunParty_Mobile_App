@@ -963,7 +963,8 @@ export class GameWebSocketService {
     const baseUrl =
       backendUrl || `${this.getWebSocketBaseUrl()}/ws/session/${sessionCode}`;
     const params = new URLSearchParams();
-    const apiKey = Constants.expoConfig?.extra?.API_KEY;
+    const apiKey =
+      Constants.expoConfig?.extra?.API_KEY || process.env.EXPO_PUBLIC_API_KEY;
 
     if (apiKey) {
       params.append("api_key", apiKey);
