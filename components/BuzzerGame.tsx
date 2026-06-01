@@ -153,6 +153,17 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     }
   };
 
+  const getAnswerMatchStatus = (data: any) => {
+    const match = data.answer_match;
+    const matchedAnswer = match?.matched_answer || match?.matchedAnswer;
+
+    if (matchedAnswer) {
+      return `Matched: ${matchedAnswer}`;
+    }
+
+    return data.correct_answer ? `Answer: ${data.correct_answer}` : null;
+  };
+
   const applyQuestionAnswerData = (data: any) => {
     const options = data.display_options || data.options || [];
 
@@ -353,6 +364,34 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       if (data.type === "buzzer_winner") {
         handleBuzzerWinner(data.winner_name);
         Vibration.vibrate(500); // Haptic feedback
+      } else if (
+        data.type === "correct_answer" ||
+        data.event_type === "correct_answer"
+      ) {
+        const matchStatus = getAnswerMatchStatus(data);
+        setBuzzerState((prev) => ({
+          ...prev,
+          buttonState: "locked",
+          isActive: false,
+          canBuzz: false,
+          canAnswer: false,
+          statusText: matchStatus ? `Correct! ${matchStatus}` : "Correct!",
+        }));
+      } else if (
+        data.type === "incorrect_answer" ||
+        data.event_type === "incorrect_answer"
+      ) {
+        const matchStatus = getAnswerMatchStatus(data);
+        setBuzzerState((prev) => ({
+          ...prev,
+          buttonState: "frozen",
+          isActive: false,
+          canBuzz: false,
+          canAnswer: false,
+          statusText: matchStatus
+            ? `Not quite. ${matchStatus}`
+            : "Not quite. You're frozen for this question.",
+        }));
       } else if (data.button_state || data.buttonState) {
         applyBackendButtonState(data);
       } else if (data.type === "buzzer_reset") {

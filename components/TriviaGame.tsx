@@ -6,6 +6,7 @@ import {
   Dimensions,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -37,6 +38,17 @@ interface GameState {
   answers: Answer[];
 }
 
+interface AnswerResult {
+  is_correct: boolean;
+  correct_answer?: string;
+  answer_match?: {
+    method?: string;
+    matched_answer?: string;
+    matchedAnswer?: string;
+    score?: number;
+  };
+}
+
 export const TriviaGame: React.FC<TriviaGameProps> = ({
   sessionCode,
   onGameEnd,
@@ -52,6 +64,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [answerResult, setAnswerResult] = useState<AnswerResult | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [isGameActive, setIsGameActive] = useState(true);
 
@@ -263,7 +276,9 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       console.log("✅ Answer submission result:", {
         is_correct: data.is_correct,
         correct_answer: data.correct_answer,
+        answer_match: data.answer_match,
         has_is_correct: data.is_correct !== undefined,
+        event_type: data.event_type,
         player_id: data.player_id,
         my_player_id: gameWebSocket.playerInfo?.player_id,
         is_my_answer: data.player_id === gameWebSocket.playerInfo?.player_id,
@@ -272,13 +287,18 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
       // CRITICAL: Only update results if this is MY answer submission
       // Other players' submissions shouldn't affect my screen
+      const isMyAnswer =
+        data.player_id === gameWebSocket.playerInfo?.player_id ||
+        data.is_current_player === true ||
+        data.event_type === "answer_submitted";
+
       if (
-        data.player_id === gameWebSocket.playerInfo?.player_id &&
+        isMyAnswer &&
         data.is_correct !== undefined
       ) {
         console.log("📊 This is MY answer result - updating display");
         updateAnswerResults(data);
-      } else if (data.player_id !== gameWebSocket.playerInfo?.player_id) {
+      } else if (!isMyAnswer) {
         console.log("👥 Another player's answer - ignoring (not my result)");
       } else {
         console.log("⚠️ Answer event without is_correct flag - ignoring");
@@ -333,8 +353,11 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           game_type: "trivia",
           ui_mode: questionData.ui_mode || "multiple_choice", // Use backend ui_mode
           display_options: questionData.display_options,
+          accepted_answers: questionData.accepted_answers,
           correct_index: questionData.correct_index,
+          correct_answer: questionData.correct_answer,
           answer: questionData.answer,
+          difficulty: questionData.difficulty,
         };
 
         console.log(
@@ -392,8 +415,11 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
             game_type: "trivia",
             ui_mode: status.current_question.ui_mode || "multiple_choice", // Use backend ui_mode
             display_options: status.current_question.display_options,
+            accepted_answers: status.current_question.accepted_answers,
             correct_index: status.current_question.correct_index,
+            correct_answer: status.current_question.correct_answer,
             answer: status.current_question.answer,
+            difficulty: status.current_question.difficulty,
           };
 
           console.log(
@@ -440,6 +466,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     setSelectedAnswer(null);
     setHasSubmitted(false);
     setShowResults(false);
+    setAnswerResult(null);
     setTimeLeft(0);
     fadeAnimation.setValue(0);
   };
@@ -488,18 +515,19 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   };
 
   const submitAnswer = async () => {
-    if (!selectedAnswer || !currentQuestion || hasSubmitted) return;
+    const answerToSubmit = selectedAnswer?.trim();
+    if (!answerToSubmit || !currentQuestion || hasSubmitted) return;
 
     setHasSubmitted(true);
     console.log("🎯 Submitting answer:", {
-      answer: selectedAnswer,
+      answer: answerToSubmit,
       question_id: currentQuestion.question_id,
       session_code: sessionCode,
     });
 
     // Try WebSocket first
     const wsSuccess = gameWebSocket.submitAnswer(
-      selectedAnswer,
+      answerToSubmit,
       currentQuestion.question_id,
     );
 
@@ -508,7 +536,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         // Fallback to API submission
         const apiResult = await gameWebSocket.submitAnswerViaAPI(
           currentQuestion.question_id,
-          selectedAnswer,
+          answerToSubmit,
         );
 
         if (!apiResult?.isSuccess) {
@@ -528,6 +556,8 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   };
 
   const updateAnswerResults = (data: any) => {
+    setAnswerResult(data);
+
     const updatedAnswers = answers.map((answer, index) => {
       // Use correct_index from backend if available, otherwise fall back to answer comparison
       const isCorrect =
@@ -603,6 +633,27 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     return textStyle;
   };
 
+  const getAnswerMatchText = () => {
+    const match = answerResult?.answer_match;
+    if (!match) {
+      return null;
+    }
+
+    const matchedAnswer = match.matched_answer || match.matchedAnswer;
+    const score =
+      typeof match.score === "number" ? ` (${Math.round(match.score)}%)` : "";
+
+    if (matchedAnswer) {
+      return `Matched: ${matchedAnswer}${score}`;
+    }
+
+    if (match.method) {
+      return `Match method: ${match.method}${score}`;
+    }
+
+    return null;
+  };
+
   if (!currentQuestion) {
     return (
       <View style={styles.container}>
@@ -619,6 +670,14 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     );
   }
 
+  const isTextInputQuestion = currentQuestion.ui_mode === "text_input";
+  const typedAnswer = selectedAnswer ?? "";
+  const answerMatchText = getAnswerMatchText();
+  const correctText =
+    answerResult?.correct_answer ||
+    currentQuestion.correct_answer ||
+    currentQuestion.answer;
+
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.gameContent, { opacity: fadeAnimation }]}>
@@ -632,41 +691,98 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           )}
         </AppCard>
 
-        <View style={styles.answersContainer}>
-          {answers.map((answer, index) => (
-            <Animated.View
-              key={index}
-              style={{ transform: [{ scale: pulseAnimation }] }}
-            >
-              <TouchableOpacity
-                style={getAnswerButtonStyle(answer)}
-                onPress={() => selectAnswer(answer.option)}
-                disabled={hasSubmitted || showResults}
-                activeOpacity={0.8}
-              >
-                <Text style={getAnswerTextStyle(answer)}>
-                  {String.fromCharCode(65 + index)}. {answer.option}
-                </Text>
-                {showResults && answer.isCorrect && (
-                  <MaterialIcons
-                    name="check-circle"
-                    size={24}
-                    color={colors.tea[500]}
-                  />
-                )}
-                {showResults && answer.isSelected && !answer.isCorrect && (
-                  <MaterialIcons
-                    name="cancel"
-                    size={24}
-                    color={colors.red[500]}
-                  />
-                )}
-              </TouchableOpacity>
-            </Animated.View>
-          ))}
-        </View>
+        {isTextInputQuestion ? (
+          <View style={styles.textAnswerContainer}>
+            <TextInput
+              style={[
+                styles.textAnswerInput,
+                showResults &&
+                  (answerResult?.is_correct
+                    ? styles.correctAnswer
+                    : styles.incorrectAnswer),
+              ]}
+              value={typedAnswer}
+              onChangeText={setSelectedAnswer}
+              placeholder="Type your answer"
+              placeholderTextColor={colors.stone[400]}
+              editable={!hasSubmitted && !showResults}
+              autoCapitalize="none"
+              autoCorrect
+              returnKeyType="done"
+              onSubmitEditing={submitAnswer}
+            />
 
-        {selectedAnswer && !hasSubmitted && !showResults && (
+            {showResults && answerResult && (
+              <View style={styles.textResultCard}>
+                <MaterialIcons
+                  name={answerResult.is_correct ? "check-circle" : "cancel"}
+                  size={28}
+                  color={
+                    answerResult.is_correct ? colors.tea[500] : colors.red[500]
+                  }
+                />
+                <View style={styles.textResultContent}>
+                  <Text
+                    style={[
+                      styles.textResultTitle,
+                      answerResult.is_correct
+                        ? styles.correctAnswerText
+                        : styles.incorrectAnswerText,
+                    ]}
+                  >
+                    {answerResult.is_correct ? "Correct" : "Not quite"}
+                  </Text>
+                  {!!correctText && (
+                    <Text style={styles.textResultDetail}>
+                      Answer: {correctText}
+                    </Text>
+                  )}
+                  {!!answerMatchText && (
+                    <Text style={styles.textResultDetail}>
+                      {answerMatchText}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={styles.answersContainer}>
+            {answers.map((answer, index) => (
+              <Animated.View
+                key={index}
+                style={{ transform: [{ scale: pulseAnimation }] }}
+              >
+                <TouchableOpacity
+                  style={getAnswerButtonStyle(answer)}
+                  onPress={() => selectAnswer(answer.option)}
+                  disabled={hasSubmitted || showResults}
+                  activeOpacity={0.8}
+                >
+                  <Text style={getAnswerTextStyle(answer)}>
+                    {String.fromCharCode(65 + index)}. {answer.option}
+                  </Text>
+                  {showResults && answer.isCorrect && (
+                    <MaterialIcons
+                      name="check-circle"
+                      size={24}
+                      color={colors.tea[500]}
+                    />
+                  )}
+                  {showResults && answer.isSelected && !answer.isCorrect && (
+                    <MaterialIcons
+                      name="cancel"
+                      size={24}
+                      color={colors.red[500]}
+                    />
+                  )}
+                </TouchableOpacity>
+              </Animated.View>
+            ))}
+          </View>
+        )}
+
+        {selectedAnswer?.trim() && !hasSubmitted && !showResults && (
           <View style={styles.submitContainer}>
             <AppButton
               title="Submit Answer"
@@ -741,6 +857,43 @@ const styles = StyleSheet.create({
   },
   answersContainer: {
     flex: 1,
+  },
+  textAnswerContainer: {
+    flex: 1,
+    gap: 16,
+  },
+  textAnswerInput: {
+    ...typography.body,
+    backgroundColor: colors.ink[800],
+    borderColor: colors.ink[700],
+    borderWidth: 2,
+    borderRadius: 12,
+    color: colors.stone[100],
+    fontSize: 18,
+    minHeight: 64,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  textResultCard: {
+    backgroundColor: colors.ink[800],
+    borderColor: colors.ink[700],
+    borderWidth: 1,
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 12,
+    padding: 16,
+  },
+  textResultContent: {
+    flex: 1,
+  },
+  textResultTitle: {
+    ...typography.h3,
+    marginBottom: 4,
+  },
+  textResultDetail: {
+    ...typography.body,
+    color: colors.stone[300],
+    marginTop: 4,
   },
   answerButton: {
     backgroundColor: colors.ink[800],

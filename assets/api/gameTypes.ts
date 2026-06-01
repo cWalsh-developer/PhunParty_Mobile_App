@@ -51,10 +51,21 @@ export interface GameQuestion {
   genre: string;
   options?: string[]; // For multiple choice questions
   display_options?: string[]; // Randomized options from backend
+  accepted_answers?: string[];
   correct_index?: number; // Index of correct answer in display_options
   correct_answer?: string;
   answer?: string; // Original correct answer (for reference)
+  difficulty?: string;
   ui_mode?: "multiple_choice" | "buzzer" | "text_input";
+}
+
+export interface AnswerMatch {
+  method?: string;
+  matched_answer?: string;
+  matchedAnswer?: string;
+  score?: number;
+  normalized_answer?: string;
+  normalizedAnswer?: string;
 }
 
 export interface PlayerResponse {
@@ -64,6 +75,7 @@ export interface PlayerResponse {
   question_id: string;
   player_answer: string;
   is_correct: boolean;
+  answer_match?: AnswerMatch;
   answered_at: string;
 }
 
@@ -79,6 +91,7 @@ export interface SubmitAnswerResponse {
   message: string;
   is_correct: boolean;
   correct_answer?: string;
+  answer_match?: AnswerMatch;
   current_score: number;
   game_state: "question_answered" | "question_complete" | "game_complete";
   next_question?: GameQuestion;

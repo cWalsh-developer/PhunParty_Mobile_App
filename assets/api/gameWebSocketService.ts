@@ -41,8 +41,11 @@ export interface GameQuestion {
   question: string;
   options?: string[];
   display_options?: string[];
+  accepted_answers?: string[];
   correct_index?: number;
   answer?: string;
+  correct_answer?: string;
+  difficulty?: string;
   game_type: string;
   ui_mode: "multiple_choice" | "buzzer" | "text_input";
   button_state?: string;
@@ -605,14 +608,21 @@ export class GameWebSocketService {
 
       case "answer_submitted":
       case "player_answered":
-        this.onAnswerSubmitted?.(message.data);
+        this.onAnswerSubmitted?.({
+          ...(message.data ?? {}),
+          event_type: message.type,
+        });
         break;
 
       case "ui_update":
       case "buzzer_winner":
       case "correct_answer":
       case "incorrect_answer":
-        this.onBuzzerUpdate?.(message.data);
+        this.onBuzzerUpdate?.({
+          ...(message.data ?? {}),
+          event_type: message.type,
+          type: message.data?.type ?? message.type,
+        });
         break;
 
       case "pong":
