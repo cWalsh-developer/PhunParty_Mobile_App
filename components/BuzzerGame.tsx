@@ -57,11 +57,11 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   const [answerText, setAnswerText] = useState("");
   const [hasSubmittedAnswer, setHasSubmittedAnswer] = useState(false);
   const [isGameActive, setIsGameActive] = useState(true);
+  const [glowIntensity, setGlowIntensity] = useState(0);
 
   const [scaleAnimation] = useState(() => new Animated.Value(1));
-  const [glowAnimation] = useState(() => new Animated.Value(0));
   const [winnerAnimation] = useState(() => new Animated.Value(0));
-  const glowLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const glowIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const winnerAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const fetchCurrentQuestion = async () => {
@@ -174,33 +174,22 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   };
 
   const startGlowAnimation = () => {
-    glowLoopRef.current?.stop();
-    glowAnimation.stopAnimation();
-    glowAnimation.setValue(0);
+    if (glowIntervalRef.current) {
+      clearInterval(glowIntervalRef.current);
+    }
 
-    glowLoopRef.current = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnimation, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: false,
-        }),
-        Animated.timing(glowAnimation, {
-          toValue: 0,
-          duration: 1000,
-          useNativeDriver: false,
-        }),
-      ]),
-    );
-
-    glowLoopRef.current.start();
+    setGlowIntensity(1);
+    glowIntervalRef.current = setInterval(() => {
+      setGlowIntensity((current) => (current > 0 ? 0 : 1));
+    }, 1000);
   };
 
   const stopGlowAnimation = () => {
-    glowLoopRef.current?.stop();
-    glowLoopRef.current = null;
-    glowAnimation.stopAnimation();
-    glowAnimation.setValue(0);
+    if (glowIntervalRef.current) {
+      clearInterval(glowIntervalRef.current);
+      glowIntervalRef.current = null;
+    }
+    setGlowIntensity(0);
   };
 
   const stopWinnerAnimation = () => {
@@ -342,15 +331,9 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     return {
       shadowColor: colors.tea[500],
       shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: glowAnimation,
-      shadowRadius: glowAnimation.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, 20],
-      }),
-      elevation: glowAnimation.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, 20],
-      }),
+      shadowOpacity: glowIntensity ? 0.85 : 0.25,
+      shadowRadius: glowIntensity ? 20 : 6,
+      elevation: glowIntensity ? 20 : 6,
     };
   };
 
