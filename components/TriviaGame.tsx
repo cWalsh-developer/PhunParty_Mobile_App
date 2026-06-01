@@ -161,17 +161,9 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         return;
       }
 
-      // Verify this is a multiple choice question (not buzzer or text input)
-      if (question.ui_mode && question.ui_mode !== "multiple_choice") {
-        console.warn(
-          `⚠️ TriviaGame received question with ui_mode: ${question.ui_mode} - this should be handled by a different component`,
-        );
-        // Still process it but log the warning
-      }
-
       // Valid question received via WebSocket
       console.log(
-        `✅ Processing ${question.ui_mode || "multiple_choice"} question`,
+        `✅ Processing backend ui_mode: ${question.ui_mode || "multiple_choice"}`,
       );
 
       // Use display_options (randomized) - no fallback to old options format
