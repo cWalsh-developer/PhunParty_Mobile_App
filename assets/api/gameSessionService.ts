@@ -305,7 +305,7 @@ export class GameSessionService {
 
       if (this.isWebSocketConnected) {
         try {
-          gameWebSocket.disconnect();
+          gameWebSocket.leaveGame();
         } catch (wsError: any) {
           console.error("Error disconnecting WebSocket:", wsError);
         }

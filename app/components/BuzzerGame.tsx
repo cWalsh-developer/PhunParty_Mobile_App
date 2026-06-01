@@ -15,7 +15,6 @@ import {
   GameQuestion,
   gameWebSocket,
 } from "../../assets/api/gameWebSocketService";
-import { AppButton } from "../../assets/components/AppButton";
 import { AppCard } from "../../assets/components/AppCard";
 import { colors } from "../../assets/theme/colors";
 import { typography } from "../../assets/theme/typography";
@@ -55,7 +54,6 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
   useEffect(() => {
     setupWebSocketListeners();
-    fetchCurrentQuestion();
     return () => {
       // Cleanup handled by parent component
     };
@@ -84,7 +82,6 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         stopGlowAnimation();
         setTimeout(() => {
           resetBuzzerState();
-          fetchCurrentQuestion(); // Fetch next question after current one ends
         }, 3000);
       } else if (data.type === "next_question" && data.question) {
         setCurrentQuestion(data.question);
@@ -100,9 +97,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       ]);
     };
 
-    // Handle when the game starts - fetch the first question
     gameWebSocket.onGameStarted = (data: any) => {
-      fetchCurrentQuestion(); // Now fetch the first question
+      console.log("Game started; waiting for question_started.", data);
     };
 
     gameWebSocket.onError = (error: string) => {
@@ -132,6 +128,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       }
     } catch (error) {}
   };
+  void fetchCurrentQuestion;
 
   const resetBuzzerState = () => {
     setBuzzerState({
@@ -279,15 +276,6 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           />
           <Text style={styles.waitingText}>Get ready to buzz in!</Text>
           <Text style={styles.sessionCode}>Session: {sessionCode}</Text>
-
-          <View style={styles.actionButtons}>
-            <AppButton
-              title="Refresh Question"
-              onPress={fetchCurrentQuestion}
-              variant="secondary"
-              style={styles.actionButton}
-            />
-          </View>
         </AppCard>
       </View>
     );

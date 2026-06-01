@@ -11,7 +11,9 @@ import {
 } from "react-native";
 import * as APIGame from "../../assets/api/API";
 import {
+  CountdownState,
   ConnectionState,
+  GamePhase,
   GameState,
   gameWebSocket,
   PlayerInfo,
@@ -42,6 +44,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const [currentGameType, setCurrentGameType] = useState<string | null>(null);
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [isWaitingForQuestion, setIsWaitingForQuestion] = useState(false);
+  const [gamePhase, setGamePhase] = useState<GamePhase>("lobby");
+  const [countdownQuestionStartAt, setCountdownQuestionStartAt] = useState<
+    string | null
+  >(null);
+  const [countdownRemainingMs, setCountdownRemainingMs] = useState(0);
   const [pulseAnimation] = useState(new Animated.Value(1));
 
   // Use ref to track game started state synchronously (avoids race condition)
@@ -51,6 +58,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const hasAttemptedConnection = useRef(false);
   const isCurrentlyConnecting = useRef(false);
   const cleanupRef = useRef<(() => void) | undefined>(undefined);
+  const countdownIntervalRef = useRef<any>(null);
 
   useEffect(() => {
     const initializeGame = async () => {
@@ -93,12 +101,45 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         cleanupRef.current();
       }
 
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+
       // Reset refs for potential remount
       hasAttemptedConnection.current = false;
       isCurrentlyConnecting.current = false;
       gameStartedRef.current = false;
     };
   }, []); // Empty dependency array - only run once on mount
+
+  useEffect(() => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+
+    if (!countdownQuestionStartAt) {
+      setCountdownRemainingMs(0);
+      return;
+    }
+
+    const updateCountdown = () => {
+      setCountdownRemainingMs(
+        gameWebSocket.getDelayUntilServerTime(countdownQuestionStartAt)
+      );
+    };
+
+    updateCountdown();
+    countdownIntervalRef.current = setInterval(updateCountdown, 100);
+
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+    };
+  }, [countdownQuestionStartAt]);
 
   const startPulsingAnimation = () => {
     const pulse = () => {
@@ -170,7 +211,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
           started_at: status.started_at,
         });
 
-        setIsGameStarted(hasActuallyStarted);
+        setIsGameStarted(false);
       } else {
         throw new Error(
           statusResponse.message || "Failed to get session status"
@@ -227,6 +268,31 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       }
     };
 
+    gameWebSocket.onPhaseChange = (phase: GamePhase, data?: any) => {
+      setGamePhase(phase);
+
+      if (phase === "lobby" || phase === "waiting") {
+        setIsGameStarted(false);
+        setCountdownQuestionStartAt(null);
+        return;
+      }
+
+      setIsGameStarted(true);
+
+      if (phase !== "countdown") {
+        setCountdownQuestionStartAt(null);
+      }
+
+      const nextGameType = data?.game_type || data?.genre;
+      if (nextGameType) {
+        setCurrentGameType(String(nextGameType).toLowerCase());
+      }
+    };
+
+    gameWebSocket.onCountdownStarted = (state: CountdownState) => {
+      setCountdownQuestionStartAt(state.questionStartAt || null);
+    };
+
     gameWebSocket.onError = (error: string) => {
       setConnectionError(error);
       setIsConnecting(false);
@@ -251,6 +317,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         setTimeout(fetchQuestionFromAPI, 1000); // Retry in 1 second
       }
     };
+    void fetchQuestionFromAPI;
 
     gameWebSocket.onGameStarted = (data: any) => {
       console.log(
@@ -330,8 +397,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
   const handleLeaveGame = () => {
     console.log("📺 Resetting WebSocket: UI no longer ready for questions");
-    gameWebSocket.setReadyForQuestions(false); // Reset ready state
-    gameWebSocket.disconnect();
+    gameWebSocket.leaveGame();
     onLeaveGame();
   };
 
@@ -365,10 +431,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
           [{ text: "OK" }]
         );
 
-        // Game has started if it's active and has a current question
-        if (!isGameStarted && status.is_active && status.current_question) {
-          setIsGameStarted(true);
-        }
+        // The WebSocket sync_state remains the source of truth for phase.
       } else {
         Alert.alert(
           "Error",
@@ -428,6 +491,56 @@ export const GameContainer: React.FC<GameContainerProps> = ({
                 style={styles.actionButton}
               />
             </View>
+          </AppCard>
+        </View>
+      );
+    }
+
+    if (
+      gamePhase === "waiting_for_host_intro" ||
+      gamePhase === "intro_audio" ||
+      gamePhase === "countdown_pending"
+    ) {
+      const waitingText =
+        gamePhase === "countdown_pending"
+          ? "Intro skipped. Get ready..."
+          : "The host is explaining the rules...";
+
+      return (
+        <View style={styles.centerContainer}>
+          <AppCard style={styles.loadingCard}>
+            <MaterialIcons
+              name="campaign"
+              size={64}
+              color={colors.tea[500]}
+            />
+            <Text style={styles.loadingTitle}>{waitingText}</Text>
+            <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
+            <View style={styles.statusIndicator}>
+              <Animated.View
+                style={[styles.pulsingDot, { opacity: pulseAnimation }]}
+              />
+              <Text style={styles.statusText}>Waiting for host</Text>
+            </View>
+          </AppCard>
+        </View>
+      );
+    }
+
+    if (gamePhase === "countdown") {
+      const seconds = Math.ceil(countdownRemainingMs / 1000);
+
+      return (
+        <View style={styles.centerContainer}>
+          <AppCard style={styles.loadingCard}>
+            <MaterialIcons
+              name="timer"
+              size={64}
+              color={colors.tea[500]}
+            />
+            <Text style={styles.countdownNumber}>{Math.max(0, seconds)}</Text>
+            <Text style={styles.loadingTitle}>Get ready...</Text>
+            <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
           </AppCard>
         </View>
       );
@@ -679,6 +792,13 @@ const styles = StyleSheet.create({
   },
   loadingTitle: {
     ...typography.h2,
+    color: colors.tea[400],
+    marginTop: 16,
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+  countdownNumber: {
+    ...typography.h1,
     color: colors.tea[400],
     marginTop: 16,
     textAlign: "center",

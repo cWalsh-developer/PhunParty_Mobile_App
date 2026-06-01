@@ -1,5 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -57,6 +57,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
   const [pulseAnimation] = useState(new Animated.Value(1));
   const [fadeAnimation] = useState(new Animated.Value(0));
+  const revealTimeoutRef = useRef<any>(null);
 
   // Derived values for backward compatibility
   const currentQuestion = gameState.currentQuestion;
@@ -82,6 +83,10 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     }, 10000);
 
     return () => {
+      if (revealTimeoutRef.current) {
+        clearTimeout(revealTimeoutRef.current);
+        revealTimeoutRef.current = null;
+      }
       clearInterval(debugInterval);
       // Cleanup handled by parent component
     };
@@ -140,7 +145,6 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         console.log(
           "⚡ Empty WebSocket event - fetching current question immediately"
         );
-        fetchCurrentQuestionNow();
         return;
       }
 
@@ -175,17 +179,12 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
         if (startAt) {
           // Parse server timestamp and apply clock offset
-          const startTime =
-            new Date(startAt).getTime() + gameWebSocket.getClockOffset();
           const now = Date.now();
-          const delay = Math.max(0, startTime - now);
+          const delay = gameWebSocket.getDelayUntilServerTime(startAt);
 
           console.log(`⏰ Question has start_at - delay: ${delay}ms`);
           console.log(`   Server start_at: ${startAt}`);
           console.log(`   Clock offset: ${gameWebSocket.getClockOffset()}ms`);
-          console.log(
-            `   Calculated start time: ${new Date(startTime).toISOString()}`
-          );
           console.log(`   Current time: ${new Date(now).toISOString()}`);
           console.log(`   Time until display: ${delay}ms`);
 
@@ -202,7 +201,12 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           } else {
             // Schedule display at synchronized time
             console.log(`⏱️ Scheduling display in ${delay}ms`);
-            setTimeout(() => {
+            if (revealTimeoutRef.current) {
+              clearTimeout(revealTimeoutRef.current);
+            }
+
+            revealTimeoutRef.current = setTimeout(() => {
+              revealTimeoutRef.current = null;
               console.log("✅ Synchronized reveal - displaying question NOW");
               console.log("🔧 Setting question and answers atomically:", {
                 question_id: question.question_id,
@@ -251,12 +255,8 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       }
     };
 
-    // Handle when the game starts - fetch initial question
     gameWebSocket.onGameStarted = (data: any) => {
-      // Small delay to ensure backend is ready
-      setTimeout(() => {
-        fetchInitialQuestion();
-      }, 500);
+      console.log("Game started; waiting for question_started.", data);
     };
 
     gameWebSocket.onAnswerSubmitted = (data: any) => {
@@ -430,8 +430,13 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       await fetchCurrentQuestionNow();
     } catch (error) {}
   };
+  void fetchInitialQuestion;
 
   const resetForNewQuestion = () => {
+    if (revealTimeoutRef.current) {
+      clearTimeout(revealTimeoutRef.current);
+      revealTimeoutRef.current = null;
+    }
     setSelectedAnswer(null);
     setHasSubmitted(false);
     setShowResults(false);
