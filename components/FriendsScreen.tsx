@@ -1,9 +1,11 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { Camera, CameraView } from "expo-camera";
+import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Modal,
   RefreshControl,
   ScrollView,
@@ -145,18 +147,22 @@ export default function FriendsScreen({
 
   const pendingIncomingCount = incomingRequests.length;
 
-  const loadFriendsData = useCallback(async (showLoader = false) => {
+  const loadFriendsData = useCallback(async (showLoader = false, silent = false) => {
     if (!playerId) {
       setLoading(false);
       setRefreshing(false);
-      setMessage("Sign in again to use friends.");
+      if (!silent) {
+        setMessage("Sign in again to use friends.");
+      }
       return;
     }
 
     if (showLoader) {
       setLoading(true);
     }
-    setMessage(null);
+    if (!silent) {
+      setMessage(null);
+    }
 
     try {
       const [
@@ -212,18 +218,24 @@ export default function FriendsScreen({
 
       if (firstFailure) {
         if (firstFailure.status === 401) {
-          setMessage("Your session has expired. Please log in again.");
+          if (!silent) {
+            setMessage("Your session has expired. Please log in again.");
+          }
           onAuthInvalid?.();
           return;
         }
 
-        setMessage(
-          firstFailure.message ||
-            "Friends endpoints are not available yet. Deploy the backend friend API, then pull to refresh.",
-        );
+        if (!silent) {
+          setMessage(
+            firstFailure.message ||
+              "Friends endpoints are not available yet. Deploy the backend friend API, then pull to refresh.",
+          );
+        }
       }
     } catch (error: any) {
-      setMessage(error.message || "Could not load friends right now.");
+      if (!silent) {
+        setMessage(error.message || "Could not load friends right now.");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -267,6 +279,30 @@ export default function FriendsScreen({
       cleanup?.();
     };
   }, [loadFriendsData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (playerId) {
+        loadFriendsData(false, true);
+      }
+    }, [loadFriendsData, playerId]),
+  );
+
+  useEffect(() => {
+    if (!playerId) {
+      return;
+    }
+
+    const appStateSubscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        loadFriendsData(false, true);
+      }
+    });
+
+    return () => {
+      appStateSubscription.remove();
+    };
+  }, [loadFriendsData, playerId]);
 
   const refresh = () => {
     setRefreshing(true);
@@ -405,7 +441,11 @@ export default function FriendsScreen({
                 );
                 return;
               }
-              await loadFriendsData();
+
+              setFriends((prev) =>
+                prev.filter((item) => item.player_id !== friend.player_id),
+              );
+              loadFriendsData(false);
             } finally {
               setActionId(null);
             }

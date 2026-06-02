@@ -64,6 +64,8 @@ const getNotificationData = (content?: { data?: Record<string, any> | null }) =>
 const isFriendNotification = (data: Record<string, any>) =>
   data.type === "friend_request_received" ||
   data.type === "friend_request_accepted" ||
+  data.type === "friend_removed" ||
+  data.type === "friendship_removed" ||
   typeof data.friend_request_id === "string";
 
 export const pushNotificationService = {
