@@ -1,5 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -13,15 +13,27 @@ import {
 } from "react-native";
 import * as APIGame from "../assets/api/API";
 import {
+  FairPlayStatus,
+  FocusViolationReason,
+  GamePhase,
   GameQuestion,
   gameWebSocket,
 } from "../assets/api/gameWebSocketService";
 import { AppCard } from "../assets/components/AppCard";
+import { useFairPlayMonitor } from "../assets/hooks/useFairPlayMonitor";
 import { colors } from "../assets/theme/colors";
 import { typography } from "../assets/theme/typography";
 
 interface BuzzerGameProps {
   sessionCode: string;
+  gamePhase?: GamePhase;
+  fairPlayEnabled?: boolean;
+  maxFairPlayStrikes?: number;
+  fairPlayStatus?: FairPlayStatus | null;
+  onFairPlayViolation?: (
+    questionId: string,
+    reason: FocusViolationReason,
+  ) => void;
   onGameEnd: () => void;
   onError: (error: string) => void;
 }
@@ -38,6 +50,11 @@ interface BuzzerState {
 
 export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   sessionCode,
+  gamePhase = "question",
+  fairPlayEnabled = false,
+  maxFairPlayStrikes = 3,
+  fairPlayStatus,
+  onFairPlayViolation,
   onGameEnd,
   onError,
 }) => {
@@ -63,6 +80,42 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   const [winnerAnimation] = useState(() => new Animated.Value(0));
   const glowIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const winnerAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const currentQuestionId = currentQuestion?.question_id;
+  const fairPlayStrikeCount = Number(
+    fairPlayStatus?.strike_count ?? fairPlayStatus?.strikeCount ?? 0,
+  );
+  const fairPlayMaxStrikes = Number(
+    fairPlayStatus?.max_strikes ??
+      fairPlayStatus?.maxStrikes ??
+      maxFairPlayStrikes,
+  );
+  const fairPlayFrozenQuestionId =
+    fairPlayStatus?.frozen_question_id ?? fairPlayStatus?.frozenQuestionId;
+  const isFrozenByFairPlay = Boolean(
+    fairPlayStatus?.is_frozen ?? fairPlayStatus?.isFrozen,
+  );
+  const isKickedByFairPlay = Boolean(
+    fairPlayStatus?.is_kicked ?? fairPlayStatus?.isKicked,
+  );
+  const isFairPlayLocked =
+    isKickedByFairPlay ||
+    (isFrozenByFairPlay &&
+      (!fairPlayFrozenQuestionId ||
+        fairPlayFrozenQuestionId === currentQuestionId));
+
+  const handleFairPlayViolation = useCallback(
+    (questionId: string, reason: FocusViolationReason) => {
+      onFairPlayViolation?.(questionId, reason);
+    },
+    [onFairPlayViolation],
+  );
+
+  useFairPlayMonitor({
+    enabled: fairPlayEnabled,
+    questionId: currentQuestionId,
+    phase: gamePhase,
+    onViolation: handleFairPlayViolation,
+  });
 
   const fetchCurrentQuestion = async () => {
     try {
@@ -246,7 +299,12 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   };
 
   const submitBuzzerAnswer = (answer: string) => {
-    if (!currentQuestion?.question_id || !answer || hasSubmittedAnswer) {
+    if (
+      !currentQuestion?.question_id ||
+      !answer ||
+      hasSubmittedAnswer ||
+      isFairPlayLocked
+    ) {
       return;
     }
 
@@ -269,7 +327,13 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   };
 
   const handleBuzzerPress = () => {
-    if (!buzzerState.canBuzz || !buzzerState.isActive || !isGameActive) return;
+    if (
+      !buzzerState.canBuzz ||
+      !buzzerState.isActive ||
+      !isGameActive ||
+      isFairPlayLocked
+    )
+      return;
 
     // Immediate visual feedback
     setBuzzerState((prev) => ({ ...prev, canBuzz: false }));
@@ -323,7 +387,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
     if (buzzerState.winner) {
       buttonStyle = { ...buttonStyle, ...styles.buzzerButtonWinner };
-    } else if (buzzerState.buttonState === "frozen") {
+    } else if (isFairPlayLocked || buzzerState.buttonState === "frozen") {
       buttonStyle = { ...buttonStyle, ...styles.buzzerButtonFrozen };
     } else if (!buzzerState.canBuzz) {
       buttonStyle = { ...buttonStyle, ...styles.buzzerButtonPressed };
@@ -337,7 +401,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   };
 
   const getBuzzerGlowStyle = () => {
-    if (!buzzerState.isActive || buzzerState.winner) return {};
+    if (!buzzerState.isActive || buzzerState.winner || isFairPlayLocked)
+      return {};
 
     return {
       shadowColor: colors.tea[500],
@@ -346,6 +411,38 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       shadowRadius: glowIntensity ? 20 : 6,
       elevation: glowIntensity ? 20 : 6,
     };
+  };
+
+  const renderFairPlayStatus = () => {
+    if (!fairPlayEnabled) {
+      return null;
+    }
+
+    return (
+      <View
+        style={[
+          styles.fairPlayBanner,
+          isFairPlayLocked && styles.fairPlayBannerWarning,
+        ]}
+      >
+        <MaterialIcons
+          name={isFairPlayLocked ? "block" : "verified-user"}
+          size={20}
+          color={isFairPlayLocked ? colors.red[500] : colors.tea[400]}
+        />
+        <Text
+          style={[
+            styles.fairPlayText,
+            isFairPlayLocked && styles.fairPlayTextWarning,
+          ]}
+        >
+          {isFairPlayLocked
+            ? fairPlayStatus?.message ||
+              `Fair Play strike ${fairPlayStrikeCount}/${fairPlayMaxStrikes}. You are frozen for this question.`
+            : `Fair Play Mode active - ${fairPlayStrikeCount}/${fairPlayMaxStrikes} strikes`}
+        </Text>
+      </View>
+    );
   };
 
   useEffect(() => {
@@ -462,6 +559,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         <AppCard style={styles.questionCard}>
           <Text style={styles.questionText}>{currentQuestion.question}</Text>
         </AppCard>
+        {renderFairPlayStatus()}
 
         {buzzerState.winner && (
           <Animated.View
@@ -487,6 +585,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         )}
 
         {buzzerState.canAnswer &&
+        !isFairPlayLocked &&
         (answerOptions.length > 0 || currentQuestion?.ui_mode === "text_input") ? (
           <View style={styles.answerContainer}>
             {answerOptions.length > 0 ? (
@@ -495,10 +594,11 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
                   key={`${option}-${index}`}
                   style={[
                     styles.optionButton,
-                    hasSubmittedAnswer && styles.optionButtonDisabled,
+                    (hasSubmittedAnswer || isFairPlayLocked) &&
+                      styles.optionButtonDisabled,
                   ]}
                   onPress={() => submitBuzzerAnswer(option)}
-                  disabled={hasSubmittedAnswer}
+                  disabled={hasSubmittedAnswer || isFairPlayLocked}
                   activeOpacity={0.8}
                 >
                   <Text style={styles.optionText}>
@@ -514,16 +614,20 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
                   onChangeText={setAnswerText}
                   placeholder="Type your answer"
                   placeholderTextColor={colors.stone[400]}
-                  editable={!hasSubmittedAnswer}
+                  editable={!hasSubmittedAnswer && !isFairPlayLocked}
                 />
                 <TouchableOpacity
                   style={[
                     styles.submitAnswerButton,
-                    (!answerText.trim() || hasSubmittedAnswer) &&
+                    (!answerText.trim() ||
+                      hasSubmittedAnswer ||
+                      isFairPlayLocked) &&
                       styles.optionButtonDisabled,
                   ]}
                   onPress={() => submitBuzzerAnswer(answerText.trim())}
-                  disabled={!answerText.trim() || hasSubmittedAnswer}
+                  disabled={
+                    !answerText.trim() || hasSubmittedAnswer || isFairPlayLocked
+                  }
                   activeOpacity={0.8}
                 >
                   <Text style={styles.submitAnswerText}>Submit Answer</Text>
@@ -542,13 +646,15 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
             <TouchableOpacity
               style={getBuzzerButtonStyle()}
               onPress={handleBuzzerPress}
-              disabled={!buzzerState.canBuzz || !buzzerState.isActive}
+              disabled={
+                !buzzerState.canBuzz || !buzzerState.isActive || isFairPlayLocked
+              }
               activeOpacity={0.8}
             >
               <View style={styles.buzzerButtonContent}>
                 <MaterialIcons
                   name={
-                    buzzerState.buttonState === "frozen"
+                    isFairPlayLocked || buzzerState.buttonState === "frozen"
                       ? "block"
                       : buzzerState.winner
                         ? "check-circle"
@@ -558,7 +664,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
                   color={colors.white}
                 />
                 <Text style={styles.buzzerButtonText}>
-                  {buzzerState.buttonState === "frozen"
+                  {isFairPlayLocked || buzzerState.buttonState === "frozen"
                     ? "Frozen"
                     : buzzerState.winner
                     ? "Winner!"
@@ -581,7 +687,9 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         <View style={styles.statusContainer}>
           <MaterialIcons name="timer" size={20} color={colors.stone[400]} />
           <Text style={styles.statusText}>
-            {buzzerState.isActive
+            {isFairPlayLocked
+              ? "Fair Play freeze. Wait for the next question."
+              : buzzerState.isActive
               ? "Buzzer is LIVE!"
               : buzzerState.statusText}
           </Text>
@@ -645,6 +753,30 @@ const styles = StyleSheet.create({
     marginTop: 12,
     textAlign: "center",
     fontWeight: "bold",
+  },
+  fairPlayBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: colors.ink[800],
+    borderColor: colors.tea[500],
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  fairPlayBannerWarning: {
+    borderColor: colors.red[500],
+    backgroundColor: colors.red[500] + "14",
+  },
+  fairPlayText: {
+    ...typography.body,
+    color: colors.stone[300],
+    flex: 1,
+    fontWeight: "600",
+  },
+  fairPlayTextWarning: {
+    color: colors.stone[100],
   },
   buzzerContainer: {
     flex: 1,

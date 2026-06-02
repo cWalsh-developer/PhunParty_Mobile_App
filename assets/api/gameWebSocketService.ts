@@ -62,6 +62,33 @@ export interface CountdownState {
   questionStartAt?: string;
 }
 
+export type FocusViolationReason =
+  | "app_backgrounded"
+  | "app_inactive"
+  | "screen_blurred";
+
+export interface FairPlaySettings {
+  enabled: boolean;
+  maxStrikes: number;
+}
+
+export interface FairPlayStatus {
+  player_id?: string;
+  strike_count?: number;
+  strikeCount?: number;
+  max_strikes?: number;
+  maxStrikes?: number;
+  is_frozen?: boolean;
+  isFrozen?: boolean;
+  frozen_question_id?: string;
+  frozenQuestionId?: string;
+  is_kicked?: boolean;
+  isKicked?: boolean;
+  reason?: string;
+  message?: string;
+  event_type?: string;
+}
+
 export type ConnectionState =
   | "connecting"
   | "connected"
@@ -114,6 +141,14 @@ export class GameWebSocketService {
   public onCountdownStarted:
     | ((state: CountdownState, data?: any) => void)
     | null = null;
+  public onFairPlaySettingsUpdate:
+    | ((settings: FairPlaySettings | any) => void)
+    | null = null;
+  public onFairPlayStatusUpdate:
+    | ((status: FairPlayStatus | any) => void)
+    | null = null;
+  public onKickedFromSession: ((data: FairPlayStatus | any) => void) | null =
+    null;
 
   public set onQuestionReceived(
     handler: ((question: GameQuestion) => void) | null,
@@ -322,6 +357,22 @@ export class GameWebSocketService {
       data: {
         session_code: this.sessionCode,
         player_id: this.playerInfo?.player_id,
+      },
+    });
+  }
+
+  reportFocusViolation(
+    questionId: string,
+    reason: FocusViolationReason,
+  ): boolean {
+    return this.sendMessage({
+      type: "focus_violation",
+      data: {
+        session_code: this.sessionCode,
+        player_id: this.playerInfo?.player_id,
+        question_id: questionId,
+        reason,
+        occurred_at: new Date().toISOString(),
       },
     });
   }
@@ -608,6 +659,33 @@ export class GameWebSocketService {
       case "game_status_update":
         if (message.data) {
           this.onGameStateUpdate?.(message.data);
+          this.emitFairPlayFromState(message.data);
+        }
+        break;
+
+      case "fair_play_settings_updated":
+        this.onFairPlaySettingsUpdate?.(message.data ?? {});
+        break;
+
+      case "fair_play_status_update":
+      case "player_flagged":
+        this.onFairPlayStatusUpdate?.({
+          ...(message.data ?? {}),
+          event_type: message.type,
+        });
+        break;
+
+      case "kicked_from_session":
+        this.shouldReconnect = false;
+        this.onKickedFromSession?.({
+          ...(message.data ?? {}),
+          is_kicked: true,
+          event_type: message.type,
+        });
+        try {
+          this.ws?.close(1000, "Kicked from session");
+        } catch {
+          // Ignore close failures; the UI already has the authoritative event.
         }
         break;
 
@@ -662,6 +740,7 @@ export class GameWebSocketService {
       ...state,
     };
     this.onGameStateUpdate?.(gameState);
+    this.emitFairPlayFromState(gameState);
 
     const phase = this.normalizePhase(gameState);
 
@@ -740,6 +819,31 @@ export class GameWebSocketService {
       },
       data,
     );
+  }
+
+  private emitFairPlayFromState(state: any): void {
+    const settings =
+      state?.fair_play_settings ??
+      state?.fairPlaySettings ??
+      state?.fair_play ??
+      state?.fairPlay;
+    const hasLegacySetting =
+      typeof state?.fair_play_enabled === "boolean" ||
+      typeof state?.cheat_detection_enabled === "boolean";
+
+    if (settings || hasLegacySetting) {
+      this.onFairPlaySettingsUpdate?.(settings ?? state);
+    }
+
+    const playerStatus =
+      state?.fair_play_status ??
+      state?.fairPlayStatus ??
+      state?.player_fair_play_status ??
+      state?.playerFairPlayStatus;
+
+    if (playerStatus) {
+      this.onFairPlayStatusUpdate?.(playerStatus);
+    }
   }
 
   private deliverOrBufferQuestion(questionData: any, source: string): void {

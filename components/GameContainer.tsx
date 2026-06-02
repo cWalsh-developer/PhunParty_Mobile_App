@@ -13,6 +13,9 @@ import * as APIGame from "../assets/api/API";
 import {
   ConnectionState,
   CountdownState,
+  FairPlaySettings,
+  FairPlayStatus,
+  FocusViolationReason,
   GamePhase,
   GameState,
   gameWebSocket,
@@ -45,6 +48,13 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [isWaitingForQuestion, setIsWaitingForQuestion] = useState(false);
   const [gamePhase, setGamePhase] = useState<GamePhase>("lobby");
+  const [fairPlaySettings, setFairPlaySettings] = useState<FairPlaySettings>({
+    enabled: false,
+    maxStrikes: 3,
+  });
+  const [fairPlayStatus, setFairPlayStatus] = useState<FairPlayStatus | null>(
+    null,
+  );
   const [countdownQuestionStartAt, setCountdownQuestionStartAt] = useState<
     string | null
   >(null);
@@ -82,6 +92,106 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     }
 
     return null;
+  };
+
+  const normalizeFairPlaySettings = (
+    payload: any,
+  ): FairPlaySettings | null => {
+    const source =
+      payload?.fair_play_settings ??
+      payload?.fairPlaySettings ??
+      payload?.fair_play ??
+      payload?.fairPlay ??
+      payload;
+
+    const enabled =
+      source?.enabled ??
+      source?.fair_play_enabled ??
+      source?.fairPlayEnabled ??
+      source?.cheat_detection_enabled ??
+      source?.cheatDetectionEnabled;
+
+    if (typeof enabled !== "boolean") {
+      return null;
+    }
+
+    const maxStrikesRaw =
+      source?.maxStrikes ??
+      source?.max_strikes ??
+      source?.max_cheat_strikes ??
+      source?.maxCheatStrikes;
+    const maxStrikes = Number(maxStrikesRaw);
+
+    return {
+      enabled,
+      maxStrikes: Number.isFinite(maxStrikes) && maxStrikes > 0 ? maxStrikes : 3,
+    };
+  };
+
+  const normalizeFairPlayStatus = (payload: any): FairPlayStatus | null => {
+    if (!payload) {
+      return null;
+    }
+
+    const source =
+      payload?.fair_play_status ??
+      payload?.fairPlayStatus ??
+      payload?.player_fair_play_status ??
+      payload?.playerFairPlayStatus ??
+      payload;
+
+    const eventPlayerId =
+      source?.player_id ?? source?.playerId ?? source?.participant_id;
+
+    if (eventPlayerId && eventPlayerId !== playerInfo.player_id) {
+      return null;
+    }
+
+    return {
+      ...source,
+      player_id: eventPlayerId ?? playerInfo.player_id,
+      strike_count: Number(
+        source?.strike_count ?? source?.strikeCount ?? source?.strikes ?? 0,
+      ),
+      max_strikes: Number(
+        source?.max_strikes ??
+          source?.maxStrikes ??
+          source?.max_cheat_strikes ??
+          fairPlaySettings.maxStrikes,
+      ),
+      is_frozen: Boolean(source?.is_frozen ?? source?.isFrozen),
+      frozen_question_id:
+        source?.frozen_question_id ??
+        source?.frozenQuestionId ??
+        source?.question_id,
+      is_kicked: Boolean(source?.is_kicked ?? source?.isKicked),
+      message: source?.message,
+      reason: source?.reason,
+      event_type: payload?.event_type ?? source?.event_type,
+    };
+  };
+
+  const applyFairPlaySettings = (payload: any) => {
+    const settings = normalizeFairPlaySettings(payload);
+
+    if (settings) {
+      setFairPlaySettings(settings);
+    }
+  };
+
+  const applyFairPlayStatus = (payload: any) => {
+    const status = normalizeFairPlayStatus(payload);
+
+    if (status) {
+      setFairPlayStatus(status);
+    }
+  };
+
+  const reportFairPlayViolation = (
+    questionId: string,
+    reason: FocusViolationReason,
+  ) => {
+    gameWebSocket.reportFocusViolation(questionId, reason);
   };
 
   useEffect(() => {
@@ -204,6 +314,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         }
 
         const status = statusResponse.result;
+        applyFairPlaySettings(status);
+        applyFairPlayStatus(status);
 
         // Determine game type from the session info but don't start the game yet
         const gameType = inferGameType(status);
@@ -284,6 +396,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     gameWebSocket.onGameStateUpdate = (state: GameState) => {
       setGameState(state);
+      applyFairPlaySettings(state);
+      applyFairPlayStatus(state);
       const nextGameType = inferGameType(state);
 
       if (nextGameType && nextGameType !== currentGameType) {
@@ -317,6 +431,34 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     gameWebSocket.onCountdownStarted = (state: CountdownState) => {
       setCountdownQuestionStartAt(state.questionStartAt || null);
+    };
+
+    gameWebSocket.onFairPlaySettingsUpdate = (settings: any) => {
+      applyFairPlaySettings(settings);
+    };
+
+    gameWebSocket.onFairPlayStatusUpdate = (status: any) => {
+      applyFairPlayStatus(status);
+    };
+
+    gameWebSocket.onKickedFromSession = (status: any) => {
+      const kickedStatus =
+        normalizeFairPlayStatus({
+          ...status,
+          is_kicked: true,
+          message:
+            status?.message ||
+            "You have been removed from this session by Fair Play Mode.",
+        }) ?? {
+          player_id: playerInfo.player_id,
+          is_kicked: true,
+          strike_count: 0,
+          max_strikes: fairPlaySettings.maxStrikes,
+          message: "You have been removed from this session by Fair Play Mode.",
+        };
+
+      setFairPlayStatus(kickedStatus);
+      setConnectionError(null);
     };
 
     gameWebSocket.onError = (error: string) => {
@@ -353,6 +495,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
       // Transition from lobby to game screen
       if (data && data.isstarted === true) {
+        applyFairPlaySettings(data);
+        applyFairPlayStatus(data);
         console.log("🎮 Game started - Intro beginning");
         console.log("📍 Setting isGameStarted = true");
 
@@ -467,6 +611,36 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     }
   };
 
+  const fairPlayStrikeCount = Number(
+    fairPlayStatus?.strike_count ?? fairPlayStatus?.strikeCount ?? 0,
+  );
+  const fairPlayMaxStrikes = Number(
+    fairPlayStatus?.max_strikes ??
+      fairPlayStatus?.maxStrikes ??
+      fairPlaySettings.maxStrikes,
+  );
+  const isKickedByFairPlay = Boolean(
+    fairPlayStatus?.is_kicked ?? fairPlayStatus?.isKicked,
+  );
+
+  const renderFairPlayNotice = () => {
+    if (!fairPlaySettings.enabled) {
+      return null;
+    }
+
+    return (
+      <View style={styles.fairPlayNotice}>
+        <MaterialIcons name="verified-user" size={18} color={colors.tea[400]} />
+        <Text style={styles.fairPlayNoticeText}>
+          Fair Play Mode active
+          {fairPlayMaxStrikes > 0
+            ? ` - ${fairPlayStrikeCount}/${fairPlayMaxStrikes} strikes`
+            : ""}
+        </Text>
+      </View>
+    );
+  };
+
   const renderGameContent = () => {
     console.log("Rendering game content:", {
       currentGameType,
@@ -498,6 +672,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
                   currentGameType.slice(1)}
               </Text>
             )}
+            {renderFairPlayNotice()}
 
             {/* Lobby status indicator */}
             <View style={styles.statusIndicator}>
@@ -536,6 +711,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             <MaterialIcons name="campaign" size={64} color={colors.tea[500]} />
             <Text style={styles.loadingTitle}>{waitingText}</Text>
             <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
+            {renderFairPlayNotice()}
             <View style={styles.statusIndicator}>
               <Animated.View
                 style={[styles.pulsingDot, { opacity: pulseAnimation }]}
@@ -557,6 +733,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             <Text style={styles.countdownNumber}>{Math.max(0, seconds)}</Text>
             <Text style={styles.loadingTitle}>Get ready...</Text>
             <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
+            {renderFairPlayNotice()}
           </AppCard>
         </View>
       );
@@ -599,6 +776,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         return (
           <TriviaGame
             sessionCode={sessionCode}
+            gamePhase={gamePhase}
+            fairPlayEnabled={fairPlaySettings.enabled}
+            maxFairPlayStrikes={fairPlaySettings.maxStrikes}
+            fairPlayStatus={fairPlayStatus}
+            onFairPlayViolation={reportFairPlayViolation}
             onGameEnd={handleGameEnd}
             onError={handleGameError}
           />
@@ -608,6 +790,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         return (
           <BuzzerGame
             sessionCode={sessionCode}
+            gamePhase={gamePhase}
+            fairPlayEnabled={fairPlaySettings.enabled}
+            maxFairPlayStrikes={fairPlaySettings.maxStrikes}
+            fairPlayStatus={fairPlayStatus}
+            onFairPlayViolation={reportFairPlayViolation}
             onGameEnd={handleGameEnd}
             onError={handleGameError}
           />
@@ -617,6 +804,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         return (
           <TriviaGame
             sessionCode={sessionCode}
+            gamePhase={gamePhase}
+            fairPlayEnabled={fairPlaySettings.enabled}
+            maxFairPlayStrikes={fairPlaySettings.maxStrikes}
+            fairPlayStatus={fairPlayStatus}
+            onFairPlayViolation={reportFairPlayViolation}
             onGameEnd={handleGameEnd}
             onError={handleGameError}
           />
@@ -640,6 +832,37 @@ export const GameContainer: React.FC<GameContainerProps> = ({
               Please wait while we connect you to the session...
             </Text>
             <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
+          </AppCard>
+        </View>
+      </View>
+    );
+  }
+
+  if (isKickedByFairPlay) {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.centerContainer}>
+          <AppCard style={styles.errorCard}>
+            <MaterialIcons name="gpp-bad" size={48} color={colors.red[500]} />
+            <Text style={styles.errorTitle}>Removed From Session</Text>
+            <Text style={styles.errorText}>
+              {fairPlayStatus?.message ||
+                "Fair Play Mode removed you from this session."}
+            </Text>
+            {fairPlaySettings.enabled && (
+              <Text style={styles.playerInfo}>
+                Strikes: {fairPlayStrikeCount}/{fairPlayMaxStrikes}
+              </Text>
+            )}
+            <View style={styles.actionButtons}>
+              <AppButton
+                title="Leave Game"
+                onPress={handleLeaveGame}
+                variant="primary"
+                style={styles.actionButton}
+              />
+            </View>
           </AppCard>
         </View>
       </View>
@@ -870,6 +1093,25 @@ const styles = StyleSheet.create({
     color: colors.tea[400],
     marginTop: 8,
     fontStyle: "italic",
+  },
+  fairPlayNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: colors.ink[800],
+    borderColor: colors.tea[500],
+    borderWidth: 1,
+  },
+  fairPlayNoticeText: {
+    ...typography.body,
+    color: colors.stone[300],
+    fontWeight: "600",
+    textAlign: "center",
   },
   statusIndicator: {
     flexDirection: "row",

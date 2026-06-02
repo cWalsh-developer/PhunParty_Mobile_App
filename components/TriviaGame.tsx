@@ -1,5 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -12,16 +12,28 @@ import {
 } from "react-native";
 import * as APIGame from "../assets/api/API";
 import {
+  FairPlayStatus,
+  FocusViolationReason,
+  GamePhase,
   GameQuestion,
   gameWebSocket,
 } from "../assets/api/gameWebSocketService";
 import { AppButton } from "../assets/components/AppButton";
 import { AppCard } from "../assets/components/AppCard";
+import { useFairPlayMonitor } from "../assets/hooks/useFairPlayMonitor";
 import { colors } from "../assets/theme/colors";
 import { typography } from "../assets/theme/typography";
 
 interface TriviaGameProps {
   sessionCode: string;
+  gamePhase?: GamePhase;
+  fairPlayEnabled?: boolean;
+  maxFairPlayStrikes?: number;
+  fairPlayStatus?: FairPlayStatus | null;
+  onFairPlayViolation?: (
+    questionId: string,
+    reason: FocusViolationReason,
+  ) => void;
   onGameEnd: () => void;
   onError: (message: string) => void;
   onAnswerSubmitted?: () => void;
@@ -40,6 +52,11 @@ interface GameState {
 
 export const TriviaGame: React.FC<TriviaGameProps> = ({
   sessionCode,
+  gamePhase = "question",
+  fairPlayEnabled = false,
+  maxFairPlayStrikes = 3,
+  fairPlayStatus,
+  onFairPlayViolation,
   onGameEnd,
   onError,
   onAnswerSubmitted,
@@ -67,6 +84,41 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
   // Track question ID to detect actual question changes (not just state updates)
   const currentQuestionId = gameState.currentQuestion?.question_id;
+  const fairPlayStrikeCount = Number(
+    fairPlayStatus?.strike_count ?? fairPlayStatus?.strikeCount ?? 0,
+  );
+  const fairPlayMaxStrikes = Number(
+    fairPlayStatus?.max_strikes ??
+      fairPlayStatus?.maxStrikes ??
+      maxFairPlayStrikes,
+  );
+  const fairPlayFrozenQuestionId =
+    fairPlayStatus?.frozen_question_id ?? fairPlayStatus?.frozenQuestionId;
+  const isFrozenByFairPlay = Boolean(
+    fairPlayStatus?.is_frozen ?? fairPlayStatus?.isFrozen,
+  );
+  const isKickedByFairPlay = Boolean(
+    fairPlayStatus?.is_kicked ?? fairPlayStatus?.isKicked,
+  );
+  const isFairPlayLocked =
+    isKickedByFairPlay ||
+    (isFrozenByFairPlay &&
+      (!fairPlayFrozenQuestionId ||
+        fairPlayFrozenQuestionId === currentQuestionId));
+
+  const handleFairPlayViolation = useCallback(
+    (questionId: string, reason: FocusViolationReason) => {
+      onFairPlayViolation?.(questionId, reason);
+    },
+    [onFairPlayViolation],
+  );
+
+  useFairPlayMonitor({
+    enabled: fairPlayEnabled,
+    questionId: currentQuestionId,
+    phase: gamePhase,
+    onViolation: handleFairPlayViolation,
+  });
 
   useEffect(() => {
     currentQuestionRef.current = currentQuestion;
@@ -498,7 +550,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   };
 
   const selectAnswer = (option: string) => {
-    if (hasSubmitted || !isGameActive) return;
+    if (hasSubmitted || !isGameActive || isFairPlayLocked) return;
 
     animateSelection();
     setSelectedAnswer(option);
@@ -525,7 +577,8 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
   const submitAnswer = async () => {
     const answerToSubmit = selectedAnswer?.trim();
-    if (!answerToSubmit || !currentQuestion || hasSubmitted) return;
+    if (!answerToSubmit || !currentQuestion || hasSubmitted || isFairPlayLocked)
+      return;
 
     setHasSubmitted(true);
     console.log("🎯 Submitting answer:", {
@@ -650,6 +703,40 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     return textStyle;
   };
 
+  const renderFairPlayStatus = () => {
+    if (!fairPlayEnabled) {
+      return null;
+    }
+
+    const isLocked = isFairPlayLocked;
+
+    return (
+      <View
+        style={[
+          styles.fairPlayBanner,
+          isLocked && styles.fairPlayBannerWarning,
+        ]}
+      >
+        <MaterialIcons
+          name={isLocked ? "block" : "verified-user"}
+          size={20}
+          color={isLocked ? colors.red[500] : colors.tea[400]}
+        />
+        <Text
+          style={[
+            styles.fairPlayText,
+            isLocked && styles.fairPlayTextWarning,
+          ]}
+        >
+          {isLocked
+            ? fairPlayStatus?.message ||
+              `Fair Play strike ${fairPlayStrikeCount}/${fairPlayMaxStrikes}. You are frozen for this question.`
+            : `Fair Play Mode active - ${fairPlayStrikeCount}/${fairPlayMaxStrikes} strikes`}
+        </Text>
+      </View>
+    );
+  };
+
   if (!currentQuestion) {
     return (
       <View style={styles.container}>
@@ -681,6 +768,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
             </View>
           )}
         </AppCard>
+        {renderFairPlayStatus()}
 
         {isTextInputQuestion ? (
           <View style={styles.textAnswerContainer}>
@@ -690,7 +778,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
               onChangeText={setSelectedAnswer}
               placeholder="Type your answer"
               placeholderTextColor={colors.stone[400]}
-              editable={!hasSubmitted}
+              editable={!hasSubmitted && !isFairPlayLocked}
               autoCapitalize="none"
               autoCorrect
               returnKeyType="done"
@@ -706,9 +794,12 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
                 style={{ transform: [{ scale: pulseAnimation }] }}
               >
                 <TouchableOpacity
-                  style={getAnswerButtonStyle(answer)}
+                  style={[
+                    getAnswerButtonStyle(answer),
+                    isFairPlayLocked && styles.answerButtonDisabled,
+                  ]}
                   onPress={() => selectAnswer(answer.option)}
-                  disabled={hasSubmitted || showResults}
+                  disabled={hasSubmitted || showResults || isFairPlayLocked}
                   activeOpacity={0.8}
                 >
                   <Text style={getAnswerTextStyle(answer)}>
@@ -734,7 +825,10 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           </View>
         )}
 
-        {selectedAnswer?.trim() && !hasSubmitted && !showResults && (
+        {selectedAnswer?.trim() &&
+          !hasSubmitted &&
+          !showResults &&
+          !isFairPlayLocked && (
           <View style={styles.submitContainer}>
             <AppButton
               title="Submit Answer"
@@ -859,6 +953,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     minHeight: 60,
   },
+  answerButtonDisabled: {
+    opacity: 0.55,
+  },
   selectedAnswer: {
     backgroundColor: colors.tea[500] + "20",
     borderColor: colors.tea[500],
@@ -891,6 +988,30 @@ const styles = StyleSheet.create({
   incorrectAnswerText: {
     color: colors.red[500],
     fontWeight: "bold",
+  },
+  fairPlayBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: colors.ink[800],
+    borderColor: colors.tea[500],
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  fairPlayBannerWarning: {
+    borderColor: colors.red[500],
+    backgroundColor: colors.red[500] + "14",
+  },
+  fairPlayText: {
+    ...typography.body,
+    color: colors.stone[300],
+    flex: 1,
+    fontWeight: "600",
+  },
+  fairPlayTextWarning: {
+    color: colors.stone[100],
   },
   submitContainer: {
     paddingTop: 16,
