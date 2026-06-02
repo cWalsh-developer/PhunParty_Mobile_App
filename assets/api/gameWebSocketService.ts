@@ -76,14 +76,21 @@ export interface FairPlayStatus {
   player_id?: string;
   strike_count?: number;
   strikeCount?: number;
+  fair_play_strikes?: number;
   max_strikes?: number;
   maxStrikes?: number;
+  max_fair_play_strikes?: number;
+  max_cheat_strikes?: number;
   is_frozen?: boolean;
   isFrozen?: boolean;
+  frozen_for_question?: boolean;
   frozen_question_id?: string;
   frozenQuestionId?: string;
+  question_id?: string;
   is_kicked?: boolean;
   isKicked?: boolean;
+  answered_current?: boolean;
+  answer_status?: string;
   reason?: string;
   message?: string;
   event_type?: string;
@@ -135,6 +142,7 @@ export class GameWebSocketService {
   public onPlayerLeft: ((playerInfo: any) => void) | null = null;
   public onGameEnded: ((data: any) => void) | null = null;
   public onAnswerSubmitted: ((data: any) => void) | null = null;
+  public onAnswerRejected: ((data: any) => void) | null = null;
   public onBuzzerUpdate: ((data: any) => void) | null = null;
   public onError: ((error: string) => void) | null = null;
   public onPhaseChange: ((phase: GamePhase, data?: any) => void) | null = null;
@@ -676,17 +684,7 @@ export class GameWebSocketService {
         break;
 
       case "kicked_from_session":
-        this.shouldReconnect = false;
-        this.onKickedFromSession?.({
-          ...(message.data ?? {}),
-          is_kicked: true,
-          event_type: message.type,
-        });
-        try {
-          this.ws?.close(1000, "Kicked from session");
-        } catch {
-          // Ignore close failures; the UI already has the authoritative event.
-        }
+        this.handleKickedFromSession(message.data ?? {}, message.type);
         break;
 
       case "game_ended":
@@ -704,6 +702,11 @@ export class GameWebSocketService {
         });
         break;
 
+      case "answer_rejected":
+      case "buzzer_rejected":
+        this.handleRejectedPlayerAction(message.type, message.data ?? {});
+        break;
+
       case "ui_update":
       case "buzzer_winner":
       case "correct_answer":
@@ -717,6 +720,21 @@ export class GameWebSocketService {
 
       case "pong":
         this.updateServerOffset(message.data?.serverTime ?? message.serverTime);
+        break;
+
+      case "player_kicked":
+        if (
+          !message.data?.player_id ||
+          message.data.player_id === this.playerInfo?.player_id
+        ) {
+          this.handleKickedFromSession(message.data ?? {}, message.type);
+        } else {
+          this.onFairPlayStatusUpdate?.({
+            ...(message.data ?? {}),
+            is_kicked: true,
+            event_type: message.type,
+          });
+        }
         break;
 
       case "error":
@@ -843,6 +861,45 @@ export class GameWebSocketService {
 
     if (playerStatus) {
       this.onFairPlayStatusUpdate?.(playerStatus);
+    }
+  }
+
+  private handleRejectedPlayerAction(type: string, data: any): void {
+    const rejectedData = {
+      ...data,
+      event_type: type,
+    };
+
+    if (data?.reason === "fair_play_restriction") {
+      this.onFairPlayStatusUpdate?.({
+        player_id: this.playerInfo?.player_id,
+        question_id: data.question_id,
+        strike_count: data.strike_count,
+        max_strikes: data.max_strikes,
+        is_frozen: true,
+        frozen_question_id: data.question_id,
+        reason: data.reason,
+        message:
+          data.message ||
+          "You are frozen for this question because of Fair Play Mode.",
+        event_type: type,
+      });
+    }
+
+    this.onAnswerRejected?.(rejectedData);
+  }
+
+  private handleKickedFromSession(data: any, eventType: string): void {
+    this.shouldReconnect = false;
+    this.onKickedFromSession?.({
+      ...data,
+      is_kicked: true,
+      event_type: eventType,
+    });
+    try {
+      this.ws?.close(1000, "Kicked from session");
+    } catch {
+      // Ignore close failures; the UI already has the authoritative event.
     }
   }
 

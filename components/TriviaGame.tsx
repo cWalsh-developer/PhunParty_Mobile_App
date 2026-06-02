@@ -125,6 +125,15 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   }, [currentQuestion]);
 
   useEffect(() => {
+    if (!isFairPlayLocked) {
+      return;
+    }
+
+    setHasSubmitted(false);
+    setShowResults(false);
+  }, [isFairPlayLocked, currentQuestionId]);
+
+  useEffect(() => {
     setupWebSocketListeners();
 
     // Don't auto-fetch - wait for question_started event from backend
@@ -348,6 +357,17 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       } else {
         console.log("⚠️ Answer event without is_correct flag - ignoring");
       }
+    };
+
+    gameWebSocket.onAnswerRejected = (data: any) => {
+      if (data.reason === "fair_play_restriction") {
+        setHasSubmitted(false);
+        setShowResults(false);
+        return;
+      }
+
+      setHasSubmitted(false);
+      onError(data.message || "Your answer was rejected.");
     };
 
     gameWebSocket.onBuzzerUpdate = (data: any) => {

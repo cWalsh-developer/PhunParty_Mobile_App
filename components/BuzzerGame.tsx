@@ -117,6 +117,23 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     onViolation: handleFairPlayViolation,
   });
 
+  useEffect(() => {
+    if (!isFairPlayLocked) {
+      return;
+    }
+
+    setHasSubmittedAnswer(false);
+    stopGlowAnimation();
+    setBuzzerState((prev) => ({
+      ...prev,
+      buttonState: "frozen",
+      isActive: false,
+      canBuzz: false,
+      canAnswer: false,
+      statusText: "Fair Play freeze. Wait for the next question.",
+    }));
+  }, [isFairPlayLocked, currentQuestionId]);
+
   const fetchCurrentQuestion = async () => {
     try {
       const API = (await APIGame).default;
@@ -513,6 +530,27 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         applyQuestionAnswerData(data.question);
         startGlowAnimation();
       }
+    };
+
+    gameWebSocket.onAnswerRejected = (data: any) => {
+      if (data.reason === "fair_play_restriction") {
+        setHasSubmittedAnswer(false);
+        stopGlowAnimation();
+        setBuzzerState((prev) => ({
+          ...prev,
+          buttonState: "frozen",
+          isActive: false,
+          canBuzz: false,
+          canAnswer: false,
+          statusText:
+            data.message ||
+            "You are frozen for this question because of Fair Play Mode.",
+        }));
+        return;
+      }
+
+      setHasSubmittedAnswer(false);
+      onError(data.message || "Your action was rejected.");
     };
 
     gameWebSocket.onGameEnded = (data: any) => {
