@@ -92,11 +92,18 @@ export const pushNotificationService = {
       projectId ? { projectId } : undefined,
     );
 
-    await notificationsApi.registerPushToken({
+    const response = await notificationsApi.registerPushToken({
       expo_push_token: token.data,
       device_id: Device.deviceName || null,
       platform: Platform.OS,
     });
+
+    if (!response.isSuccess) {
+      return {
+        registered: false,
+        message: response.message || "Could not save push token.",
+      };
+    }
 
     return {
       registered: true,

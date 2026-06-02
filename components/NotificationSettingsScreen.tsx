@@ -137,6 +137,20 @@ export default function NotificationSettingsScreen({
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
+  const registerCurrentDeviceForPush = async () => {
+    const pushResult =
+      await pushNotificationService.registerForPushNotifications();
+
+    if (!pushResult.registered) {
+      setStatusMessage(
+        pushResult.message || "Push notifications could not be enabled.",
+      );
+      return false;
+    }
+
+    return true;
+  };
+
   useEffect(() => {
     const timeout = setTimeout(async () => {
       try {
@@ -152,9 +166,19 @@ export default function NotificationSettingsScreen({
             ...prev,
             friendRequests: friendRequestsEnabled,
           }));
+
+          if (friendRequestsEnabled) {
+            setLoading(true);
+            const registered = await registerCurrentDeviceForPush();
+            if (registered) {
+              setStatusMessage("This device is registered for notifications.");
+            }
+          }
         }
       } catch {
         setStatusMessage("Could not load notification preferences.");
+      } finally {
+        setLoading(false);
       }
     }, 0);
 
@@ -181,14 +205,10 @@ export default function NotificationSettingsScreen({
 
     try {
       if (value) {
-        const pushResult =
-          await pushNotificationService.registerForPushNotifications();
+        const registered = await registerCurrentDeviceForPush();
 
-        if (!pushResult.registered) {
+        if (!registered) {
           setPreferences(previousPreferences);
-          setStatusMessage(
-            pushResult.message || "Push notifications could not be enabled.",
-          );
           return;
         }
       }

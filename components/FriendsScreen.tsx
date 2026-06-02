@@ -1,6 +1,6 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { Camera, CameraView } from "expo-camera";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import {
   FriendRequest,
   friendsApi,
 } from "../assets/api/friendsApi";
+import { pushNotificationService } from "../assets/api/pushNotificationService";
 import { AppButton, AppCard } from "../assets/components";
 import { colors, typography } from "../assets/theme";
 
@@ -135,6 +136,7 @@ export default function FriendsScreen({
     null,
   );
   const [scannerScanned, setScannerScanned] = useState(false);
+  const pushRegistrationAttemptedRef = useRef(false);
 
   const friendQrValue = useMemo(
     () => (friendCode ? createFriendQrValue(friendCode) : ""),
@@ -171,6 +173,22 @@ export default function FriendsScreen({
 
       if (codeResponse.isSuccess && codeResponse.result?.friend_code) {
         setFriendCode(codeResponse.result.friend_code);
+
+        if (
+          codeResponse.result.friend_request_notifications_enabled &&
+          !pushRegistrationAttemptedRef.current
+        ) {
+          pushRegistrationAttemptedRef.current = true;
+          const pushResult =
+            await pushNotificationService.registerForPushNotifications();
+
+          if (!pushResult.registered) {
+            setMessage(
+              pushResult.message ||
+                "This device is not registered for push notifications.",
+            );
+          }
+        }
       }
 
       if (friendsResponse.isSuccess) {
