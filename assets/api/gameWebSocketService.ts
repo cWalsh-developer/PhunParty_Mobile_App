@@ -81,6 +81,7 @@ export class GameWebSocketService {
   private currentPhase: GamePhase = "lobby";
   private isConnecting = false;
   private shouldReconnect = true;
+  private cachedWebSocketUrl: string | null = null;
   private lastActivityAt = Date.now();
   private readonly HEARTBEAT_TIMEOUT = 60000;
 
@@ -194,6 +195,15 @@ export class GameWebSocketService {
       return false;
     }
 
+    const isSameSession =
+      this.sessionCode === sessionCode &&
+      this.playerInfo?.player_id === playerInfo.player_id;
+
+    if (!isSameSession) {
+      this.cachedWebSocketUrl = null;
+      this.reconnectAttempts = 0;
+    }
+
     this.sessionCode = sessionCode;
     this.playerInfo = playerInfo;
     this.shouldReconnect = true;
@@ -234,6 +244,7 @@ export class GameWebSocketService {
         playerInfo,
       );
 
+      this.cachedWebSocketUrl = wsUrl;
       this.openWebSocket(wsUrl);
       return true;
     } catch (error: any) {
@@ -261,6 +272,7 @@ export class GameWebSocketService {
     }
 
     this.resetConnectionState();
+    this.cachedWebSocketUrl = null;
     this.sessionCode = null;
     this.playerInfo = null;
   }
@@ -968,9 +980,18 @@ export class GameWebSocketService {
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
 
-      if (this.sessionCode && this.playerInfo && this.shouldReconnect) {
-        this.connect(this.sessionCode, this.playerInfo);
+      if (!this.sessionCode || !this.playerInfo || !this.shouldReconnect) {
+        return;
       }
+
+      if (this.cachedWebSocketUrl) {
+        this.isConnecting = true;
+        this.setConnectionState("reconnecting");
+        this.openWebSocket(this.cachedWebSocketUrl);
+        return;
+      }
+
+      this.connect(this.sessionCode, this.playerInfo);
     }, delay);
   }
 
