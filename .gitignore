@@ -45,3 +45,6 @@ app-example
 # builds
 .apk
 
+#google services.json
+google-services.json
+

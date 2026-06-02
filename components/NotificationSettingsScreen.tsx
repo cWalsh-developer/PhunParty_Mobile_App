@@ -1,15 +1,19 @@
 import { colors, layoutStyles, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { openSettings } from "expo-linking";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
+  ActivityIndicator,
   ScrollView,
   Switch,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { friendsApi } from "../assets/api/friendsApi";
+import { notificationsApi } from "../assets/api/notificationsApi";
+import { pushNotificationService } from "../assets/api/pushNotificationService";
 import { AppCard } from "../assets/components";
 import Selector from "./Selector";
 
@@ -29,72 +33,28 @@ interface NotificationPreferences {
   doNotDisturbEnd: string;
 }
 
-export default function NotificationSettingsScreen({
-  onBack,
-}: NotificationSettingsScreenProps) {
-  const [preferences, setPreferences] = useState<NotificationPreferences>({
-    gameInvitations: true,
-    gameStart: true,
-    friendRequests: true,
-    systemAnnouncements: true,
-    sound: true,
-    vibration: true,
-    doNotDisturb: false,
-    doNotDisturbStart: "22:00",
-    doNotDisturbEnd: "08:00",
-  });
+interface SettingRowProps {
+  title: string;
+  subtitle?: string;
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+  icon: keyof typeof MaterialIcons.glyphMap;
+  disabled?: boolean;
+  testable?: boolean;
+  onTest?: () => void;
+}
 
-  const [loading, setLoading] = useState(false);
-
-  const updatePreference = (
-    key: keyof NotificationPreferences,
-    value: boolean,
-  ) => {
-    setPreferences((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-    // TODO: Save to AsyncStorage and sync with backend
-  };
-
-  const testNotification = () => {
-    Alert.alert("Test Notification", "A test notification would be sent now!", [
-      { text: "OK" },
-    ]);
-    // TODO: Implement actual test notification
-  };
-
-  const openSystemSettings = () => {
-    Alert.alert(
-      "System Settings",
-      "You can manage app notifications in your device's Settings app.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Open Settings",
-          onPress: () => {
-            openSettings();
-          },
-        },
-      ],
-    );
-  };
-
-  const SettingRow = ({
-    title,
-    subtitle,
-    value,
-    onValueChange,
-    icon,
-    testable = false,
-  }: {
-    title: string;
-    subtitle?: string;
-    value: boolean;
-    onValueChange: (value: boolean) => void;
-    icon: keyof typeof MaterialIcons.glyphMap;
-    testable?: boolean;
-  }) => (
+function SettingRow({
+  title,
+  subtitle,
+  value,
+  onValueChange,
+  icon,
+  disabled = false,
+  testable = false,
+  onTest,
+}: SettingRowProps) {
+  return (
     <View
       style={{
         flexDirection: "row",
@@ -127,9 +87,9 @@ export default function NotificationSettingsScreen({
           </Text>
         )}
       </View>
-      {testable && value && (
+      {testable && value && onTest && (
         <TouchableOpacity
-          onPress={testNotification}
+          onPress={onTest}
           style={{
             paddingHorizontal: 12,
             paddingVertical: 6,
@@ -151,11 +111,147 @@ export default function NotificationSettingsScreen({
       <Switch
         value={value}
         onValueChange={onValueChange}
+        disabled={disabled}
         trackColor={{ false: colors.stone[400], true: colors.tea[400] }}
         thumbColor={value ? colors.stone[100] : colors.stone[300]}
       />
     </View>
   );
+}
+
+export default function NotificationSettingsScreen({
+  onBack,
+}: NotificationSettingsScreenProps) {
+  const [preferences, setPreferences] = useState<NotificationPreferences>({
+    gameInvitations: true,
+    gameStart: true,
+    friendRequests: true,
+    systemAnnouncements: true,
+    sound: true,
+    vibration: true,
+    doNotDisturb: false,
+    doNotDisturbStart: "22:00",
+    doNotDisturbEnd: "08:00",
+  });
+
+  const [loading, setLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timeout = setTimeout(async () => {
+      try {
+        const response = await friendsApi.getMyCode();
+        const friendRequestsEnabled =
+          response.result?.friend_request_notifications_enabled;
+
+        if (
+          response.isSuccess &&
+          typeof friendRequestsEnabled === "boolean"
+        ) {
+          setPreferences((prev) => ({
+            ...prev,
+            friendRequests: friendRequestsEnabled,
+          }));
+        }
+      } catch {
+        setStatusMessage("Could not load notification preferences.");
+      }
+    }, 0);
+
+    return () => clearTimeout(timeout);
+  }, []);
+
+  const updatePreference = async (
+    key: keyof NotificationPreferences,
+    value: boolean,
+  ) => {
+    const previousPreferences = preferences;
+
+    setPreferences({
+      ...preferences,
+      [key]: value,
+    });
+    setStatusMessage(null);
+
+    if (key !== "friendRequests") {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      if (value) {
+        const pushResult =
+          await pushNotificationService.registerForPushNotifications();
+
+        if (!pushResult.registered) {
+          setPreferences(previousPreferences);
+          setStatusMessage(
+            pushResult.message || "Push notifications could not be enabled.",
+          );
+          return;
+        }
+      }
+
+      const response = await notificationsApi.updateSettings({
+        friend_request_notifications_enabled: value,
+      });
+
+      if (!response.isSuccess) {
+        setPreferences(previousPreferences);
+        setStatusMessage(
+          response.message || "Could not update notification preferences.",
+        );
+        return;
+      }
+
+      setStatusMessage(
+        value
+          ? "Friend request notifications enabled."
+          : "Friend request notifications disabled.",
+      );
+    } catch (error: any) {
+      setPreferences(previousPreferences);
+      setStatusMessage(
+        error.message || "Could not update notification preferences.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateLocalPreference = (
+    key: keyof NotificationPreferences,
+    value: boolean,
+  ) => {
+    setPreferences((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const testNotification = () => {
+    Alert.alert("Test Notification", "A test notification would be sent now!", [
+      { text: "OK" },
+    ]);
+    // TODO: Implement actual test notification
+  };
+
+  const openSystemSettings = () => {
+    Alert.alert(
+      "System Settings",
+      "You can manage app notifications in your device's Settings app.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Open Settings",
+          onPress: () => {
+            openSettings();
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <ScrollView
@@ -251,6 +347,32 @@ export default function NotificationSettingsScreen({
         </Selector>
       </AppCard>
 
+      {statusMessage && (
+        <AppCard
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 24,
+            borderColor: colors.tea[400],
+            borderWidth: 1,
+          }}
+        >
+          {loading ? (
+            <ActivityIndicator color={colors.tea[400]} />
+          ) : (
+            <MaterialIcons
+              name="info-outline"
+              size={20}
+              color={colors.tea[400]}
+            />
+          )}
+          <Text style={[typography.small, { color: colors.stone[100], flex: 1 }]}>
+            {statusMessage}
+          </Text>
+        </AppCard>
+      )}
+
       {/* Game Notifications */}
       <AppCard style={{ marginBottom: 24 }}>
         <Text
@@ -268,19 +390,23 @@ export default function NotificationSettingsScreen({
             subtitle="When someone invites you to play"
             value={preferences.gameInvitations}
             onValueChange={(value) =>
-              updatePreference("gameInvitations", value)
+              updateLocalPreference("gameInvitations", value)
             }
             icon="group-add"
+            disabled={loading}
             testable={true}
+            onTest={testNotification}
           />
 
           <SettingRow
             title="Game Start"
             subtitle="When a game you've joined is starting"
             value={preferences.gameStart}
-            onValueChange={(value) => updatePreference("gameStart", value)}
+            onValueChange={(value) => updateLocalPreference("gameStart", value)}
             icon="play-circle-outline"
+            disabled={loading}
             testable={true}
+            onTest={testNotification}
           />
 
           <SettingRow
@@ -289,6 +415,7 @@ export default function NotificationSettingsScreen({
             value={preferences.friendRequests}
             onValueChange={(value) => updatePreference("friendRequests", value)}
             icon="person-add"
+            disabled={loading}
           />
         </View>
       </AppCard>
@@ -309,9 +436,10 @@ export default function NotificationSettingsScreen({
           subtitle="Important updates and announcements"
           value={preferences.systemAnnouncements}
           onValueChange={(value) =>
-            updatePreference("systemAnnouncements", value)
+            updateLocalPreference("systemAnnouncements", value)
           }
           icon="campaign"
+          disabled={loading}
         />
       </AppCard>
 
@@ -331,17 +459,20 @@ export default function NotificationSettingsScreen({
             title="Sound"
             subtitle="Play notification sounds"
             value={preferences.sound}
-            onValueChange={(value) => updatePreference("sound", value)}
+            onValueChange={(value) => updateLocalPreference("sound", value)}
             icon="volume-up"
+            disabled={loading}
             testable={true}
+            onTest={testNotification}
           />
 
           <SettingRow
             title="Vibration"
             subtitle="Vibrate on notifications"
             value={preferences.vibration}
-            onValueChange={(value) => updatePreference("vibration", value)}
+            onValueChange={(value) => updateLocalPreference("vibration", value)}
             icon="vibration"
+            disabled={loading}
           />
         </View>
       </AppCard>
@@ -371,8 +502,11 @@ export default function NotificationSettingsScreen({
               : "Disabled"
           }
           value={preferences.doNotDisturb}
-          onValueChange={(value) => updatePreference("doNotDisturb", value)}
+          onValueChange={(value) =>
+            updateLocalPreference("doNotDisturb", value)
+          }
           icon="do-not-disturb"
+          disabled={loading}
         />
 
         {preferences.doNotDisturb && (

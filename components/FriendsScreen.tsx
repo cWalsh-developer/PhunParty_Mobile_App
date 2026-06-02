@@ -1,8 +1,10 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { Camera, CameraView } from "expo-camera";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -11,23 +13,20 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import qrcode from "qrcode-generator";
 import {
   FriendProfile,
   FriendRequest,
   friendsApi,
 } from "../assets/api/friendsApi";
-import {
-  AppNotification,
-  notificationsApi,
-} from "../assets/api/notificationsApi";
-import { pushNotificationService } from "../assets/api/pushNotificationService";
 import { AppButton, AppCard } from "../assets/components";
 import { colors, typography } from "../assets/theme";
 
-type FriendsView = "friends" | "add" | "requests" | "notifications";
+type FriendsView = "friends" | "add" | "requests";
 
 interface FriendsScreenProps {
   playerId?: string | null;
+  onAuthInvalid?: () => void;
 }
 
 const getProfileName = (profile?: FriendProfile | null) =>
@@ -65,7 +64,60 @@ const canSendFriendRequest = (profile: FriendProfile | null) =>
   !!profile &&
   (!profile.relationship_status || profile.relationship_status === "none");
 
-export default function FriendsScreen({ playerId }: FriendsScreenProps) {
+const FRIEND_QR_TYPE = "phunparty_friend_code";
+const FRIEND_CODE_PATTERN = /^[A-Z0-9]{4,32}$/;
+
+const normalizeFriendCode = (value: string) =>
+  value.trim().toUpperCase().replace(/\s+/g, "");
+
+const createFriendQrValue = (code: string) =>
+  JSON.stringify({
+    type: FRIEND_QR_TYPE,
+    friend_code: normalizeFriendCode(code),
+  });
+
+const extractFriendCodeFromQr = (data: string) => {
+  const directCode = normalizeFriendCode(data);
+  if (FRIEND_CODE_PATTERN.test(directCode)) {
+    return directCode;
+  }
+
+  try {
+    const parsed = JSON.parse(data);
+    const parsedCode = normalizeFriendCode(
+      parsed.friend_code || parsed.friendCode || "",
+    );
+
+    if (
+      (!parsed.type || parsed.type === FRIEND_QR_TYPE) &&
+      FRIEND_CODE_PATTERN.test(parsedCode)
+    ) {
+      return parsedCode;
+    }
+  } catch {
+    // Fall through to URL parsing.
+  }
+
+  try {
+    const url = new URL(data);
+    const urlCode = normalizeFriendCode(
+      url.searchParams.get("friend_code") || url.searchParams.get("code") || "",
+    );
+
+    if (FRIEND_CODE_PATTERN.test(urlCode)) {
+      return urlCode;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+export default function FriendsScreen({
+  playerId,
+  onAuthInvalid,
+}: FriendsScreenProps) {
   const [currentView, setCurrentView] = useState<FriendsView>("friends");
   const [friendCode, setFriendCode] = useState<string | null>(null);
   const [searchCode, setSearchCode] = useState("");
@@ -73,20 +125,32 @@ export default function FriendsScreen({ playerId }: FriendsScreenProps) {
   const [friends, setFriends] = useState<FriendProfile[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
   const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>([]);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [qrModalVisible, setQrModalVisible] = useState(false);
+  const [scannerVisible, setScannerVisible] = useState(false);
+  const [scannerPermission, setScannerPermission] = useState<boolean | null>(
+    null,
+  );
+  const [scannerScanned, setScannerScanned] = useState(false);
 
-  const unreadCount = useMemo(
-    () => notifications.filter((item) => !item.is_read).length,
-    [notifications],
+  const friendQrValue = useMemo(
+    () => (friendCode ? createFriendQrValue(friendCode) : ""),
+    [friendCode],
   );
 
   const pendingIncomingCount = incomingRequests.length;
 
   const loadFriendsData = useCallback(async (showLoader = false) => {
+    if (!playerId) {
+      setLoading(false);
+      setRefreshing(false);
+      setMessage("Sign in again to use friends.");
+      return;
+    }
+
     if (showLoader) {
       setLoading(true);
     }
@@ -98,13 +162,11 @@ export default function FriendsScreen({ playerId }: FriendsScreenProps) {
         friendsResponse,
         incomingResponse,
         outgoingResponse,
-        notificationResponse,
       ] = await Promise.all([
         friendsApi.getMyCode(),
         friendsApi.getFriends(),
         friendsApi.getIncomingRequests(),
         friendsApi.getOutgoingRequests(),
-        notificationsApi.getNotifications(),
       ]);
 
       if (codeResponse.isSuccess && codeResponse.result?.friend_code) {
@@ -123,19 +185,20 @@ export default function FriendsScreen({ playerId }: FriendsScreenProps) {
         setOutgoingRequests(outgoingResponse.result || []);
       }
 
-      if (notificationResponse.isSuccess) {
-        setNotifications(notificationResponse.result || []);
-      }
-
       const firstFailure = [
         codeResponse,
         friendsResponse,
         incomingResponse,
         outgoingResponse,
-        notificationResponse,
       ].find((response) => !response.isSuccess);
 
       if (firstFailure) {
+        if (firstFailure.status === 401) {
+          setMessage("Your session has expired. Please log in again.");
+          onAuthInvalid?.();
+          return;
+        }
+
         setMessage(
           firstFailure.message ||
             "Friends endpoints are not available yet. Deploy the backend friend API, then pull to refresh.",
@@ -147,7 +210,7 @@ export default function FriendsScreen({ playerId }: FriendsScreenProps) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [onAuthInvalid, playerId]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -162,8 +225,8 @@ export default function FriendsScreen({ playerId }: FriendsScreenProps) {
     loadFriendsData();
   };
 
-  const searchFriend = async () => {
-    const code = searchCode.trim();
+  const searchFriendCode = async (friendCodeToSearch: string) => {
+    const code = normalizeFriendCode(friendCodeToSearch);
     if (!code) {
       setMessage("Enter a friend code first.");
       return;
@@ -172,6 +235,7 @@ export default function FriendsScreen({ playerId }: FriendsScreenProps) {
     setActionId("search");
     setMessage(null);
     setSearchResult(null);
+    setSearchCode(code);
 
     try {
       const response = await friendsApi.searchByCode(code);
@@ -185,6 +249,10 @@ export default function FriendsScreen({ playerId }: FriendsScreenProps) {
     } finally {
       setActionId(null);
     }
+  };
+
+  const searchFriend = async () => {
+    await searchFriendCode(searchCode);
   };
 
   const sendRequest = async () => {
@@ -271,38 +339,40 @@ export default function FriendsScreen({ playerId }: FriendsScreenProps) {
     );
   };
 
-  const markNotificationRead = async (notificationId: string) => {
-    setActionId(notificationId);
-    try {
-      await notificationsApi.markRead(notificationId);
-      await loadFriendsData();
-    } finally {
-      setActionId(null);
-    }
+  const openFriendScanner = async () => {
+    const { status } = await Camera.requestCameraPermissionsAsync();
+    const hasPermission = status === "granted";
+
+    setScannerPermission(hasPermission);
+    setScannerScanned(false);
+    setScannerVisible(true);
   };
 
-  const markAllNotificationsRead = async () => {
-    setActionId("read-all");
-    try {
-      await notificationsApi.markAllRead();
-      await loadFriendsData();
-    } finally {
-      setActionId(null);
+  const handleFriendQrScanned = async ({ data }: { data: string }) => {
+    if (scannerScanned) {
+      return;
     }
-  };
 
-  const enablePushNotifications = async () => {
-    setActionId("push");
-    try {
-      const result = await pushNotificationService.registerForPushNotifications();
-      setMessage(
-        result.registered
-          ? "Push notifications enabled."
-          : result.message || "Push notifications could not be enabled.",
+    setScannerScanned(true);
+    const scannedFriendCode = extractFriendCodeFromQr(data);
+
+    if (!scannedFriendCode) {
+      Alert.alert(
+        "Invalid Friend QR",
+        "That QR code does not contain a PhunParty friend code.",
+        [
+          {
+            text: "Try Again",
+            onPress: () => setScannerScanned(false),
+          },
+        ],
       );
-    } finally {
-      setActionId(null);
+      return;
     }
+
+    setScannerVisible(false);
+    setCurrentView("add");
+    await searchFriendCode(scannedFriendCode);
   };
 
   const renderProfileRow = (
@@ -369,8 +439,26 @@ export default function FriendsScreen({ playerId }: FriendsScreenProps) {
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Add Friend</Text>
       <AppCard style={styles.codeCard}>
-        <Text style={styles.label}>Your friend code</Text>
-        <Text style={styles.friendCode}>{friendCode || "Not available yet"}</Text>
+        <View style={styles.codeCardContent}>
+          <View style={styles.codeTextBlock}>
+            <Text style={styles.label}>Your friend code</Text>
+            <Text style={styles.friendCode} numberOfLines={1}>
+              {friendCode || "Not available yet"}
+            </Text>
+          </View>
+
+          {friendCode && (
+            <TouchableOpacity
+              style={styles.qrPreviewButton}
+              onPress={() => setQrModalVisible(true)}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Enlarge friend QR code"
+            >
+              <FriendQrCode value={friendQrValue} size={74} />
+            </TouchableOpacity>
+          )}
+        </View>
       </AppCard>
 
       <View style={styles.searchRow}>
@@ -395,6 +483,13 @@ export default function FriendsScreen({ playerId }: FriendsScreenProps) {
           )}
         </TouchableOpacity>
       </View>
+
+      <AppButton
+        title="Scan Friend QR"
+        onPress={openFriendScanner}
+        variant="secondary"
+        icon={<MaterialIcons name="qr-code-scanner" size={20} color={colors.tea[500]} />}
+      />
 
       {searchResult && (
         <View style={styles.searchResult}>
@@ -498,70 +593,12 @@ export default function FriendsScreen({ playerId }: FriendsScreenProps) {
     </View>
   );
 
-  const renderNotifications = () => (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Notifications</Text>
-        {unreadCount > 0 && (
-          <TouchableOpacity onPress={markAllNotificationsRead}>
-            <Text style={styles.linkText}>Mark all read</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <AppButton
-        title="Enable Push Notifications"
-        onPress={enablePushNotifications}
-        variant="secondary"
-        disabled={actionId === "push"}
-        style={styles.pushButton}
-        icon={<MaterialIcons name="notifications" size={20} color={colors.tea[500]} />}
-      />
-
-      {notifications.length === 0 ? (
-        <EmptyState
-          icon="notifications-none"
-          title="No notifications"
-          body="Friend request updates will appear here."
-        />
-      ) : (
-        notifications.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            onPress={() => markNotificationRead(item.id)}
-            disabled={item.is_read || actionId === item.id}
-            activeOpacity={0.8}
-          >
-            <AppCard
-              style={[
-                styles.notificationCard,
-                !item.is_read && styles.unreadNotification,
-              ]}
-            >
-              <MaterialIcons
-                name={item.is_read ? "notifications-none" : "notifications-active"}
-                size={22}
-                color={item.is_read ? colors.stone[400] : colors.tea[500]}
-              />
-              <View style={styles.rowBody}>
-                <Text style={styles.rowTitle}>{item.title}</Text>
-                <Text style={styles.rowSubtitle}>{item.body}</Text>
-              </View>
-            </AppCard>
-          </TouchableOpacity>
-        ))
-      )}
-    </View>
-  );
-
   const renderActiveView = () => {
     switch (currentView) {
       case "add":
         return renderAddFriend();
       case "requests":
         return renderRequests();
-      case "notifications":
-        return renderNotifications();
       case "friends":
       default:
         return renderFriendList();
@@ -598,12 +635,6 @@ export default function FriendsScreen({ playerId }: FriendsScreenProps) {
           active={currentView === "requests"}
           onPress={() => setCurrentView("requests")}
         />
-        <SegmentButton
-          label={`Alerts${unreadCount ? ` ${unreadCount}` : ""}`}
-          icon="notifications"
-          active={currentView === "notifications"}
-          onPress={() => setCurrentView("notifications")}
-        />
       </View>
 
       {!!message && (
@@ -631,7 +662,172 @@ export default function FriendsScreen({ playerId }: FriendsScreenProps) {
           {renderActiveView()}
         </ScrollView>
       )}
+
+      {renderFriendQrModal({
+        friendCode,
+        friendQrValue,
+        visible: qrModalVisible,
+        onClose: () => setQrModalVisible(false),
+      })}
+
+      {renderFriendScanner({
+        visible: scannerVisible,
+        hasPermission: scannerPermission,
+        scanned: scannerScanned,
+        onClose: () => {
+          setScannerVisible(false);
+          setScannerScanned(false);
+        },
+        onScanned: handleFriendQrScanned,
+      })}
     </View>
+  );
+}
+
+function renderFriendQrModal({
+  friendCode,
+  friendQrValue,
+  visible,
+  onClose,
+}: {
+  friendCode: string | null;
+  friendQrValue: string;
+  visible: boolean;
+  onClose: () => void;
+}) {
+  if (!friendCode) {
+    return null;
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalContainer}>
+        <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
+          <MaterialIcons name="close" size={30} color={colors.stone[100]} />
+        </TouchableOpacity>
+
+        <View style={styles.enlargedQrCard}>
+          <FriendQrCode value={friendQrValue} size={250} />
+          <Text style={styles.enlargedQrCode}>{friendCode}</Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+      </View>
+    </Modal>
+  );
+}
+
+function FriendQrCode({
+  value,
+  size,
+}: {
+  value: string;
+  size: number;
+}) {
+  const qr = useMemo(() => {
+    const generatedQr = qrcode(0, "M");
+    generatedQr.addData(value);
+    generatedQr.make();
+    return generatedQr;
+  }, [value]);
+  const moduleCount = qr.getModuleCount();
+  const moduleSize = Math.max(1, Math.floor(size / moduleCount));
+  const actualSize = moduleSize * moduleCount;
+
+  return (
+    <View
+      style={[
+        styles.qrMatrix,
+        {
+          width: actualSize,
+          height: actualSize,
+        },
+      ]}
+    >
+      {Array.from({ length: moduleCount }).map((_, row) => (
+        <View key={`row-${row}`} style={styles.qrMatrixRow}>
+          {Array.from({ length: moduleCount }).map((__, column) => (
+            <View
+              key={`${row}-${column}`}
+              style={[
+                styles.qrMatrixCell,
+                {
+                  width: moduleSize,
+                  height: moduleSize,
+                  backgroundColor: qr.isDark(row, column)
+                    ? colors.ink[900]
+                    : colors.stone[100],
+                },
+              ]}
+            />
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function renderFriendScanner({
+  visible,
+  hasPermission,
+  scanned,
+  onClose,
+  onScanned,
+}: {
+  visible: boolean;
+  hasPermission: boolean | null;
+  scanned: boolean;
+  onClose: () => void;
+  onScanned: ({ data }: { data: string }) => void;
+}) {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={styles.scannerContainer}>
+        {hasPermission === false ? (
+          <View style={styles.scannerPermissionCard}>
+            <MaterialIcons
+              name="camera-alt"
+              size={44}
+              color={colors.stone[400]}
+            />
+            <Text style={styles.emptyTitle}>Camera access required</Text>
+            <Text style={styles.emptyBody}>
+              Enable camera access in device settings to scan friend QR codes.
+            </Text>
+          </View>
+        ) : (
+          <CameraView
+            onBarcodeScanned={scanned ? undefined : onScanned}
+            style={styles.scannerCamera}
+            barcodeScannerSettings={{
+              barcodeTypes: ["qr"],
+            }}
+          />
+        )}
+
+        <TouchableOpacity style={styles.scannerCloseButton} onPress={onClose}>
+          <MaterialIcons name="close" size={28} color={colors.stone[100]} />
+        </TouchableOpacity>
+
+        {hasPermission !== false && (
+          <>
+            <View style={styles.scannerFrame} />
+            <View style={styles.scannerHint}>
+              <Text style={styles.scannerHintText}>Scan a friend QR code</Text>
+            </View>
+          </>
+        )}
+      </View>
+    </Modal>
   );
 }
 
@@ -777,6 +973,15 @@ const styles = StyleSheet.create({
   codeCard: {
     padding: 16,
   },
+  codeCardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  codeTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
   label: {
     ...typography.caption,
     textTransform: "uppercase",
@@ -786,6 +991,25 @@ const styles = StyleSheet.create({
     ...typography.h2,
     marginTop: 6,
     color: colors.tea[500],
+  },
+  qrPreviewButton: {
+    width: 88,
+    height: 88,
+    borderRadius: 8,
+    backgroundColor: colors.stone[100],
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colors.tea[500],
+  },
+  qrMatrix: {
+    backgroundColor: colors.stone[100],
+  },
+  qrMatrixRow: {
+    flexDirection: "row",
+  },
+  qrMatrixCell: {
+    backgroundColor: colors.stone[100],
   },
   searchRow: {
     flexDirection: "row",
@@ -885,24 +1109,6 @@ const styles = StyleSheet.create({
   acceptButton: {
     backgroundColor: colors.tea[500],
   },
-  pushButton: {
-    marginBottom: 4,
-  },
-  notificationCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
-  },
-  unreadNotification: {
-    borderColor: colors.tea[500],
-    borderWidth: 1,
-  },
-  linkText: {
-    ...typography.small,
-    color: colors.tea[500],
-    fontWeight: "700",
-  },
   emptyCard: {
     alignItems: "center",
     padding: 24,
@@ -915,5 +1121,101 @@ const styles = StyleSheet.create({
     ...typography.small,
     textAlign: "center",
     marginTop: 4,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 1,
+  },
+  modalCloseButton: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 3,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  enlargedQrCard: {
+    zIndex: 2,
+    backgroundColor: colors.stone[100],
+    borderRadius: 8,
+    padding: 22,
+    alignItems: "center",
+  },
+  enlargedQrCode: {
+    ...typography.h2,
+    color: colors.ink[900],
+    marginTop: 16,
+  },
+  scannerContainer: {
+    flex: 1,
+    backgroundColor: colors.ink[900],
+  },
+  scannerCamera: {
+    flex: 1,
+  },
+  scannerCloseButton: {
+    position: "absolute",
+    top: 54,
+    right: 20,
+    zIndex: 3,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: colors.ink[800],
+    borderWidth: 2,
+    borderColor: colors.tea[400],
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scannerFrame: {
+    position: "absolute",
+    top: "28%",
+    left: "15%",
+    width: "70%",
+    height: "32%",
+    borderWidth: 3,
+    borderColor: colors.tea[400],
+    borderRadius: 12,
+    zIndex: 2,
+  },
+  scannerHint: {
+    position: "absolute",
+    bottom: 95,
+    left: 20,
+    right: 20,
+    alignItems: "center",
+    zIndex: 2,
+  },
+  scannerHintText: {
+    ...typography.body,
+    color: colors.stone[100],
+    fontWeight: "700",
+    textAlign: "center",
+    backgroundColor: `${colors.ink[800]}CC`,
+    borderColor: colors.tea[400],
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  scannerPermissionCard: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
   },
 });

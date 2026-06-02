@@ -11,8 +11,23 @@ export interface DecodedToken {
 
 export const getToken = async (): Promise<string | null> => {
   try {
-    return await SecureStore.getItemAsync(TOKEN_KEY);
+    const token = await SecureStore.getItemAsync(TOKEN_KEY);
+
+    if (!token) {
+      return null;
+    }
+
+    const decodedToken = decodeToken(token);
+    const expiresAtMs = decodedToken?.exp ? decodedToken.exp * 1000 : 0;
+
+    if (!decodedToken || !expiresAtMs || expiresAtMs <= Date.now()) {
+      await removeToken();
+      return null;
+    }
+
+    return token;
   } catch {
+    await removeToken();
     return null;
   }
 };
@@ -34,5 +49,9 @@ export const removeToken = async (): Promise<void> => {
 };
 
 export const decodeToken = (token: string): DecodedToken | null => {
-  return jwtDecode<DecodedToken>(token);
+  try {
+    return jwtDecode<DecodedToken>(token);
+  } catch {
+    return null;
+  }
 };

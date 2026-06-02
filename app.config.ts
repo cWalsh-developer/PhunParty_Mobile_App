@@ -52,6 +52,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: "com.phunparty.mobileapp",
+    googleServicesFile: "./google-services.json",
     adaptiveIcon: {
       foregroundImage: "./assets/images/adaptive-icon.png",
       backgroundColor: "#0a0a0a",

@@ -1,12 +1,13 @@
 //Imports
 import Constants from "expo-constants";
-import { getToken } from "../authentication-storage/authStorage";
+import { getToken, removeToken } from "../authentication-storage/authStorage";
 
 // Define API result shape
 interface APIResponse<T = any> {
   isSuccess: boolean;
   result?: T;
   message?: string;
+  status?: number;
 }
 
 type DataObject = Record<string, any>;
@@ -162,7 +163,7 @@ const callFetch = async <T = any>(
     }
 
     if (response.ok) {
-      return { isSuccess: true, result };
+      return { isSuccess: true, result, status: response.status };
     } else {
       // Extract error message
       const errorMessage =
@@ -171,6 +172,10 @@ const callFetch = async <T = any>(
         result?.error ||
         (typeof result === 'string' ? result : JSON.stringify(result)) ||
         `Request failed with status ${response.status}: ${response.statusText}`;
+
+      if (response.status === 401 && withAuth) {
+        await removeToken();
+      }
 
       // Log at appropriate level - 400 errors are often expected business logic errors
       if (response.status >= 500) {
@@ -202,7 +207,11 @@ const callFetch = async <T = any>(
 
       return {
         isSuccess: false,
-        message: errorMessage,
+        message:
+          response.status === 401 && withAuth
+            ? "Your session has expired. Please log in again."
+            : errorMessage,
+        status: response.status,
       };
     }
   } catch (error: any) {
