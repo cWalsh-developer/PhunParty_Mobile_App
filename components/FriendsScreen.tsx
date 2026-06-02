@@ -238,6 +238,36 @@ export default function FriendsScreen({
     return () => clearTimeout(timeout);
   }, [loadFriendsData]);
 
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    let isMounted = true;
+
+    pushNotificationService
+      .addFriendNotificationListeners((event) => {
+        if (event.type === "friend_request_received") {
+          setCurrentView("requests");
+        }
+
+        loadFriendsData(false);
+      })
+      .then((removeListeners) => {
+        if (isMounted) {
+          cleanup = removeListeners;
+          return;
+        }
+
+        removeListeners();
+      })
+      .catch(() => {
+        setMessage("Could not attach friend notification listeners.");
+      });
+
+    return () => {
+      isMounted = false;
+      cleanup?.();
+    };
+  }, [loadFriendsData]);
+
   const refresh = () => {
     setRefreshing(true);
     loadFriendsData();
@@ -301,13 +331,41 @@ export default function FriendsScreen({
 
   const acceptRequest = async (requestId: string) => {
     setActionId(requestId);
+    const request = incomingRequests.find((item) => item.id === requestId);
+
     try {
       const response = await friendsApi.acceptRequest(requestId);
       if (!response.isSuccess) {
         Alert.alert("Request failed", response.message || "Could not accept.");
         return;
       }
-      await loadFriendsData();
+
+      setIncomingRequests((prev) =>
+        prev.filter((item) => item.id !== requestId),
+      );
+
+      const newFriend = request?.sender || response.result?.sender;
+      if (newFriend) {
+        setFriends((prev) => {
+          const exists = prev.some(
+            (friend) => friend.player_id === newFriend.player_id,
+          );
+
+          if (exists) {
+            return prev;
+          }
+
+          return [
+            {
+              ...newFriend,
+              relationship_status: "friends",
+            },
+            ...prev,
+          ];
+        });
+      }
+
+      loadFriendsData(false);
     } finally {
       setActionId(null);
     }

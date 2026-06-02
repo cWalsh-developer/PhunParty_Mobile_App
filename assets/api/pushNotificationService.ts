@@ -9,6 +9,11 @@ interface PushRegistrationResult {
   message?: string;
 }
 
+export interface FriendNotificationEvent {
+  type?: string;
+  data: Record<string, any>;
+}
+
 type NotificationsModule = typeof import("expo-notifications");
 
 let notificationsModulePromise: Promise<NotificationsModule> | null = null;
@@ -52,6 +57,14 @@ const loadNotificationsModule = async () => {
 
   return notificationsModulePromise;
 };
+
+const getNotificationData = (content?: { data?: Record<string, any> | null }) =>
+  content?.data || {};
+
+const isFriendNotification = (data: Record<string, any>) =>
+  data.type === "friend_request_received" ||
+  data.type === "friend_request_accepted" ||
+  typeof data.friend_request_id === "string";
 
 export const pushNotificationService = {
   async registerForPushNotifications(): Promise<PushRegistrationResult> {
@@ -108,6 +121,48 @@ export const pushNotificationService = {
     return {
       registered: true,
       token: token.data,
+    };
+  },
+
+  async addFriendNotificationListeners(
+    onSocialUpdate: (event: FriendNotificationEvent) => void,
+  ): Promise<() => void> {
+    if (isRunningInExpoGo()) {
+      return () => {};
+    }
+
+    const Notifications = await loadNotificationsModule();
+
+    const receivedSub = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        const data = getNotificationData(notification.request.content);
+
+        if (isFriendNotification(data)) {
+          onSocialUpdate({
+            type: typeof data.type === "string" ? data.type : undefined,
+            data,
+          });
+        }
+      },
+    );
+
+    const responseSub =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const data = getNotificationData(
+          response.notification.request.content,
+        );
+
+        if (isFriendNotification(data)) {
+          onSocialUpdate({
+            type: typeof data.type === "string" ? data.type : undefined,
+            data,
+          });
+        }
+      });
+
+    return () => {
+      receivedSub.remove();
+      responseSub.remove();
     };
   },
 };
