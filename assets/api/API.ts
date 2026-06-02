@@ -24,6 +24,11 @@ const API = {
     data?: DataObject,
     withAuth: boolean = true
   ) => callFetch<T>(endpoint, "PUT", data, withAuth),
+  patch: <T = any>(
+    endpoint: string,
+    data?: DataObject,
+    withAuth: boolean = true
+  ) => callFetch<T>(endpoint, "PATCH", data, withAuth),
   delete: <T = any>(endpoint: string, withAuth: boolean = true) =>
     callFetch<T>(endpoint, "DELETE", null, withAuth),
 
@@ -96,7 +101,7 @@ export default API;
 // Core fetch function
 const callFetch = async <T = any>(
   endpoint: string,
-  method: "GET" | "POST" | "PUT" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   dataObj: DataObject | null = null,
   withAuth: boolean = true
 ): Promise<APIResponse<T>> => {

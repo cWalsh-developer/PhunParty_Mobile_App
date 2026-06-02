@@ -57,6 +57,25 @@ export default function TabsLayout() {
         }}
       />
       <MaterialTopTabs.Screen
+        name="friends"
+        options={{
+          title: "Friends",
+          tabBarIcon: ({
+            color,
+            focused,
+          }: {
+            color: string;
+            focused: boolean;
+          }) => (
+            <Ionicons
+              name="people"
+              size={24}
+              color={focused ? color : colors.stone[400]}
+            />
+          ),
+        }}
+      />
+      <MaterialTopTabs.Screen
         name="profileTab"
         options={{
           title: "Profile",
