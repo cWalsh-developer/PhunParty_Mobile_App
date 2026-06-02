@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import { File as FileSystemFile } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import API from "./API";
 
@@ -20,6 +21,37 @@ export interface AvatarOption {
   preview_url: string;
 }
 
+const getImageUploadMetadata = (imageUri: string) => {
+  const cleanUri = imageUri.split("?")[0]?.split("#")[0] || imageUri;
+  const rawExtension = cleanUri.split(".").pop()?.toLowerCase();
+  const extension =
+    rawExtension && /^[a-z0-9]+$/.test(rawExtension) ? rawExtension : "jpg";
+
+  const normalizedExtension = extension === "jpeg" ? "jpg" : extension;
+  const mimeType =
+    normalizedExtension === "jpg"
+      ? "image/jpeg"
+      : normalizedExtension === "heic"
+        ? "image/heic"
+        : normalizedExtension === "heif"
+          ? "image/heif"
+          : `image/${normalizedExtension}`;
+
+  return {
+    fileName: `photo.${normalizedExtension}`,
+    mimeType,
+  };
+};
+
+const createImageUploadPart = (imageUri: string, fileName: string, mimeType: string) => {
+  const file = new FileSystemFile(imageUri);
+  return {
+    name: fileName,
+    type: mimeType,
+    bytes: () => file.bytes(),
+  };
+};
+
 export class PhotoService {
   // Upload a photo from camera or gallery
   static async uploadPhoto(
@@ -36,23 +68,10 @@ export class PhotoService {
       // Create form data
       const formData = new FormData();
 
-      // Get file extension from URI
-      const uriParts = imageUri.split(".");
-      const fileType = uriParts[uriParts.length - 1];
+      const { fileName, mimeType } = getImageUploadMetadata(imageUri);
+      const imagePart = createImageUploadPart(imageUri, fileName, mimeType);
 
-      if (!fileType) {
-        console.error("PhotoService: Unable to determine file type from URI");
-        return null;
-      }
-
-      // Create file object for FormData
-      const fileObject: any = {
-        uri: imageUri,
-        name: `photo.${fileType}`,
-        type: `image/${fileType === "jpg" ? "jpeg" : fileType}`,
-      };
-
-      formData.append("file", fileObject);
+      formData.append("file", imagePart as any);
 
       // Make API call with FormData
       const response = await this.uploadFormData(
