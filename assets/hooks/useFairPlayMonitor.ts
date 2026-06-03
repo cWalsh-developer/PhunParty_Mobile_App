@@ -137,8 +137,6 @@ export function useFairPlayMonitor({
 
       if (isInMultiWindowMode) {
         reportFocusLost("multi_window_mode");
-      } else {
-        reportFocusReturned();
       }
     };
 
