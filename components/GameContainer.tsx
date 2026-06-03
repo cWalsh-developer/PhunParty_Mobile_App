@@ -269,11 +269,15 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     }
   };
 
-  const reportFairPlayViolation = (
+  const reportFairPlayFocusLost = (
     questionId: string,
     reason: FocusViolationReason,
   ) => {
-    gameWebSocket.reportFocusViolation(questionId, reason);
+    gameWebSocket.reportFairPlayFocusLost(questionId, reason);
+  };
+
+  const reportFairPlayFocusReturned = (questionId: string) => {
+    gameWebSocket.reportFairPlayFocusReturned(questionId);
   };
 
   useEffect(() => {
@@ -862,7 +866,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             fairPlayEnabled={fairPlaySettings.enabled}
             maxFairPlayStrikes={fairPlaySettings.maxStrikes}
             fairPlayStatus={fairPlayStatus}
-            onFairPlayViolation={reportFairPlayViolation}
+            onFairPlayFocusLost={reportFairPlayFocusLost}
+            onFairPlayFocusReturned={reportFairPlayFocusReturned}
             onGameEnd={handleGameEnd}
             onError={handleGameError}
           />
@@ -876,7 +881,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             fairPlayEnabled={fairPlaySettings.enabled}
             maxFairPlayStrikes={fairPlaySettings.maxStrikes}
             fairPlayStatus={fairPlayStatus}
-            onFairPlayViolation={reportFairPlayViolation}
+            onFairPlayFocusLost={reportFairPlayFocusLost}
+            onFairPlayFocusReturned={reportFairPlayFocusReturned}
             onGameEnd={handleGameEnd}
             onError={handleGameError}
           />
@@ -890,7 +896,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             fairPlayEnabled={fairPlaySettings.enabled}
             maxFairPlayStrikes={fairPlaySettings.maxStrikes}
             fairPlayStatus={fairPlayStatus}
-            onFairPlayViolation={reportFairPlayViolation}
+            onFairPlayFocusLost={reportFairPlayFocusLost}
+            onFairPlayFocusReturned={reportFairPlayFocusReturned}
             onGameEnd={handleGameEnd}
             onError={handleGameError}
           />

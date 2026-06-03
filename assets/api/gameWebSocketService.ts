@@ -67,6 +67,8 @@ export type FocusViolationReason =
   | "app_inactive"
   | "screen_blurred";
 
+export type FairPlayFocusEvent = "lost" | "returned";
+
 export interface FairPlaySettings {
   enabled: boolean;
   maxStrikes: number;
@@ -94,6 +96,20 @@ export interface FairPlayStatus {
   reason?: string;
   message?: string;
   event_type?: string;
+}
+
+export interface BuzzerStateUpdate {
+  question_id?: string;
+  current_buzzer_winner?: string | null;
+  currentBuzzerWinner?: string | null;
+  frozen_players?: string[];
+  frozenPlayers?: string[];
+  question_active?: boolean;
+  questionActive?: boolean;
+  server_time_ms?: number;
+  serverTime?: number;
+  event_type?: string;
+  type?: string;
 }
 
 export type ConnectionState =
@@ -385,6 +401,34 @@ export class GameWebSocketService {
     });
   }
 
+  reportFairPlayFocusLost(
+    questionId: string,
+    reason: FocusViolationReason,
+  ): boolean {
+    return this.sendMessage({
+      type: "fair_play_focus_lost",
+      data: {
+        session_code: this.sessionCode,
+        player_id: this.playerInfo?.player_id,
+        question_id: questionId,
+        reason,
+        occurred_at: new Date().toISOString(),
+      },
+    });
+  }
+
+  reportFairPlayFocusReturned(questionId: string): boolean {
+    return this.sendMessage({
+      type: "fair_play_focus_returned",
+      data: {
+        session_code: this.sessionCode,
+        player_id: this.playerInfo?.player_id,
+        question_id: questionId,
+        returned_at: new Date().toISOString(),
+      },
+    });
+  }
+
   requestSessionStats(): boolean {
     return this.requestSync();
   }
@@ -646,12 +690,22 @@ export class GameWebSocketService {
 
       case "question_started":
         console.log("MOBILE RECEIVED question_started", message.data);
+        this.questionReceived = false;
+        this.clearQuestionRecoveryTimeouts();
         this.setReadyForQuestions(true);
         if (message.data) {
+          const revealDelay = message.data.start_at
+            ? this.getDelayUntilServerTime(message.data.start_at)
+            : 0;
           this.scheduleAtServerTime(message.data.start_at, () => {
             this.setPhase("question", message.data);
             this.deliverOrBufferQuestion(message.data, "question_started");
           });
+          this.scheduleQuestionRecovery("question_started", [
+            revealDelay + 500,
+            revealDelay + 1500,
+            revealDelay + 3000,
+          ]);
         } else {
           this.scheduleQuestionRecovery("empty_question_started");
         }
@@ -711,6 +765,7 @@ export class GameWebSocketService {
       case "buzzer_winner":
       case "correct_answer":
       case "incorrect_answer":
+      case "buzzer_state_update":
         this.onBuzzerUpdate?.({
           ...(message.data ?? {}),
           event_type: message.type,
@@ -971,7 +1026,11 @@ export class GameWebSocketService {
         ? this.getDelayUntilServerTime(questionStartAt)
         : durationMs;
 
-    this.scheduleQuestionRecovery("countdown_started", [delay + 1000]);
+    this.scheduleQuestionRecovery("countdown_started", [
+      delay + 500,
+      delay + 1500,
+      delay + 3000,
+    ]);
   }
 
   private clearQuestionRecoveryTimeouts(): void {

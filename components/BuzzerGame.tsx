@@ -30,10 +30,11 @@ interface BuzzerGameProps {
   fairPlayEnabled?: boolean;
   maxFairPlayStrikes?: number;
   fairPlayStatus?: FairPlayStatus | null;
-  onFairPlayViolation?: (
+  onFairPlayFocusLost?: (
     questionId: string,
     reason: FocusViolationReason,
   ) => void;
+  onFairPlayFocusReturned?: (questionId: string) => void;
   onGameEnd: () => void;
   onError: (error: string) => void;
 }
@@ -54,7 +55,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   fairPlayEnabled = false,
   maxFairPlayStrikes = 3,
   fairPlayStatus,
-  onFairPlayViolation,
+  onFairPlayFocusLost,
+  onFairPlayFocusReturned,
   onGameEnd,
   onError,
 }) => {
@@ -105,16 +107,24 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
   const handleFairPlayViolation = useCallback(
     (questionId: string, reason: FocusViolationReason) => {
-      onFairPlayViolation?.(questionId, reason);
+      onFairPlayFocusLost?.(questionId, reason);
     },
-    [onFairPlayViolation],
+    [onFairPlayFocusLost],
   );
 
-  useFairPlayMonitor({
+  const handleFairPlayReturned = useCallback(
+    (questionId: string) => {
+      onFairPlayFocusReturned?.(questionId);
+    },
+    [onFairPlayFocusReturned],
+  );
+
+  const { isInGracePeriod } = useFairPlayMonitor({
     enabled: fairPlayEnabled,
     questionId: currentQuestionId,
     phase: gamePhase,
-    onViolation: handleFairPlayViolation,
+    onFocusLost: handleFairPlayViolation,
+    onFocusReturned: handleFairPlayReturned,
   });
 
   useEffect(() => {
@@ -197,6 +207,66 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
     if (buttonState === "active") {
       startGlowAnimation();
+    } else {
+      stopGlowAnimation();
+    }
+  };
+
+  const applyAuthoritativeBuzzerState = (data: any) => {
+    const updateQuestionId = data.question_id ?? data.questionId;
+
+    if (
+      updateQuestionId &&
+      currentQuestionId &&
+      updateQuestionId !== currentQuestionId
+    ) {
+      return;
+    }
+
+    const myPlayerId = gameWebSocket.playerInfo?.player_id;
+    const currentWinner =
+      data.current_buzzer_winner ?? data.currentBuzzerWinner ?? null;
+    const frozenPlayers = Array.isArray(data.frozen_players)
+      ? data.frozen_players
+      : Array.isArray(data.frozenPlayers)
+        ? data.frozenPlayers
+        : [];
+    const questionActive =
+      data.question_active ?? data.questionActive ?? true;
+    const isFrozen = !!myPlayerId && frozenPlayers.includes(myPlayerId);
+    const isWinner = !!myPlayerId && currentWinner === myPlayerId;
+
+    let nextButtonState: BuzzerState["buttonState"] = "locked";
+    let nextStatusText = "Buzzer locked.";
+
+    if (isFrozen) {
+      nextButtonState = "frozen";
+      nextStatusText = "You're frozen for this question.";
+    } else if (isWinner) {
+      nextButtonState = "answer_mode";
+      nextStatusText = "You buzzed first. Choose your answer.";
+      setHasSubmittedAnswer(false);
+    } else if (currentWinner) {
+      nextButtonState = "waiting";
+      nextStatusText = "Another player buzzed first.";
+    } else if (questionActive) {
+      nextButtonState = "active";
+      nextStatusText = "Tap to buzz in first!";
+    }
+
+    setBuzzerState((prev) => ({
+      ...prev,
+      buttonState: nextButtonState,
+      winner: currentWinner || null,
+      isActive: nextButtonState === "active",
+      canBuzz: nextButtonState === "active",
+      canAnswer: nextButtonState === "answer_mode",
+      statusText: nextStatusText,
+    }));
+
+    if (nextButtonState === "active") {
+      startGlowAnimation();
+      stopWinnerAnimation();
     } else {
       stopGlowAnimation();
     }
@@ -435,27 +505,41 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       return null;
     }
 
+    const isWarning = isInGracePeriod && !isFairPlayLocked;
+
     return (
       <View
         style={[
           styles.fairPlayBanner,
+          isWarning && styles.fairPlayBannerGrace,
           isFairPlayLocked && styles.fairPlayBannerWarning,
         ]}
       >
         <MaterialIcons
-          name={isFairPlayLocked ? "block" : "verified-user"}
+          name={
+            isFairPlayLocked ? "block" : isWarning ? "timer" : "verified-user"
+          }
           size={20}
-          color={isFairPlayLocked ? colors.red[500] : colors.tea[400]}
+          color={
+            isFairPlayLocked
+              ? colors.red[500]
+              : isWarning
+                ? colors.peach[500]
+                : colors.tea[400]
+          }
         />
         <Text
           style={[
             styles.fairPlayText,
+            isWarning && styles.fairPlayTextGrace,
             isFairPlayLocked && styles.fairPlayTextWarning,
           ]}
         >
           {isFairPlayLocked
             ? fairPlayStatus?.message ||
               `Fair Play strike ${fairPlayStrikeCount}/${fairPlayMaxStrikes}. You are frozen for this question.`
+            : isWarning
+              ? "Return to the game within 5 seconds to avoid a Fair Play strike."
             : `Fair Play Mode active - ${fairPlayStrikeCount}/${fairPlayMaxStrikes} strikes`}
         </Text>
       </View>
@@ -478,6 +562,11 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       if (data.type === "buzzer_winner") {
         handleBuzzerWinner(data.winner_name);
         Vibration.vibrate(500); // Haptic feedback
+      } else if (
+        data.type === "buzzer_state_update" ||
+        data.event_type === "buzzer_state_update"
+      ) {
+        applyAuthoritativeBuzzerState(data);
       } else if (
         data.type === "correct_answer" ||
         data.event_type === "correct_answer"
@@ -807,11 +896,18 @@ const styles = StyleSheet.create({
     borderColor: colors.red[500],
     backgroundColor: colors.red[500] + "14",
   },
+  fairPlayBannerGrace: {
+    borderColor: colors.peach[500],
+    backgroundColor: colors.peach[500] + "14",
+  },
   fairPlayText: {
     ...typography.body,
     color: colors.stone[300],
     flex: 1,
     fontWeight: "600",
+  },
+  fairPlayTextGrace: {
+    color: colors.stone[100],
   },
   fairPlayTextWarning: {
     color: colors.stone[100],

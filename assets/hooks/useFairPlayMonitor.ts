@@ -1,5 +1,5 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, AppStateStatus } from "react-native";
 import type { FocusViolationReason } from "../api/gameWebSocketService";
 
@@ -7,63 +7,103 @@ interface UseFairPlayMonitorOptions {
   enabled: boolean;
   questionId?: string | null;
   phase: string;
-  onViolation: (questionId: string, reason: FocusViolationReason) => void;
+  onFocusLost: (questionId: string, reason: FocusViolationReason) => void;
+  onFocusReturned: (questionId: string) => void;
 }
 
 export function useFairPlayMonitor({
   enabled,
   questionId,
   phase,
-  onViolation,
+  onFocusLost,
+  onFocusReturned,
 }: UseFairPlayMonitorOptions) {
-  const reportedQuestionRef = useRef<string | null>(null);
+  const pendingQuestionRef = useRef<string | null>(null);
+  const [graceQuestionId, setGraceQuestionId] = useState<string | null>(null);
   const activeQuestionId = enabled && phase === "question" ? questionId : null;
 
   useEffect(() => {
-    reportedQuestionRef.current = null;
+    pendingQuestionRef.current = null;
   }, [questionId]);
 
-  const reportViolation = useCallback(
+  const reportFocusLost = useCallback(
     (reason: FocusViolationReason) => {
       if (!activeQuestionId) {
         return;
       }
 
-      if (reportedQuestionRef.current === activeQuestionId) {
+      if (pendingQuestionRef.current === activeQuestionId) {
         return;
       }
 
-      reportedQuestionRef.current = activeQuestionId;
-      onViolation(activeQuestionId, reason);
+      pendingQuestionRef.current = activeQuestionId;
+      setGraceQuestionId(activeQuestionId);
+      onFocusLost(activeQuestionId, reason);
     },
-    [activeQuestionId, onViolation],
+    [activeQuestionId, onFocusLost],
   );
 
+  const reportFocusReturned = useCallback(() => {
+    const pendingQuestionId = pendingQuestionRef.current;
+
+    if (!pendingQuestionId) {
+      return;
+    }
+
+    pendingQuestionRef.current = null;
+    setGraceQuestionId(null);
+    onFocusReturned(pendingQuestionId);
+  }, [onFocusReturned]);
+
   useEffect(() => {
-    const handleAppStateChange = (nextState: AppStateStatus) => {
+    if (AppState.currentState === "active") {
+      reportFocusReturned();
+    }
+  }, [activeQuestionId, reportFocusReturned]);
+
+  useEffect(() => {
+    if (!enabled || phase !== "question") {
+      reportFocusReturned();
+    }
+  }, [enabled, phase, reportFocusReturned]);
+
+  const handleAppStateChange = useCallback(
+    (nextState: AppStateStatus) => {
+      if (nextState === "active") {
+        reportFocusReturned();
+        return;
+      }
+
       if (nextState === "background") {
-        reportViolation("app_backgrounded");
+        reportFocusLost("app_backgrounded");
         return;
       }
 
       if (nextState === "inactive") {
-        reportViolation("app_inactive");
+        reportFocusLost("app_inactive");
       }
-    };
+    },
+    [reportFocusLost, reportFocusReturned],
+  );
 
+  useEffect(() => {
     const subscription = AppState.addEventListener(
       "change",
       handleAppStateChange,
     );
 
     return () => subscription.remove();
-  }, [reportViolation]);
+  }, [handleAppStateChange]);
 
   useFocusEffect(
     useCallback(() => {
+      reportFocusReturned();
+
       return () => {
-        reportViolation("screen_blurred");
+        reportFocusLost("screen_blurred");
       };
-    }, [reportViolation]),
+    }, [reportFocusLost, reportFocusReturned]),
   );
+
+  return { isInGracePeriod: graceQuestionId === activeQuestionId };
 }

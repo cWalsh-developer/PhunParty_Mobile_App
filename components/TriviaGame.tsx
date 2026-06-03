@@ -30,10 +30,11 @@ interface TriviaGameProps {
   fairPlayEnabled?: boolean;
   maxFairPlayStrikes?: number;
   fairPlayStatus?: FairPlayStatus | null;
-  onFairPlayViolation?: (
+  onFairPlayFocusLost?: (
     questionId: string,
     reason: FocusViolationReason,
   ) => void;
+  onFairPlayFocusReturned?: (questionId: string) => void;
   onGameEnd: () => void;
   onError: (message: string) => void;
   onAnswerSubmitted?: () => void;
@@ -56,7 +57,8 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   fairPlayEnabled = false,
   maxFairPlayStrikes = 3,
   fairPlayStatus,
-  onFairPlayViolation,
+  onFairPlayFocusLost,
+  onFairPlayFocusReturned,
   onGameEnd,
   onError,
   onAnswerSubmitted,
@@ -108,16 +110,24 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
   const handleFairPlayViolation = useCallback(
     (questionId: string, reason: FocusViolationReason) => {
-      onFairPlayViolation?.(questionId, reason);
+      onFairPlayFocusLost?.(questionId, reason);
     },
-    [onFairPlayViolation],
+    [onFairPlayFocusLost],
   );
 
-  useFairPlayMonitor({
+  const handleFairPlayReturned = useCallback(
+    (questionId: string) => {
+      onFairPlayFocusReturned?.(questionId);
+    },
+    [onFairPlayFocusReturned],
+  );
+
+  const { isInGracePeriod } = useFairPlayMonitor({
     enabled: fairPlayEnabled,
     questionId: currentQuestionId,
     phase: gamePhase,
-    onViolation: handleFairPlayViolation,
+    onFocusLost: handleFairPlayViolation,
+    onFocusReturned: handleFairPlayReturned,
   });
 
   useEffect(() => {
@@ -729,28 +739,39 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     }
 
     const isLocked = isFairPlayLocked;
+    const isWarning = isInGracePeriod && !isLocked;
 
     return (
       <View
         style={[
           styles.fairPlayBanner,
+          isWarning && styles.fairPlayBannerGrace,
           isLocked && styles.fairPlayBannerWarning,
         ]}
       >
         <MaterialIcons
-          name={isLocked ? "block" : "verified-user"}
+          name={isLocked ? "block" : isWarning ? "timer" : "verified-user"}
           size={20}
-          color={isLocked ? colors.red[500] : colors.tea[400]}
+          color={
+            isLocked
+              ? colors.red[500]
+              : isWarning
+                ? colors.peach[500]
+                : colors.tea[400]
+          }
         />
         <Text
           style={[
             styles.fairPlayText,
+            isWarning && styles.fairPlayTextGrace,
             isLocked && styles.fairPlayTextWarning,
           ]}
         >
           {isLocked
             ? fairPlayStatus?.message ||
               `Fair Play strike ${fairPlayStrikeCount}/${fairPlayMaxStrikes}. You are frozen for this question.`
+            : isWarning
+              ? "Return to the game within 5 seconds to avoid a Fair Play strike."
             : `Fair Play Mode active - ${fairPlayStrikeCount}/${fairPlayMaxStrikes} strikes`}
         </Text>
       </View>
@@ -1024,11 +1045,18 @@ const styles = StyleSheet.create({
     borderColor: colors.red[500],
     backgroundColor: colors.red[500] + "14",
   },
+  fairPlayBannerGrace: {
+    borderColor: colors.peach[500],
+    backgroundColor: colors.peach[500] + "14",
+  },
   fairPlayText: {
     ...typography.body,
     color: colors.stone[300],
     flex: 1,
     fontWeight: "600",
+  },
+  fairPlayTextGrace: {
+    color: colors.stone[100],
   },
   fairPlayTextWarning: {
     color: colors.stone[100],
