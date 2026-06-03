@@ -76,13 +76,25 @@ export interface FairPlaySettings {
 
 export interface FairPlayStatus {
   player_id?: string;
+  playerId?: string;
+  participant_id?: string;
   strike_count?: number;
   strikeCount?: number;
   fair_play_strikes?: number;
+  fairPlayStrikes?: number;
+  fair_play_strike_count?: number;
+  fairPlayStrikeCount?: number;
+  current_strikes?: number;
+  currentStrikes?: number;
+  strikes?: number;
   max_strikes?: number;
   maxStrikes?: number;
   max_fair_play_strikes?: number;
+  maxFairPlayStrikes?: number;
   max_cheat_strikes?: number;
+  maxCheatStrikes?: number;
+  strike_limit?: number;
+  strikeLimit?: number;
   is_frozen?: boolean;
   isFrozen?: boolean;
   frozen_for_question?: boolean;
@@ -568,6 +580,21 @@ export class GameWebSocketService {
       this.wsId = null;
       this.stopHeartbeat();
 
+      if (event.code === 4003) {
+        this.handleKickedFromSession(
+          {
+            reason: "fair_play_strikes",
+            message:
+              event.reason ||
+              "You were removed after reaching the Fair Play strike limit.",
+          },
+          "websocket_closed",
+          false,
+        );
+        this.setConnectionState("disconnected");
+        return;
+      }
+
       if (event.code === 1000 && !this.shouldReconnect) {
         this.setConnectionState("disconnected");
         return;
@@ -690,6 +717,10 @@ export class GameWebSocketService {
 
       case "question_started":
         console.log("MOBILE RECEIVED question_started", message.data);
+        this.emitFairPlayQuestionReset(
+          message.data?.question_id ?? message.data?.questionId,
+          "question_started_fair_play_reset",
+        );
         this.questionReceived = false;
         this.clearQuestionRecoveryTimeouts();
         this.setReadyForQuestions(true);
@@ -731,10 +762,22 @@ export class GameWebSocketService {
 
       case "fair_play_status_update":
       case "player_flagged":
+        if (this.isOwnKickedPayload(message.data)) {
+          this.handleKickedFromSession(message.data ?? {}, message.type);
+          break;
+        }
+
         this.onFairPlayStatusUpdate?.({
           ...(message.data ?? {}),
           event_type: message.type,
         });
+        break;
+
+      case "fair_play_question_reset":
+        this.emitFairPlayQuestionReset(
+          message.data?.question_id ?? message.data?.questionId,
+          message.type,
+        );
         break;
 
       case "kicked_from_session":
@@ -778,10 +821,7 @@ export class GameWebSocketService {
         break;
 
       case "player_kicked":
-        if (
-          !message.data?.player_id ||
-          message.data.player_id === this.playerInfo?.player_id
-        ) {
+        if (this.isOwnKickedPayload(message.data)) {
           this.handleKickedFromSession(message.data ?? {}, message.type);
         } else {
           this.onFairPlayStatusUpdate?.({
@@ -919,6 +959,23 @@ export class GameWebSocketService {
     }
   }
 
+  private emitFairPlayQuestionReset(
+    questionId: string | undefined,
+    eventType: string,
+  ): void {
+    this.onFairPlayStatusUpdate?.({
+      player_id: this.playerInfo?.player_id,
+      question_id: questionId,
+      is_frozen: false,
+      isFrozen: false,
+      frozen_question_id: undefined,
+      frozenQuestionId: undefined,
+      answer_status: undefined,
+      message: undefined,
+      event_type: eventType,
+    });
+  }
+
   private handleRejectedPlayerAction(type: string, data: any): void {
     const rejectedData = {
       ...data,
@@ -944,17 +1001,49 @@ export class GameWebSocketService {
     this.onAnswerRejected?.(rejectedData);
   }
 
-  private handleKickedFromSession(data: any, eventType: string): void {
+  private isOwnKickedPayload(data: any): boolean {
+    if (!data) {
+      return false;
+    }
+
+    const playerId = data.player_id ?? data.playerId ?? data.participant_id;
+    const isKicked =
+      data.is_kicked === true ||
+      data.isKicked === true ||
+      data.answer_status === "kicked" ||
+      data.reason === "fair_play_strikes";
+
+    if (!isKicked) {
+      return false;
+    }
+
+    return (
+      !playerId ||
+      String(playerId).trim() === String(this.playerInfo?.player_id ?? "").trim()
+    );
+  }
+
+  private handleKickedFromSession(
+    data: any,
+    eventType: string,
+    closeSocket = true,
+  ): void {
     this.shouldReconnect = false;
-    this.onKickedFromSession?.({
+    const kickedPayload = {
       ...data,
       is_kicked: true,
       event_type: eventType,
-    });
-    try {
-      this.ws?.close(1000, "Kicked from session");
-    } catch {
-      // Ignore close failures; the UI already has the authoritative event.
+    };
+
+    this.onFairPlayStatusUpdate?.(kickedPayload);
+    this.onKickedFromSession?.(kickedPayload);
+
+    if (closeSocket) {
+      try {
+        this.ws?.close(1000, "Kicked from session");
+      } catch {
+        // Ignore close failures; the UI already has the authoritative event.
+      }
     }
   }
 
@@ -971,6 +1060,16 @@ export class GameWebSocketService {
       ui_mode: questionData.ui_mode || "multiple_choice",
       ...questionData,
     };
+    const isNewQuestion =
+      !!question.question_id &&
+      question.question_id !== this.lastQuestion?.question_id;
+
+    if (isNewQuestion) {
+      this.emitFairPlayQuestionReset(
+        question.question_id,
+        `${source}_fair_play_reset`,
+      );
+    }
 
     this.lastQuestion = question;
 

@@ -107,6 +107,9 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     return Number.isFinite(numberValue) ? numberValue : undefined;
   };
 
+  const normalizeId = (value: any): string =>
+    value === undefined || value === null ? "" : String(value).trim();
+
   const normalizeFairPlaySettings = (
     payload: any,
   ): FairPlaySettings | null => {
@@ -152,13 +155,19 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       payload?.fair_play_status ??
         payload?.fairPlayStatus ??
         payload?.player_fair_play_status ??
-        payload?.playerFairPlayStatus,
+        payload?.playerFairPlayStatus ??
+        payload?.status ??
+        payload?.fair_play_record ??
+        payload?.fairPlayRecord,
     );
     const source =
       payload?.fair_play_status ??
       payload?.fairPlayStatus ??
       payload?.player_fair_play_status ??
       payload?.playerFairPlayStatus ??
+      payload?.status ??
+      payload?.fair_play_record ??
+      payload?.fairPlayRecord ??
       payload;
     const hasStatusFields = [
       "player_id",
@@ -168,7 +177,19 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       "strikeCount",
       "fair_play_strikes",
       "fairPlayStrikes",
+      "fair_play_strike_count",
+      "fairPlayStrikeCount",
+      "current_strikes",
+      "currentStrikes",
       "strikes",
+      "max_strikes",
+      "maxStrikes",
+      "max_fair_play_strikes",
+      "maxFairPlayStrikes",
+      "max_cheat_strikes",
+      "maxCheatStrikes",
+      "strike_limit",
+      "strikeLimit",
       "is_frozen",
       "isFrozen",
       "frozen_for_question",
@@ -186,7 +207,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     const eventPlayerId =
       source?.player_id ?? source?.playerId ?? source?.participant_id;
 
-    if (eventPlayerId && eventPlayerId !== playerInfo.player_id) {
+    if (
+      eventPlayerId &&
+      normalizeId(eventPlayerId) !== normalizeId(playerInfo.player_id)
+    ) {
       return null;
     }
 
@@ -195,6 +219,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       source?.strikeCount,
       source?.fair_play_strikes,
       source?.fairPlayStrikes,
+      source?.fair_play_strike_count,
+      source?.fairPlayStrikeCount,
+      source?.current_strikes,
+      source?.currentStrikes,
       source?.strikes,
     );
     const maxStrikes = parseOptionalNumber(
@@ -204,13 +232,21 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       source?.maxFairPlayStrikes,
       source?.max_cheat_strikes,
       source?.maxCheatStrikes,
+      source?.strike_limit,
+      source?.strikeLimit,
     );
     const frozenValue =
       source?.is_frozen ?? source?.isFrozen ?? source?.frozen_for_question;
-    const kickedValue = source?.is_kicked ?? source?.isKicked;
+    const kickedValue =
+      source?.is_kicked ??
+      source?.isKicked ??
+      (source?.answer_status === "kicked" ||
+        source?.reason === "fair_play_strikes"
+        ? true
+        : undefined);
     const status: FairPlayStatus = {
       ...source,
-      player_id: eventPlayerId ?? playerInfo.player_id,
+      player_id: normalizeId(eventPlayerId || playerInfo.player_id),
       frozen_question_id:
         source?.frozen_question_id ??
         source?.frozenQuestionId ??
@@ -251,21 +287,32 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     const status = normalizeFairPlayStatus(payload);
 
     if (status) {
-      setFairPlayStatus((previous) => ({
-        ...(previous ?? {}),
-        ...status,
-        strike_count:
-          status.strike_count ??
-          status.strikeCount ??
-          previous?.strike_count ??
-          previous?.strikeCount,
-        max_strikes:
+      setFairPlayStatus((previous) => {
+        const nextMaxStrikes = Number(
           status.max_strikes ??
-          status.maxStrikes ??
-          previous?.max_strikes ??
-          previous?.maxStrikes ??
-          fairPlaySettings.maxStrikes,
-      }));
+            status.maxStrikes ??
+            previous?.max_strikes ??
+            previous?.maxStrikes ??
+            fairPlaySettings.maxStrikes,
+        );
+        const nextStrikeCount = Number(
+          status.strike_count ??
+            status.strikeCount ??
+            previous?.strike_count ??
+            previous?.strikeCount ??
+            (status.is_kicked ? nextMaxStrikes : 0),
+        );
+
+        return {
+          ...(previous ?? {}),
+          ...status,
+          strike_count: Number.isFinite(nextStrikeCount) ? nextStrikeCount : 0,
+          max_strikes:
+            Number.isFinite(nextMaxStrikes) && nextMaxStrikes > 0
+              ? nextMaxStrikes
+              : fairPlaySettings.maxStrikes,
+        };
+      });
     }
   };
 
@@ -538,12 +585,39 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         }) ?? {
           player_id: playerInfo.player_id,
           is_kicked: true,
-          strike_count: 0,
           max_strikes: fairPlaySettings.maxStrikes,
           message: "You have been removed from this session by Fair Play Mode.",
         };
 
-      setFairPlayStatus(kickedStatus);
+      setFairPlayStatus((previous) => {
+        const nextMaxStrikes = Number(
+          kickedStatus.max_strikes ??
+            kickedStatus.maxStrikes ??
+            previous?.max_strikes ??
+            previous?.maxStrikes ??
+            fairPlaySettings.maxStrikes,
+        );
+        const nextStrikeCount = Number(
+          kickedStatus.strike_count ??
+            kickedStatus.strikeCount ??
+            previous?.strike_count ??
+            previous?.strikeCount ??
+            nextMaxStrikes,
+        );
+
+        return {
+          ...(previous ?? {}),
+          ...kickedStatus,
+          is_kicked: true,
+          strike_count: Number.isFinite(nextStrikeCount)
+            ? nextStrikeCount
+            : nextMaxStrikes,
+          max_strikes:
+            Number.isFinite(nextMaxStrikes) && nextMaxStrikes > 0
+              ? nextMaxStrikes
+              : fairPlaySettings.maxStrikes,
+        };
+      });
       setConnectionError(null);
     };
 
