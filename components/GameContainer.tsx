@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
+  AppState,
   BackHandler,
   StyleSheet,
   Text,
@@ -69,6 +70,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const isCurrentlyConnecting = useRef(false);
   const cleanupRef = useRef<(() => void) | undefined>(undefined);
   const countdownIntervalRef = useRef<any>(null);
+  const refreshFairPlayStatusRef = useRef<(source: string) => void>(() => {});
 
   const inferGameType = (data: any): string | null => {
     const source = data?.current_question ?? data?.question ?? data;
@@ -264,12 +266,25 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       status.max_strikes = maxStrikes;
     }
 
+    const effectiveMaxStrikes = maxStrikes ?? fairPlaySettings.maxStrikes;
+    if (
+      strikeCount !== undefined &&
+      effectiveMaxStrikes > 0 &&
+      strikeCount >= effectiveMaxStrikes
+    ) {
+      status.is_kicked = true;
+
+      if (maxStrikes === undefined) {
+        status.max_strikes = effectiveMaxStrikes;
+      }
+    }
+
     if (frozenValue !== undefined) {
       status.is_frozen = Boolean(frozenValue);
     }
 
     if (kickedValue !== undefined) {
-      status.is_kicked = Boolean(kickedValue);
+      status.is_kicked = Boolean(kickedValue) || status.is_kicked === true;
     }
 
     return status;
@@ -314,6 +329,72 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         };
       });
     }
+  };
+
+  const refreshFairPlayStatus = async (source: string) => {
+    if (!sessionCode || !playerInfo.player_id) {
+      return;
+    }
+
+    try {
+      const API = (await APIGame).default;
+      const gameSessionApi = API.gameSession as any;
+      let statusPayload: any = null;
+
+      if (typeof gameSessionApi.getPlayerFairPlayStatus === "function") {
+        const response = await gameSessionApi.getPlayerFairPlayStatus(
+          sessionCode,
+          playerInfo.player_id,
+        );
+
+        if (response.isSuccess) {
+          statusPayload = response.result;
+        } else if (response.status !== 404) {
+          console.warn(
+            `[GameContainer] Fair Play status refresh failed from ${source}:`,
+            response.message,
+          );
+        }
+      }
+
+      if (!statusPayload) {
+        const response = await gameSessionApi.getStatus(sessionCode);
+
+        if (response.isSuccess) {
+          statusPayload = response.result;
+        }
+      }
+
+      if (!statusPayload) {
+        return;
+      }
+
+      const effectiveStatusPayload = statusPayload?.result ?? statusPayload;
+
+      applyFairPlaySettings(effectiveStatusPayload);
+      const normalizedStatus = normalizeFairPlayStatus(effectiveStatusPayload);
+
+      if (!normalizedStatus) {
+        return;
+      }
+
+      applyFairPlayStatus(normalizedStatus);
+
+      if (normalizedStatus.is_kicked || normalizedStatus.isKicked) {
+        gameWebSocket.stopReconnect();
+        setIsConnecting(false);
+        setConnectionState("disconnected");
+        setConnectionError(null);
+      }
+    } catch (error) {
+      console.warn(
+        `[GameContainer] Could not refresh Fair Play status from ${source}:`,
+        error,
+      );
+    }
+  };
+  refreshFairPlayStatusRef.current = (source: string) => {
+    void refreshFairPlayStatus(source);
   };
 
   const reportFairPlayFocusLost = (
@@ -387,8 +468,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     }
 
     if (!countdownQuestionStartAt) {
-      setCountdownRemainingMs(0);
-      return;
+      const resetTimeout = setTimeout(() => setCountdownRemainingMs(0), 0);
+      return () => clearTimeout(resetTimeout);
     }
 
     const updateCountdown = () => {
@@ -407,6 +488,16 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       }
     };
   }, [countdownQuestionStartAt]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && fairPlaySettings.enabled) {
+        refreshFairPlayStatusRef.current("app_foregrounded");
+      }
+    });
+
+    return () => subscription.remove();
+  }, [fairPlaySettings.enabled]);
 
   const startPulsingAnimation = () => {
     const pulse = () => {
@@ -507,6 +598,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         setTimeout(() => {
           console.log("📊 Requesting session stats after connection");
           gameWebSocket.requestSessionStats();
+          void refreshFairPlayStatus("websocket_connected");
         }, 1000);
       } else if (state === "reconnecting") {
         console.log("🔄 WebSocket reconnecting...");
@@ -572,6 +664,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     gameWebSocket.onFairPlayStatusUpdate = (status: any) => {
       applyFairPlayStatus(status);
+    };
+
+    gameWebSocket.onFairPlayStatusRefreshRequested = () => {
+      void refreshFairPlayStatus("websocket_recovery");
     };
 
     gameWebSocket.onKickedFromSession = (status: any) => {

@@ -183,6 +183,7 @@ export class GameWebSocketService {
   public onFairPlayStatusUpdate:
     | ((status: FairPlayStatus | any) => void)
     | null = null;
+  public onFairPlayStatusRefreshRequested: (() => void) | null = null;
   public onKickedFromSession: ((data: FairPlayStatus | any) => void) | null =
     null;
 
@@ -346,6 +347,12 @@ export class GameWebSocketService {
     this.cachedWebSocketUrl = null;
     this.sessionCode = null;
     this.playerInfo = null;
+  }
+
+  stopReconnect(): void {
+    this.shouldReconnect = false;
+    this.reconnectAttempts = 0;
+    this.clearReconnectTimeout();
   }
 
   leaveGame(): void {
@@ -591,6 +598,7 @@ export class GameWebSocketService {
           "websocket_closed",
           false,
         );
+        this.onFairPlayStatusRefreshRequested?.();
         this.setConnectionState("disconnected");
         return;
       }
@@ -1001,6 +1009,50 @@ export class GameWebSocketService {
     this.onAnswerRejected?.(rejectedData);
   }
 
+  private getPayloadNumber(data: any, keys: string[]): number | undefined {
+    const rawValue = keys
+      .map((key) => data?.[key])
+      .find((value) => value !== undefined && value !== null);
+
+    if (rawValue === undefined) {
+      return undefined;
+    }
+
+    const value = Number(rawValue);
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  private hasReachedStrikeLimit(data: any): boolean {
+    const strikeCount = this.getPayloadNumber(data, [
+      "strike_count",
+      "strikeCount",
+      "fair_play_strikes",
+      "fairPlayStrikes",
+      "fair_play_strike_count",
+      "fairPlayStrikeCount",
+      "current_strikes",
+      "currentStrikes",
+      "strikes",
+    ]);
+    const maxStrikes = this.getPayloadNumber(data, [
+      "max_strikes",
+      "maxStrikes",
+      "max_fair_play_strikes",
+      "maxFairPlayStrikes",
+      "max_cheat_strikes",
+      "maxCheatStrikes",
+      "strike_limit",
+      "strikeLimit",
+    ]);
+
+    return (
+      strikeCount !== undefined &&
+      maxStrikes !== undefined &&
+      maxStrikes > 0 &&
+      strikeCount >= maxStrikes
+    );
+  }
+
   private isOwnKickedPayload(data: any): boolean {
     if (!data) {
       return false;
@@ -1011,7 +1063,8 @@ export class GameWebSocketService {
       data.is_kicked === true ||
       data.isKicked === true ||
       data.answer_status === "kicked" ||
-      data.reason === "fair_play_strikes";
+      data.reason === "fair_play_strikes" ||
+      this.hasReachedStrikeLimit(data);
 
     if (!isKicked) {
       return false;

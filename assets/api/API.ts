@@ -50,6 +50,15 @@ const API = {
     getStatus: (sessionCode: string) =>
       callFetch(`/game-logic/status/${sessionCode}`, "GET"),
 
+    // Get this player's Fair Play status for recovery after reconnect/foreground
+    getPlayerFairPlayStatus: (sessionCode: string, playerId: string) =>
+      callFetch(
+        `/fair-play/session/${encodeURIComponent(
+          sessionCode,
+        )}/player/${encodeURIComponent(playerId)}/status`,
+        "GET",
+      ),
+
     // Get current question for session
     getCurrentQuestion: (sessionCode: string) =>
       callFetch(`/game-logic/current-question/${sessionCode}`, "GET"),
