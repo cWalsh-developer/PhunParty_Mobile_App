@@ -11,7 +11,6 @@ const PACKAGE_FILE = "FairPlayWindowModePackage.kt";
 
 const moduleSource = `package com.phunparty.mobileapp
 
-import android.os.Build
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -30,12 +29,7 @@ class FairPlayWindowModeModule(
 
   @ReactMethod
   fun isInMultiWindowMode(promise: Promise) {
-    val activity = reactContext.currentActivity
-    val isInMultiWindowMode =
-      Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
-        activity?.isInMultiWindowMode == true
-
-    promise.resolve(isInMultiWindowMode)
+    promise.resolve(lastKnownMultiWindowMode)
   }
 
   @ReactMethod
@@ -48,9 +42,16 @@ class FairPlayWindowModeModule(
     const val NAME = "FairPlayWindowMode"
     private const val EVENT_NAME = "FairPlayWindowModeChanged"
     private var sharedReactContext: ReactApplicationContext? = null
+    private var lastKnownMultiWindowMode: Boolean = false
 
-    fun emitMultiWindowModeChanged(isInMultiWindowMode: Boolean) {
+    fun setMultiWindowMode(isInMultiWindowMode: Boolean) {
+      lastKnownMultiWindowMode = isInMultiWindowMode
+      emitMultiWindowModeChanged(isInMultiWindowMode)
+    }
+
+    private fun emitMultiWindowModeChanged(isInMultiWindowMode: Boolean) {
       val context = sharedReactContext ?: return
+
       val payload = Arguments.createMap().apply {
         putBoolean("isInMultiWindowMode", isInMultiWindowMode)
       }
@@ -97,14 +98,14 @@ const ensureImport = (source, importLine) => {
 };
 
 const ensureMainActivityOverrides = (source) => {
-  if (source.includes("FairPlayWindowModeModule.emitMultiWindowModeChanged")) {
+  if (source.includes("FairPlayWindowModeModule.setMultiWindowMode")) {
     return source;
   }
 
   const overrides = `
   override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean) {
     super.onMultiWindowModeChanged(isInMultiWindowMode)
-    FairPlayWindowModeModule.emitMultiWindowModeChanged(isInMultiWindowMode)
+    FairPlayWindowModeModule.setMultiWindowMode(isInMultiWindowMode)
   }
 
   override fun onMultiWindowModeChanged(
@@ -112,28 +113,65 @@ const ensureMainActivityOverrides = (source) => {
     newConfig: Configuration
   ) {
     super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
-    FairPlayWindowModeModule.emitMultiWindowModeChanged(isInMultiWindowMode)
+    FairPlayWindowModeModule.setMultiWindowMode(isInMultiWindowMode)
   }
 
 `;
 
-  return source.replace(
-    /\n  \/\*\*\n    \* Align the back button behavior/,
-    `\n${overrides}  /**\n    * Align the back button behavior`,
-  );
+  if (source.includes("override fun onCreate")) {
+    return source.replace(
+      /\n  override fun onCreate/,
+      `${overrides}\n  override fun onCreate`,
+    );
+  }
+
+  if (source.includes("class MainActivity")) {
+    return source.replace(/\n}/, `${overrides}\n}`);
+  }
+
+  return source;
 };
 
 const ensureMainApplicationPackage = (source) => {
+  const importLine = "import com.phunparty.mobileapp.FairPlayWindowModePackage";
+  let nextSource = ensureImport(source, importLine);
+
   const packageRegistration = "add(FairPlayWindowModePackage())";
 
-  if (source.includes(packageRegistration)) {
-    return source;
+  if (nextSource.includes(packageRegistration)) {
+    return nextSource;
   }
 
-  return source.replace(
-    /(\s+\/\/ Packages that cannot be autolinked yet can be added manually here, for example:\n\s+\/\/ add\(MyReactNativePackage\(\)\))/,
-    `$1\n          ${packageRegistration}`,
-  );
+  const manualPackageCommentRegex =
+    /(\s+\/\/ Packages that cannot be autolinked yet can be added manually here, for example:\n\s+\/\/ add\(MyReactNativePackage\(\)\))/;
+
+  if (manualPackageCommentRegex.test(nextSource)) {
+    return nextSource.replace(
+      manualPackageCommentRegex,
+      `$1\n          ${packageRegistration}`,
+    );
+  }
+
+  const packagesListRegex =
+    /(val packages = PackageList\(this\)\.packages\s*\n\s*\/\/ Packages that cannot be autolinked yet can be added manually here, for example:\s*\n\s*\/\/ packages\.add\(MyReactNativePackage\(\)\))/;
+
+  if (packagesListRegex.test(nextSource)) {
+    return nextSource.replace(
+      packagesListRegex,
+      `$1\n        packages.${packageRegistration}`,
+    );
+  }
+
+  const returnPackagesRegex = /(return packages\s*\n\s*})/;
+
+  if (returnPackagesRegex.test(nextSource)) {
+    return nextSource.replace(
+      returnPackagesRegex,
+      `packages.${packageRegistration}\n        $1`,
+    );
+  }
+
+  return nextSource;
 };
 
 const writeNativeFiles = (androidRoot) => {
@@ -143,8 +181,9 @@ const writeNativeFiles = (androidRoot) => {
     "src",
     "main",
     "java",
-    PACKAGE_PATH,
+    ...PACKAGE_PATH.split(path.sep),
   );
+
   fs.mkdirSync(packageRoot, { recursive: true });
   fs.writeFileSync(path.join(packageRoot, MODULE_FILE), moduleSource);
   fs.writeFileSync(path.join(packageRoot, PACKAGE_FILE), packageSource);
@@ -157,63 +196,70 @@ const updateNativeEntrypoints = (androidRoot) => {
     "src",
     "main",
     "java",
-    PACKAGE_PATH,
+    ...PACKAGE_PATH.split(path.sep),
   );
+
   const mainActivityPath = path.join(packageRoot, "MainActivity.kt");
   const mainApplicationPath = path.join(packageRoot, "MainApplication.kt");
 
   if (fs.existsSync(mainActivityPath)) {
-    const updatedMainActivity = ensureMainActivityOverrides(
-      ensureImport(
-        fs.readFileSync(mainActivityPath, "utf8"),
-        "import android.content.res.Configuration",
-      ),
+    let mainActivitySource = fs.readFileSync(mainActivityPath, "utf8");
+
+    mainActivitySource = ensureImport(
+      mainActivitySource,
+      "import android.content.res.Configuration",
     );
-    fs.writeFileSync(mainActivityPath, updatedMainActivity);
+
+    mainActivitySource = ensureMainActivityOverrides(mainActivitySource);
+
+    fs.writeFileSync(mainActivityPath, mainActivitySource);
   }
 
   if (fs.existsSync(mainApplicationPath)) {
-    fs.writeFileSync(
-      mainApplicationPath,
-      ensureMainApplicationPackage(
-        fs.readFileSync(mainApplicationPath, "utf8"),
-      ),
-    );
+    let mainApplicationSource = fs.readFileSync(mainApplicationPath, "utf8");
+    mainApplicationSource = ensureMainApplicationPackage(mainApplicationSource);
+    fs.writeFileSync(mainApplicationPath, mainApplicationSource);
   }
 };
 
-module.exports = function withAndroidFairPlayWindowMode(config) {
+const withAndroidFairPlayWindowMode = (config) => {
   config = withAndroidManifest(config, (config) => {
-    const application = config.modResults.manifest.application?.[0];
+    const manifest = config.modResults.manifest;
+    const application = manifest.application?.[0];
 
     if (application) {
       application.$["android:resizeableActivity"] = "false";
+    }
 
-      const mainActivity = application.activity?.find((activity) =>
-        activity["intent-filter"]?.some((filter) =>
-          filter.action?.some(
-            (action) =>
-              action.$["android:name"] === "android.intent.action.MAIN",
-          ),
+    const mainActivity = application?.activity?.find((activity) =>
+      activity["intent-filter"]?.some((filter) =>
+        filter.action?.some(
+          (action) => action.$["android:name"] === "android.intent.action.MAIN",
         ),
-      );
+      ),
+    );
 
-      if (mainActivity) {
-        mainActivity.$["android:resizeableActivity"] = "false";
-        mainActivity.$["android:supportsPictureInPicture"] = "false";
-      }
+    if (mainActivity) {
+      mainActivity.$["android:resizeableActivity"] = "false";
+      mainActivity.$["android:supportsPictureInPicture"] = "false";
     }
 
     return config;
   });
 
-  return withDangerousMod(config, [
+  config = withDangerousMod(config, [
     "android",
     (config) => {
       const androidRoot = config.modRequest.platformProjectRoot;
+
       writeNativeFiles(androidRoot);
       updateNativeEntrypoints(androidRoot);
+
       return config;
     },
   ]);
+
+  return config;
 };
+
+module.exports = withAndroidFairPlayWindowMode;
