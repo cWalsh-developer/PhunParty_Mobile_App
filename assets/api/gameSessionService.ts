@@ -275,7 +275,7 @@ export class GameSessionService {
   /**
    * Press buzzer for buzzer-style games
    */
-  async pressBuzzer(): Promise<boolean> {
+  async pressBuzzer(questionId?: string): Promise<boolean> {
     if (!this.sessionCode) {
       console.error("pressBuzzer: Not connected to a session");
       return false;
@@ -284,7 +284,7 @@ export class GameSessionService {
     // Try WebSocket first
     if (this.isWebSocketConnected) {
       try {
-        return gameWebSocket.pressBuzzer();
+        return gameWebSocket.pressBuzzer(questionId);
       } catch (error: any) {
         console.error("Error pressing buzzer:", error);
         return false;

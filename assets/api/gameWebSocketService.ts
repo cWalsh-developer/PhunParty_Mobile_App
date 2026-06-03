@@ -67,7 +67,8 @@ export interface CountdownState {
 export type FocusViolationReason =
   | "app_backgrounded"
   | "app_inactive"
-  | "screen_blurred";
+  | "screen_blurred"
+  | "multi_window_mode";
 
 export type FairPlayFocusEvent = "lost" | "returned";
 
@@ -398,12 +399,13 @@ export class GameWebSocketService {
     });
   }
 
-  pressBuzzer(): boolean {
+  pressBuzzer(questionId?: string): boolean {
     return this.sendMessage({
       type: "buzzer_press",
       data: {
         session_code: this.sessionCode,
         player_id: this.playerInfo?.player_id,
+        question_id: questionId,
       },
     });
   }

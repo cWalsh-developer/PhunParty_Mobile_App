@@ -47,6 +47,9 @@ interface BuzzerState {
   playersBuzzed: string[];
   buttonState: "active" | "answer_mode" | "frozen" | "waiting" | "locked";
   statusText: string;
+  questionId: string | null;
+  transitioning: boolean;
+  acceptingBuzzes: boolean;
 }
 
 export const BuzzerGame: React.FC<BuzzerGameProps> = ({
@@ -71,6 +74,9 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     playersBuzzed: [],
     buttonState: "waiting",
     statusText: "Waiting for the question...",
+    questionId: null,
+    transitioning: false,
+    acceptingBuzzes: false,
   });
   const [answerOptions, setAnswerOptions] = useState<string[]>([]);
   const [answerText, setAnswerText] = useState("");
@@ -155,7 +161,11 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
   useEffect(() => {
     if (isFrozenForRenderedQuestion && currentQuestionId) {
-      setFairPlayLockedQuestionId(currentQuestionId);
+      const lockTimeout = setTimeout(
+        () => setFairPlayLockedQuestionId(currentQuestionId),
+        0,
+      );
+      return () => clearTimeout(lockTimeout);
     }
   }, [currentQuestionId, isFrozenForRenderedQuestion]);
 
@@ -165,7 +175,11 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       currentQuestionId &&
       fairPlayLockedQuestionId !== currentQuestionId
     ) {
-      setFairPlayLockedQuestionId(null);
+      const unlockTimeout = setTimeout(
+        () => setFairPlayLockedQuestionId(null),
+        0,
+      );
+      return () => clearTimeout(unlockTimeout);
     }
   }, [currentQuestionId, fairPlayLockedQuestionId]);
 
@@ -174,16 +188,24 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       return;
     }
 
-    setHasSubmittedAnswer(false);
-    stopGlowAnimation();
-    setBuzzerState((prev) => ({
-      ...prev,
-      buttonState: "frozen",
-      isActive: false,
-      canBuzz: false,
-      canAnswer: false,
-      statusText: "Fair Play freeze. Wait for the next question.",
-    }));
+    const freezeTimeout = setTimeout(() => {
+      setHasSubmittedAnswer(false);
+      if (glowIntervalRef.current) {
+        clearInterval(glowIntervalRef.current);
+        glowIntervalRef.current = null;
+      }
+      setGlowIntensity(0);
+      setBuzzerState((prev) => ({
+        ...prev,
+        buttonState: "frozen",
+        isActive: false,
+        canBuzz: false,
+        canAnswer: false,
+        statusText: "Fair Play freeze. Wait for the next question.",
+      }));
+    }, 0);
+
+    return () => clearTimeout(freezeTimeout);
   }, [isFairPlayLocked, currentQuestionId]);
 
   const fetchCurrentQuestion = async () => {
@@ -210,7 +232,9 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   };
   void fetchCurrentQuestion;
 
-  const resetBuzzerState = () => {
+  const resetBuzzerState = (
+    questionId: string | null = currentQuestionId ?? null,
+  ) => {
     setAnswerOptions([]);
     setAnswerText("");
     setHasSubmittedAnswer(false);
@@ -222,6 +246,9 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       playersBuzzed: [],
       buttonState: "active",
       statusText: "Tap to buzz in first!",
+      questionId,
+      transitioning: false,
+      acceptingBuzzes: true,
     });
     stopWinnerAnimation();
   };
@@ -231,23 +258,40 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       data.buttonState ||
       "waiting") as BuzzerState["buttonState"];
     const isCurrentPlayer = !!(data.is_current_player || data.isCurrentPlayer);
+    const updateQuestionId = data.question_id ?? data.questionId ?? null;
+    const isTransitioning = !!(data.transitioning ?? data.isTransitioning);
+    const acceptingBuzzes = !!(
+      data.accepting_buzzes ??
+      data.acceptingBuzzes ??
+      buttonState === "active"
+    );
 
     if (buttonState === "answer_mode" && isCurrentPlayer) {
       applyQuestionAnswerData(data);
       setHasSubmittedAnswer(false);
     }
 
+    const canBuzz =
+      buttonState === "active" &&
+      acceptingBuzzes &&
+      !isTransitioning &&
+      !!currentQuestionId &&
+      (!updateQuestionId || updateQuestionId === currentQuestionId);
+
     setBuzzerState((prev) => ({
       ...prev,
       buttonState,
+      questionId: updateQuestionId || prev.questionId,
+      transitioning: isTransitioning,
+      acceptingBuzzes,
       winner: data.winner_name || data.winner || prev.winner,
-      isActive: buttonState === "active",
-      canBuzz: buttonState === "active",
+      isActive: canBuzz,
+      canBuzz,
       canAnswer: buttonState === "answer_mode" && isCurrentPlayer,
       statusText: getStatusTextForButtonState(buttonState, data),
     }));
 
-    if (buttonState === "active") {
+    if (canBuzz) {
       startGlowAnimation();
     } else {
       stopGlowAnimation();
@@ -275,13 +319,22 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         : [];
     const questionActive =
       data.question_active ?? data.questionActive ?? true;
+    const isTransitioning = !!(data.transitioning ?? data.isTransitioning);
+    const acceptingBuzzes = !!(
+      data.accepting_buzzes ??
+      data.acceptingBuzzes ??
+      questionActive
+    );
     const isFrozen = !!myPlayerId && frozenPlayers.includes(myPlayerId);
     const isWinner = !!myPlayerId && currentWinner === myPlayerId;
 
     let nextButtonState: BuzzerState["buttonState"] = "locked";
     let nextStatusText = "Buzzer locked.";
 
-    if (isFrozen) {
+    if (isTransitioning || !acceptingBuzzes) {
+      nextButtonState = "waiting";
+      nextStatusText = data.message || "Waiting for the next question...";
+    } else if (isFrozen) {
       nextButtonState = "frozen";
       nextStatusText = "You're frozen for this question.";
     } else if (isWinner) {
@@ -296,17 +349,27 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       nextStatusText = "Tap to buzz in first!";
     }
 
+    const canBuzz =
+      nextButtonState === "active" &&
+      acceptingBuzzes &&
+      !isTransitioning &&
+      !!currentQuestionId &&
+      (!updateQuestionId || updateQuestionId === currentQuestionId);
+
     setBuzzerState((prev) => ({
       ...prev,
       buttonState: nextButtonState,
+      questionId: updateQuestionId || prev.questionId,
+      transitioning: isTransitioning,
+      acceptingBuzzes,
       winner: currentWinner || null,
-      isActive: nextButtonState === "active",
-      canBuzz: nextButtonState === "active",
+      isActive: canBuzz,
+      canBuzz,
       canAnswer: nextButtonState === "answer_mode",
       statusText: nextStatusText,
     }));
 
-    if (nextButtonState === "active") {
+    if (canBuzz) {
       startGlowAnimation();
       stopWinnerAnimation();
     } else {
@@ -456,11 +519,19 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   };
 
   const handleBuzzerPress = () => {
+    const canPressBuzzer =
+      !!currentQuestion?.question_id &&
+      buzzerState.questionId === currentQuestion.question_id &&
+      buzzerState.buttonState === "active" &&
+      buzzerState.acceptingBuzzes &&
+      !buzzerState.transitioning &&
+      buzzerState.canBuzz &&
+      buzzerState.isActive &&
+      isGameActive &&
+      !isFairPlayLocked;
+
     if (
-      !buzzerState.canBuzz ||
-      !buzzerState.isActive ||
-      !isGameActive ||
-      isFairPlayLocked
+      !canPressBuzzer
     )
       return;
 
@@ -469,7 +540,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     animateBuzzerPress();
 
     // Send to server
-    const success = gameWebSocket.pressBuzzer();
+    const success = gameWebSocket.pressBuzzer(currentQuestion.question_id);
     if (!success) {
       setBuzzerState((prev) => ({ ...prev, canBuzz: true }));
       onError("Failed to register buzzer press. Please check your connection.");
@@ -591,7 +662,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   useEffect(() => {
     gameWebSocket.onQuestionReceived = (question: GameQuestion) => {
       setCurrentQuestion(question);
-      resetBuzzerState();
+      resetBuzzerState(question.question_id ?? null);
       applyQuestionAnswerData(question);
       if (question.button_state || question.buttonState) {
         applyBackendButtonState(question);
@@ -648,16 +719,15 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           isActive: false,
           canBuzz: false,
           canAnswer: false,
-          buttonState: "locked",
+          buttonState: "waiting",
+          transitioning: true,
+          acceptingBuzzes: false,
           statusText: "Waiting for next question...",
         }));
         stopGlowAnimation();
-        setTimeout(() => {
-          resetBuzzerState();
-        }, 3000);
       } else if (data.type === "next_question" && data.question) {
         setCurrentQuestion(data.question);
-        resetBuzzerState();
+        resetBuzzerState(data.question.question_id ?? null);
         applyQuestionAnswerData(data.question);
         startGlowAnimation();
       }

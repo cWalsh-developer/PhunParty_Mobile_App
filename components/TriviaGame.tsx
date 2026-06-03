@@ -158,7 +158,11 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
   useEffect(() => {
     if (isFrozenForRenderedQuestion && currentQuestionId) {
-      setFairPlayLockedQuestionId(currentQuestionId);
+      const lockTimeout = setTimeout(
+        () => setFairPlayLockedQuestionId(currentQuestionId),
+        0,
+      );
+      return () => clearTimeout(lockTimeout);
     }
   }, [currentQuestionId, isFrozenForRenderedQuestion]);
 
@@ -168,7 +172,11 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       currentQuestionId &&
       fairPlayLockedQuestionId !== currentQuestionId
     ) {
-      setFairPlayLockedQuestionId(null);
+      const unlockTimeout = setTimeout(
+        () => setFairPlayLockedQuestionId(null),
+        0,
+      );
+      return () => clearTimeout(unlockTimeout);
     }
   }, [currentQuestionId, fairPlayLockedQuestionId]);
 

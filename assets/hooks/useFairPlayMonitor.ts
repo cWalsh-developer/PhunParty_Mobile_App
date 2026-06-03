@@ -1,7 +1,33 @@
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, AppStateStatus } from "react-native";
+import {
+  AppState,
+  AppStateStatus,
+  NativeEventEmitter,
+  NativeModules,
+  Platform,
+} from "react-native";
 import type { FocusViolationReason } from "../api/gameWebSocketService";
+
+const FAIR_PLAY_WINDOW_MODE_EVENT = "FairPlayWindowModeChanged";
+
+type FairPlayWindowModePayload = {
+  isInMultiWindowMode?: boolean;
+};
+
+type FairPlayWindowModeModule = {
+  isInMultiWindowMode?: () => Promise<boolean>;
+  addListener?: (eventName: string) => void;
+  removeListeners?: (count: number) => void;
+};
+
+const getFairPlayWindowModeModule = (): FairPlayWindowModeModule | null => {
+  if (Platform.OS !== "android") {
+    return null;
+  }
+
+  return (NativeModules.FairPlayWindowMode as FairPlayWindowModeModule) ?? null;
+};
 
 interface UseFairPlayMonitorOptions {
   enabled: boolean;
@@ -94,6 +120,48 @@ export function useFairPlayMonitor({
 
     return () => subscription.remove();
   }, [handleAppStateChange]);
+
+  useEffect(() => {
+    const windowModeModule = getFairPlayWindowModeModule();
+
+    if (!windowModeModule) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const handleWindowMode = (isInMultiWindowMode: boolean) => {
+      if (!isMounted || !enabled || phase !== "question") {
+        return;
+      }
+
+      if (isInMultiWindowMode) {
+        reportFocusLost("multi_window_mode");
+      } else {
+        reportFocusReturned();
+      }
+    };
+
+    windowModeModule
+      .isInMultiWindowMode?.()
+      .then(handleWindowMode)
+      .catch(() => {
+        // Expo Go and older native builds will not expose this module.
+      });
+
+    const emitter = new NativeEventEmitter(windowModeModule as any);
+    const subscription = emitter.addListener(
+      FAIR_PLAY_WINDOW_MODE_EVENT,
+      (payload: FairPlayWindowModePayload) => {
+        handleWindowMode(payload?.isInMultiWindowMode === true);
+      },
+    );
+
+    return () => {
+      isMounted = false;
+      subscription.remove();
+    };
+  }, [enabled, phase, reportFocusLost, reportFocusReturned]);
 
   useFocusEffect(
     useCallback(() => {

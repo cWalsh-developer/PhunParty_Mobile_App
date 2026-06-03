@@ -41,6 +41,7 @@ const config: ExpoConfig = {
     "expo-secure-store",
     "expo-mail-composer",
     "expo-notifications",
+    "./plugins/withAndroidFairPlayWindowMode",
   ],
   platforms: ["ios", "android", "web"],
   ios: {
