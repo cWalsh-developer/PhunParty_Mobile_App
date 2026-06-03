@@ -1,6 +1,9 @@
 const fs = require("fs");
 const path = require("path");
-const { withAndroidManifest, withDangerousMod } = require("@expo/config-plugins");
+const {
+  withAndroidManifest,
+  withDangerousMod,
+} = require("@expo/config-plugins");
 
 const PACKAGE_PATH = path.join("com", "phunparty", "mobileapp");
 const MODULE_FILE = "FairPlayWindowModeModule.kt";
@@ -27,7 +30,7 @@ class FairPlayWindowModeModule(
 
   @ReactMethod
   fun isInMultiWindowMode(promise: Promise) {
-    val activity = currentActivity
+    val activity = reactContext.currentActivity
     val isInMultiWindowMode =
       Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
         activity?.isInMultiWindowMode == true
@@ -87,7 +90,10 @@ const ensureImport = (source, importLine) => {
     return source;
   }
 
-  return source.replace(/(package com\.phunparty\.mobileapp\s*)/, `$1\n${importLine}\n`);
+  return source.replace(
+    /(package com\.phunparty\.mobileapp\s*)/,
+    `$1\n${importLine}\n`,
+  );
 };
 
 const ensureMainActivityOverrides = (source) => {
@@ -131,14 +137,28 @@ const ensureMainApplicationPackage = (source) => {
 };
 
 const writeNativeFiles = (androidRoot) => {
-  const packageRoot = path.join(androidRoot, "app", "src", "main", "java", PACKAGE_PATH);
+  const packageRoot = path.join(
+    androidRoot,
+    "app",
+    "src",
+    "main",
+    "java",
+    PACKAGE_PATH,
+  );
   fs.mkdirSync(packageRoot, { recursive: true });
   fs.writeFileSync(path.join(packageRoot, MODULE_FILE), moduleSource);
   fs.writeFileSync(path.join(packageRoot, PACKAGE_FILE), packageSource);
 };
 
 const updateNativeEntrypoints = (androidRoot) => {
-  const packageRoot = path.join(androidRoot, "app", "src", "main", "java", PACKAGE_PATH);
+  const packageRoot = path.join(
+    androidRoot,
+    "app",
+    "src",
+    "main",
+    "java",
+    PACKAGE_PATH,
+  );
   const mainActivityPath = path.join(packageRoot, "MainActivity.kt");
   const mainApplicationPath = path.join(packageRoot, "MainApplication.kt");
 
@@ -155,7 +175,9 @@ const updateNativeEntrypoints = (androidRoot) => {
   if (fs.existsSync(mainApplicationPath)) {
     fs.writeFileSync(
       mainApplicationPath,
-      ensureMainApplicationPackage(fs.readFileSync(mainApplicationPath, "utf8")),
+      ensureMainApplicationPackage(
+        fs.readFileSync(mainApplicationPath, "utf8"),
+      ),
     );
   }
 };
@@ -170,7 +192,8 @@ module.exports = function withAndroidFairPlayWindowMode(config) {
       const mainActivity = application.activity?.find((activity) =>
         activity["intent-filter"]?.some((filter) =>
           filter.action?.some(
-            (action) => action.$["android:name"] === "android.intent.action.MAIN",
+            (action) =>
+              action.$["android:name"] === "android.intent.action.MAIN",
           ),
         ),
       );
