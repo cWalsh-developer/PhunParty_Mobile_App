@@ -70,6 +70,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const isCurrentlyConnecting = useRef(false);
   const cleanupRef = useRef<(() => void) | undefined>(undefined);
   const countdownIntervalRef = useRef<any>(null);
+  const foregroundRefreshTimeoutRef = useRef<any>(null);
   const refreshFairPlayStatusRef = useRef<(source: string) => void>(() => {});
 
   const inferGameType = (data: any): string | null => {
@@ -200,6 +201,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       "is_kicked",
       "isKicked",
       "answer_status",
+      "grace_period_ms",
+      "gracePeriodMs",
     ].some((key) => source?.[key] !== undefined);
 
     if (!hasWrappedStatus && !hasStatusFields) {
@@ -253,6 +256,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         source?.frozen_question_id ??
         source?.frozenQuestionId ??
         source?.question_id,
+      grace_period_ms: parseOptionalNumber(
+        source?.grace_period_ms,
+        source?.gracePeriodMs,
+      ),
       message: source?.message,
       reason: source?.reason,
       event_type: payload?.event_type ?? source?.event_type,
@@ -349,7 +356,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
         if (response.isSuccess) {
           statusPayload = response.result;
-        } else if (response.status !== 404) {
+        } else if (
+          response.status !== 404 &&
+          !String(response.message ?? "").startsWith("Network error")
+        ) {
           console.warn(
             `[GameContainer] Fair Play status refresh failed from ${source}:`,
             response.message,
@@ -454,6 +464,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         countdownIntervalRef.current = null;
       }
 
+      if (foregroundRefreshTimeoutRef.current) {
+        clearTimeout(foregroundRefreshTimeoutRef.current);
+        foregroundRefreshTimeoutRef.current = null;
+      }
+
       // Reset refs for potential remount
       hasAttemptedConnection.current = false;
       isCurrentlyConnecting.current = false;
@@ -491,12 +506,26 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
+      if (foregroundRefreshTimeoutRef.current) {
+        clearTimeout(foregroundRefreshTimeoutRef.current);
+        foregroundRefreshTimeoutRef.current = null;
+      }
+
       if (nextState === "active" && fairPlaySettings.enabled) {
-        refreshFairPlayStatusRef.current("app_foregrounded");
+        foregroundRefreshTimeoutRef.current = setTimeout(() => {
+          foregroundRefreshTimeoutRef.current = null;
+          refreshFairPlayStatusRef.current("app_foregrounded");
+        }, 1000);
       }
     });
 
-    return () => subscription.remove();
+    return () => {
+      if (foregroundRefreshTimeoutRef.current) {
+        clearTimeout(foregroundRefreshTimeoutRef.current);
+        foregroundRefreshTimeoutRef.current = null;
+      }
+      subscription.remove();
+    };
   }, [fairPlaySettings.enabled]);
 
   const startPulsingAnimation = () => {
@@ -1075,28 +1104,6 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     }
   };
 
-  if (isConnecting) {
-    return (
-      <View style={styles.container}>
-        <StatusBar style="light" />
-        <View style={styles.centerContainer}>
-          <AppCard style={styles.statusCard}>
-            <MaterialIcons
-              name="wifi-tethering"
-              size={48}
-              color={colors.tea[500]}
-            />
-            <Text style={styles.statusTitle}>Connecting to Game</Text>
-            <Text style={styles.statusText}>
-              Please wait while we connect you to the session...
-            </Text>
-            <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
-          </AppCard>
-        </View>
-      </View>
-    );
-  }
-
   if (isKickedByFairPlay) {
     return (
       <View style={styles.container}>
@@ -1122,6 +1129,28 @@ export const GameContainer: React.FC<GameContainerProps> = ({
                 style={styles.actionButton}
               />
             </View>
+          </AppCard>
+        </View>
+      </View>
+    );
+  }
+
+  if (isConnecting) {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.centerContainer}>
+          <AppCard style={styles.statusCard}>
+            <MaterialIcons
+              name="wifi-tethering"
+              size={48}
+              color={colors.tea[500]}
+            />
+            <Text style={styles.statusTitle}>Connecting to Game</Text>
+            <Text style={styles.statusText}>
+              Please wait while we connect you to the session...
+            </Text>
+            <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
           </AppCard>
         </View>
       </View>

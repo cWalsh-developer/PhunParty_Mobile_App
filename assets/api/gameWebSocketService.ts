@@ -53,6 +53,8 @@ export interface GameQuestion {
   is_current_player?: boolean;
   isCurrentPlayer?: boolean;
   message?: string;
+  grace_period_ms?: number;
+  gracePeriodMs?: number;
   start_at?: string;
 }
 
@@ -107,6 +109,8 @@ export interface FairPlayStatus {
   answer_status?: string;
   reason?: string;
   message?: string;
+  grace_period_ms?: number;
+  gracePeriodMs?: number;
   event_type?: string;
 }
 
@@ -608,6 +612,10 @@ export class GameWebSocketService {
         return;
       }
 
+      if (this.currentPhase !== "lobby" && this.currentPhase !== "ended") {
+        this.onFairPlayStatusRefreshRequested?.();
+      }
+
       if (
         this.shouldReconnect &&
         this.reconnectAttempts < this.maxReconnectAttempts
@@ -725,10 +733,6 @@ export class GameWebSocketService {
 
       case "question_started":
         console.log("MOBILE RECEIVED question_started", message.data);
-        this.emitFairPlayQuestionReset(
-          message.data?.question_id ?? message.data?.questionId,
-          "question_started_fair_play_reset",
-        );
         this.questionReceived = false;
         this.clearQuestionRecoveryTimeouts();
         this.setReadyForQuestions(true);
@@ -788,6 +792,13 @@ export class GameWebSocketService {
         );
         break;
 
+      case "fair_play_focus_grace_started":
+        this.onFairPlayStatusUpdate?.({
+          ...(message.data ?? {}),
+          event_type: message.type,
+        });
+        break;
+
       case "kicked_from_session":
         this.handleKickedFromSession(message.data ?? {}, message.type);
         break;
@@ -795,6 +806,7 @@ export class GameWebSocketService {
       case "game_ended":
         this.lastQuestion = null;
         this.pendingQuestions = [];
+        this.onFairPlayStatusRefreshRequested?.();
         this.setPhase("ended", message.data);
         this.onGameEnded?.(message.data);
         break;

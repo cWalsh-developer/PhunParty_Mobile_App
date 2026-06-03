@@ -224,23 +224,35 @@ const callFetch = async <T = any>(
       };
     }
   } catch (error: any) {
-    console.error("API request error:", error);
+    const errorMessage = String(error?.message ?? "");
+    const isNetworkError =
+      error?.name === "TypeError" ||
+      errorMessage.includes("fetch") ||
+      errorMessage.includes("Network request failed") ||
+      errorMessage.includes("UnknownHostException") ||
+      errorMessage.includes("Unable to resolve host");
 
-    // Handle specific error types
-    if (error.name === "TypeError" && error.message.includes("fetch")) {
+    // Handle transient mobile network/DNS failures without red-boxing LogBox.
+    if (isNetworkError) {
+      console.log(
+        `API network request failed (${method} ${url}):`,
+        errorMessage,
+      );
       return {
         isSuccess: false,
         message: "Network error: Unable to connect to server",
       };
     }
 
-    if (error.name === "AbortError") {
+    if (error?.name === "AbortError") {
       return { isSuccess: false, message: "Request timeout" };
     }
 
+    console.error("API request error:", error);
+
     return {
       isSuccess: false,
-      message: error.message || "An unexpected error occurred",
+      message: errorMessage || "An unexpected error occurred",
     };
   }
 };

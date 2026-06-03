@@ -77,11 +77,19 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   const [hasSubmittedAnswer, setHasSubmittedAnswer] = useState(false);
   const [isGameActive, setIsGameActive] = useState(true);
   const [glowIntensity, setGlowIntensity] = useState(0);
+  const [fairPlayLockedQuestionId, setFairPlayLockedQuestionId] = useState<
+    string | null
+  >(null);
 
   const [scaleAnimation] = useState(() => new Animated.Value(1));
   const [winnerAnimation] = useState(() => new Animated.Value(0));
   const glowIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const winnerAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const fairPlayStatusRef = useRef<FairPlayStatus | null | undefined>(
+    fairPlayStatus,
+  );
+  const fairPlayEnabledRef = useRef(fairPlayEnabled);
+  const gameEndedTimeoutRef = useRef<any>(null);
   const currentQuestionId = currentQuestion?.question_id;
   const fairPlayStrikeCount = Number(
     fairPlayStatus?.strike_count ?? fairPlayStatus?.strikeCount ?? 0,
@@ -91,6 +99,16 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       fairPlayStatus?.maxStrikes ??
       maxFairPlayStrikes,
   );
+  const fairPlayGracePeriodMs = Number(
+    fairPlayStatus?.grace_period_ms ?? fairPlayStatus?.gracePeriodMs ?? 1500,
+  );
+  const fairPlayGraceSeconds = Math.max(
+    1,
+    Math.ceil(
+      (Number.isFinite(fairPlayGracePeriodMs) ? fairPlayGracePeriodMs : 1500) /
+        1000,
+    ),
+  );
   const fairPlayFrozenQuestionId =
     fairPlayStatus?.frozen_question_id ?? fairPlayStatus?.frozenQuestionId;
   const isFrozenByFairPlay = Boolean(
@@ -99,11 +117,14 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   const isKickedByFairPlay = Boolean(
     fairPlayStatus?.is_kicked ?? fairPlayStatus?.isKicked,
   );
+  const isFrozenForRenderedQuestion =
+    isFrozenByFairPlay &&
+    !!currentQuestionId &&
+    (!fairPlayFrozenQuestionId || fairPlayFrozenQuestionId === currentQuestionId);
   const isFairPlayLocked =
     isKickedByFairPlay ||
-    (isFrozenByFairPlay &&
-      (!fairPlayFrozenQuestionId ||
-        fairPlayFrozenQuestionId === currentQuestionId));
+    isFrozenForRenderedQuestion ||
+    (!!currentQuestionId && fairPlayLockedQuestionId === currentQuestionId);
 
   const handleFairPlayViolation = useCallback(
     (questionId: string, reason: FocusViolationReason) => {
@@ -126,6 +147,27 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     onFocusLost: handleFairPlayViolation,
     onFocusReturned: handleFairPlayReturned,
   });
+
+  useEffect(() => {
+    fairPlayStatusRef.current = fairPlayStatus;
+    fairPlayEnabledRef.current = fairPlayEnabled;
+  }, [fairPlayEnabled, fairPlayStatus]);
+
+  useEffect(() => {
+    if (isFrozenForRenderedQuestion && currentQuestionId) {
+      setFairPlayLockedQuestionId(currentQuestionId);
+    }
+  }, [currentQuestionId, isFrozenForRenderedQuestion]);
+
+  useEffect(() => {
+    if (
+      fairPlayLockedQuestionId &&
+      currentQuestionId &&
+      fairPlayLockedQuestionId !== currentQuestionId
+    ) {
+      setFairPlayLockedQuestionId(null);
+    }
+  }, [currentQuestionId, fairPlayLockedQuestionId]);
 
   useEffect(() => {
     if (!isFairPlayLocked) {
@@ -539,7 +581,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
             ? fairPlayStatus?.message ||
               `Fair Play strike ${fairPlayStrikeCount}/${fairPlayMaxStrikes}. You are frozen for this question.`
             : isWarning
-              ? "Return to the game within 5 seconds to avoid a Fair Play strike."
+              ? `Return to the game within ${fairPlayGraceSeconds} seconds to avoid a Fair Play strike.`
             : `Fair Play Mode active - ${fairPlayStrikeCount}/${fairPlayMaxStrikes} strikes`}
         </Text>
       </View>
@@ -643,10 +685,32 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     };
 
     gameWebSocket.onGameEnded = (data: any) => {
-      setIsGameActive(false);
-      Alert.alert("Game Over!", data.message || "Thanks for playing!", [
-        { text: "OK", onPress: onGameEnd },
-      ]);
+      const showGameEndedAlert = () => {
+        const latestFairPlayStatus = fairPlayStatusRef.current;
+        const wasKicked = Boolean(
+          latestFairPlayStatus?.is_kicked ?? latestFairPlayStatus?.isKicked,
+        );
+
+        if (wasKicked) {
+          return;
+        }
+
+        setIsGameActive(false);
+        Alert.alert("Game Over!", data.message || "Thanks for playing!", [
+          { text: "OK", onPress: onGameEnd },
+        ]);
+      };
+
+      if (fairPlayEnabledRef.current) {
+        if (gameEndedTimeoutRef.current) {
+          clearTimeout(gameEndedTimeoutRef.current);
+        }
+
+        gameEndedTimeoutRef.current = setTimeout(showGameEndedAlert, 800);
+        return;
+      }
+
+      showGameEndedAlert();
     };
 
     gameWebSocket.onGameStarted = (data: any) => {
@@ -658,6 +722,10 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     };
 
     return () => {
+      if (gameEndedTimeoutRef.current) {
+        clearTimeout(gameEndedTimeoutRef.current);
+        gameEndedTimeoutRef.current = null;
+      }
       stopGlowAnimation();
       stopWinnerAnimation();
       scaleAnimation.stopAnimation();
