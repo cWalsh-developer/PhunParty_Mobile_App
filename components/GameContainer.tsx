@@ -160,15 +160,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       return null;
     }
 
-    const hasWrappedStatus = Boolean(
-      payload?.fair_play_status ??
-      payload?.fairPlayStatus ??
-      payload?.player_fair_play_status ??
-      payload?.playerFairPlayStatus ??
-      payload?.status ??
-      payload?.fair_play_record ??
-      payload?.fairPlayRecord,
-    );
+    const currentPlayerId = normalizeId(playerInfo.player_id);
+
     const source =
       payload?.fair_play_status ??
       payload?.fairPlayStatus ??
@@ -178,10 +171,80 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       payload?.fair_play_record ??
       payload?.fairPlayRecord ??
       payload;
+
+    const removedPlayerLists = [
+      payload?.removed_players,
+      payload?.removedPlayers,
+      payload?.kicked_players,
+      payload?.kickedPlayers,
+      payload?.authoritative_state?.removed_players,
+      payload?.authoritative_state?.removedPlayers,
+      payload?.authoritativeState?.removed_players,
+      payload?.authoritativeState?.removedPlayers,
+      payload?.game_state?.removed_players,
+      payload?.game_state?.removedPlayers,
+      payload?.gameState?.removed_players,
+      payload?.gameState?.removedPlayers,
+      source?.removed_players,
+      source?.removedPlayers,
+      source?.kicked_players,
+      source?.kickedPlayers,
+    ].filter(Array.isArray);
+
+    const removedPlayers = removedPlayerLists.reduce<any[]>(
+      (allRemovedPlayers, removedList) => [
+        ...allRemovedPlayers,
+        ...removedList,
+      ],
+      [],
+    );
+
+    const getCandidatePlayerId = (candidate: any): string => {
+      if (candidate === undefined || candidate === null) {
+        return "";
+      }
+
+      if (typeof candidate === "string" || typeof candidate === "number") {
+        return normalizeId(candidate);
+      }
+
+      return normalizeId(
+        candidate?.player_id ??
+          candidate?.playerId ??
+          candidate?.participant_id ??
+          candidate?.participantId ??
+          candidate?.id ??
+          candidate?.player?.player_id ??
+          candidate?.player?.playerId,
+      );
+    };
+
+    const removedPlayerMatch = removedPlayers.find(
+      (candidate) => getCandidatePlayerId(candidate) === currentPlayerId,
+    );
+
+    const removedPlayerData =
+      removedPlayerMatch && typeof removedPlayerMatch === "object"
+        ? removedPlayerMatch
+        : null;
+
+    const wasRemoved = Boolean(removedPlayerMatch);
+
+    const hasWrappedStatus = Boolean(
+      payload?.fair_play_status ??
+      payload?.fairPlayStatus ??
+      payload?.player_fair_play_status ??
+      payload?.playerFairPlayStatus ??
+      payload?.status ??
+      payload?.fair_play_record ??
+      payload?.fairPlayRecord,
+    );
+
     const hasStatusFields = [
       "player_id",
       "playerId",
       "participant_id",
+      "participantId",
       "strike_count",
       "strikeCount",
       "fair_play_strikes",
@@ -211,16 +274,20 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       "gracePeriodMs",
     ].some((key) => source?.[key] !== undefined);
 
-    if (!hasWrappedStatus && !hasStatusFields) {
+    if (!hasWrappedStatus && !hasStatusFields && !wasRemoved) {
       return null;
     }
 
     const eventPlayerId =
-      source?.player_id ?? source?.playerId ?? source?.participant_id;
+      source?.player_id ??
+      source?.playerId ??
+      source?.participant_id ??
+      source?.participantId;
 
     if (
       eventPlayerId &&
-      normalizeId(eventPlayerId) !== normalizeId(playerInfo.player_id)
+      normalizeId(eventPlayerId) !== currentPlayerId &&
+      !wasRemoved
     ) {
       return null;
     }
@@ -235,7 +302,13 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       source?.current_strikes,
       source?.currentStrikes,
       source?.strikes,
+      removedPlayerData?.strike_count,
+      removedPlayerData?.strikeCount,
+      removedPlayerData?.fair_play_strikes,
+      removedPlayerData?.fairPlayStrikes,
+      removedPlayerData?.strikes,
     );
+
     const maxStrikes = parseOptionalNumber(
       source?.max_strikes,
       source?.maxStrikes,
@@ -245,29 +318,62 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       source?.maxCheatStrikes,
       source?.strike_limit,
       source?.strikeLimit,
+      removedPlayerData?.max_strikes,
+      removedPlayerData?.maxStrikes,
+      removedPlayerData?.max_fair_play_strikes,
+      removedPlayerData?.maxFairPlayStrikes,
+      removedPlayerData?.strike_limit,
+      removedPlayerData?.strikeLimit,
     );
+
     const frozenValue =
-      source?.is_frozen ?? source?.isFrozen ?? source?.frozen_for_question;
+      source?.is_frozen ??
+      source?.isFrozen ??
+      source?.frozen_for_question ??
+      removedPlayerData?.is_frozen ??
+      removedPlayerData?.isFrozen ??
+      removedPlayerData?.frozen_for_question;
+
     const kickedValue =
       source?.is_kicked ??
       source?.isKicked ??
+      removedPlayerData?.is_kicked ??
+      removedPlayerData?.isKicked ??
       (source?.answer_status === "kicked" ||
-      source?.reason === "fair_play_strikes"
+      source?.reason === "fair_play_strikes" ||
+      removedPlayerData?.answer_status === "kicked" ||
+      removedPlayerData?.reason === "fair_play_strikes" ||
+      wasRemoved
         ? true
         : undefined);
+
     const status: FairPlayStatus = {
       ...source,
-      player_id: normalizeId(eventPlayerId || playerInfo.player_id),
+      ...(removedPlayerData ?? {}),
+      player_id: currentPlayerId,
       frozen_question_id:
         source?.frozen_question_id ??
         source?.frozenQuestionId ??
-        source?.question_id,
+        removedPlayerData?.frozen_question_id ??
+        removedPlayerData?.frozenQuestionId ??
+        source?.question_id ??
+        removedPlayerData?.question_id,
       grace_period_ms: parseOptionalNumber(
         source?.grace_period_ms,
         source?.gracePeriodMs,
+        removedPlayerData?.grace_period_ms,
+        removedPlayerData?.gracePeriodMs,
       ),
-      message: source?.message,
-      reason: source?.reason,
+      message:
+        source?.message ??
+        removedPlayerData?.message ??
+        (wasRemoved
+          ? "You have been removed from this session by Fair Play Mode."
+          : undefined),
+      reason:
+        source?.reason ??
+        removedPlayerData?.reason ??
+        (wasRemoved ? "fair_play_strikes" : undefined),
       event_type: payload?.event_type ?? source?.event_type,
     };
 
@@ -279,7 +385,12 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       status.max_strikes = maxStrikes;
     }
 
-    const effectiveMaxStrikes = maxStrikes ?? fairPlaySettings.maxStrikes;
+    const effectiveMaxStrikes =
+      maxStrikes ??
+      status.max_strikes ??
+      status.maxStrikes ??
+      fairPlaySettings.maxStrikes;
+
     if (
       strikeCount !== undefined &&
       effectiveMaxStrikes > 0 &&
@@ -298,6 +409,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     if (kickedValue !== undefined) {
       status.is_kicked = Boolean(kickedValue) || status.is_kicked === true;
+    }
+
+    if (wasRemoved) {
+      status.is_kicked = true;
+      status.answer_status = status.answer_status ?? "kicked";
     }
 
     return status;
@@ -393,6 +509,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       }
 
       const effectiveStatusPayload = statusPayload?.result ?? statusPayload;
+      console.log("[FAIR PLAY STATUS REFRESH]", {
+        source,
+        playerId: playerInfo.player_id,
+        effectiveStatusPayload,
+      });
 
       applyFairPlaySettings(effectiveStatusPayload);
 
@@ -440,7 +561,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const checkFinalFairPlayStatusBeforeShowingReconnect = async (
     source: string,
   ): Promise<FairPlayStatus | null> => {
-    if (!fairPlaySettings.enabled || !sessionCode || !playerInfo.player_id) {
+    if (!sessionCode || !playerInfo.player_id) {
       return null;
     }
 
@@ -588,14 +709,20 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         foregroundRefreshTimeoutRef.current = null;
       }
 
-      if (nextState === "active" && fairPlaySettings.enabled) {
+      if (nextState === "active") {
+        setIsCheckingFinalFairPlayStatus(true);
+
         foregroundRefreshTimeoutRef.current = setTimeout(async () => {
           foregroundRefreshTimeoutRef.current = null;
 
-          await checkFinalFairPlayStatusBeforeShowingReconnect(
-            "app_foregrounded",
-          );
-        }, 250);
+          const status = await refreshFairPlayStatus("app_foregrounded");
+
+          const wasKicked = Boolean(status?.is_kicked ?? status?.isKicked);
+
+          if (!wasKicked) {
+            setIsCheckingFinalFairPlayStatus(false);
+          }
+        }, 100);
       }
     });
 
@@ -604,9 +731,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         clearTimeout(foregroundRefreshTimeoutRef.current);
         foregroundRefreshTimeoutRef.current = null;
       }
+
       subscription.remove();
     };
-  }, [fairPlaySettings.enabled]);
+  }, []);
 
   const startPulsingAnimation = () => {
     const pulse = () => {
@@ -995,6 +1123,20 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     fairPlayStatus?.is_kicked ?? fairPlayStatus?.isKicked,
   );
 
+  const hasGameActuallyStarted =
+    isGameStarted ||
+    gameStartedRef.current ||
+    gamePhase === "question" ||
+    gamePhase === "countdown" ||
+    gamePhase === "intro_audio" ||
+    gamePhase === "waiting_for_host_intro" ||
+    gamePhase === "countdown_pending";
+
+  const isTerminalGameState = gamePhase === "ended" && hasGameActuallyStarted;
+
+  const shouldHideConnectionBanners =
+    isKickedByFairPlay || isCheckingFinalFairPlayStatus || isTerminalGameState;
+
   const renderFairPlayNotice = () => {
     if (!fairPlaySettings.enabled) {
       return null;
@@ -1233,6 +1375,35 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     );
   }
 
+  if (isTerminalGameState) {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.centerContainer}>
+          <AppCard style={styles.statusCard}>
+            <MaterialIcons
+              name="emoji-events"
+              size={48}
+              color={colors.tea[500]}
+            />
+            <Text style={styles.statusTitle}>Game Ended</Text>
+            <Text style={styles.statusText}>
+              Checking whether you were removed from the session...
+            </Text>
+            <View style={styles.actionButtons}>
+              <AppButton
+                title="Leave Game"
+                onPress={handleLeaveGame}
+                variant="primary"
+                style={styles.actionButton}
+              />
+            </View>
+          </AppCard>
+        </View>
+      </View>
+    );
+  }
+
   if (isConnecting) {
     return (
       <View style={styles.container}>
@@ -1293,18 +1464,19 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       <StatusBar style="light" />
 
       {/* Connection status banner */}
-      {connectionState === "reconnecting" &&
-        !isKickedByFairPlay &&
-        !isCheckingFinalFairPlayStatus && (
-          <View style={styles.reconnectingBanner}>Reconnecting...</View>
-        )}
+      {connectionState === "reconnecting" && !shouldHideConnectionBanners && (
+        <View style={styles.reconnectingBanner}>
+          <Text style={styles.reconnectingText}>Reconnecting...</Text>
+        </View>
+      )}
 
       {connectionState === "disconnected" &&
         !isConnecting &&
-        !isKickedByFairPlay &&
-        !isCheckingFinalFairPlayStatus && (
+        !shouldHideConnectionBanners && (
           <View style={styles.disconnectedBanner}>
-            Connection Lost Please Refresh.
+            <Text style={styles.disconnectedText}>
+              Connection lost. Please refresh.
+            </Text>
           </View>
         )}
 
