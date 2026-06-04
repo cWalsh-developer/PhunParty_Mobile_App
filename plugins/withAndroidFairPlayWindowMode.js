@@ -33,6 +33,16 @@ class FairPlayWindowModeModule(
   }
 
   @ReactMethod
+  fun isInPictureInPictureMode(promise: Promise) {
+    promise.resolve(lastKnownPictureInPictureMode)
+  }
+
+  @ReactMethod
+  fun hasWindowFocus(promise: Promise) {
+    promise.resolve(lastKnownWindowFocus)
+  }
+
+  @ReactMethod
   fun addListener(eventName: String) = Unit
 
   @ReactMethod
@@ -42,18 +52,33 @@ class FairPlayWindowModeModule(
     const val NAME = "FairPlayWindowMode"
     private const val EVENT_NAME = "FairPlayWindowModeChanged"
     private var sharedReactContext: ReactApplicationContext? = null
+
     private var lastKnownMultiWindowMode: Boolean = false
+    private var lastKnownPictureInPictureMode: Boolean = false
+    private var lastKnownWindowFocus: Boolean = true
 
     fun setMultiWindowMode(isInMultiWindowMode: Boolean) {
       lastKnownMultiWindowMode = isInMultiWindowMode
-      emitMultiWindowModeChanged(isInMultiWindowMode)
+      emitWindowModeChanged()
     }
 
-    private fun emitMultiWindowModeChanged(isInMultiWindowMode: Boolean) {
+    fun setPictureInPictureMode(isInPictureInPictureMode: Boolean) {
+      lastKnownPictureInPictureMode = isInPictureInPictureMode
+      emitWindowModeChanged()
+    }
+
+    fun setWindowFocus(hasWindowFocus: Boolean) {
+      lastKnownWindowFocus = hasWindowFocus
+      emitWindowModeChanged()
+    }
+
+    private fun emitWindowModeChanged() {
       val context = sharedReactContext ?: return
 
       val payload = Arguments.createMap().apply {
-        putBoolean("isInMultiWindowMode", isInMultiWindowMode)
+        putBoolean("isInMultiWindowMode", lastKnownMultiWindowMode)
+        putBoolean("isInPictureInPictureMode", lastKnownPictureInPictureMode)
+        putBoolean("hasWindowFocus", lastKnownWindowFocus)
       }
 
       try {
@@ -98,7 +123,23 @@ const ensureImport = (source, importLine) => {
 };
 
 const ensureMainActivityOverrides = (source) => {
-  if (source.includes("FairPlayWindowModeModule.setMultiWindowMode")) {
+  const hasMultiWindowOverride = source.includes(
+    "FairPlayWindowModeModule.setMultiWindowMode",
+  );
+
+  const hasPictureInPictureOverride = source.includes(
+    "FairPlayWindowModeModule.setPictureInPictureMode",
+  );
+
+  const hasWindowFocusOverride = source.includes(
+    "FairPlayWindowModeModule.setWindowFocus",
+  );
+
+  if (
+    hasMultiWindowOverride &&
+    hasPictureInPictureOverride &&
+    hasWindowFocusOverride
+  ) {
     return source;
   }
 
@@ -114,6 +155,24 @@ const ensureMainActivityOverrides = (source) => {
   ) {
     super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
     FairPlayWindowModeModule.setMultiWindowMode(isInMultiWindowMode)
+  }
+
+  override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {
+    super.onPictureInPictureModeChanged(isInPictureInPictureMode)
+    FairPlayWindowModeModule.setPictureInPictureMode(isInPictureInPictureMode)
+  }
+
+  override fun onPictureInPictureModeChanged(
+    isInPictureInPictureMode: Boolean,
+    newConfig: Configuration
+  ) {
+    super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+    FairPlayWindowModeModule.setPictureInPictureMode(isInPictureInPictureMode)
+  }
+
+  override fun onWindowFocusChanged(hasFocus: Boolean) {
+    super.onWindowFocusChanged(hasFocus)
+    FairPlayWindowModeModule.setWindowFocus(hasFocus)
   }
 
 `;

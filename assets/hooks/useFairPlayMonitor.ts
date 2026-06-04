@@ -13,10 +13,14 @@ const FAIR_PLAY_WINDOW_MODE_EVENT = "FairPlayWindowModeChanged";
 
 type FairPlayWindowModePayload = {
   isInMultiWindowMode?: boolean;
+  isInPictureInPictureMode?: boolean;
+  hasWindowFocus?: boolean;
 };
 
 type FairPlayWindowModeModule = {
   isInMultiWindowMode?: () => Promise<boolean>;
+  isInPictureInPictureMode?: () => Promise<boolean>;
+  hasWindowFocus?: () => Promise<boolean>;
   addListener?: (eventName: string) => void;
   removeListeners?: (count: number) => void;
 };
@@ -63,7 +67,16 @@ export function useFairPlayMonitor({
       }
 
       pendingQuestionRef.current = activeQuestionId;
-      setGraceQuestionId(activeQuestionId);
+
+      const isImmediateViolation =
+        reason === "multi_window_mode" ||
+        reason === "picture_in_picture_mode" ||
+        reason === "window_focus_lost";
+
+      if (!isImmediateViolation) {
+        setGraceQuestionId(activeQuestionId);
+      }
+
       onFocusLost(activeQuestionId, reason);
     },
     [activeQuestionId, onFocusLost],
@@ -130,19 +143,52 @@ export function useFairPlayMonitor({
 
     let isMounted = true;
 
-    const handleWindowMode = (isInMultiWindowMode: boolean) => {
+    const handleWindowMode = (payload: FairPlayWindowModePayload) => {
       if (!isMounted || !enabled || phase !== "question") {
         return;
       }
 
-      if (isInMultiWindowMode) {
-        reportFocusLost("multi_window_mode");
+      if (payload.isInPictureInPictureMode === true) {
+        reportFocusLost("picture_in_picture_mode");
+        return;
       }
+
+      if (payload.isInMultiWindowMode === true) {
+        reportFocusLost("multi_window_mode");
+        return;
+      }
+
+      if (payload.hasWindowFocus === false) {
+        reportFocusLost("window_focus_lost");
+        return;
+      }
+
+      /*
+       * Do not call reportFocusReturned() here.
+       *
+       * Multi-window, picture-in-picture, and window-focus-loss are immediate
+       * Fair Play violations. Returning from those modes should not clear the
+       * strike/freeze state. The freeze should clear on the next question.
+       */
     };
 
-    windowModeModule
-      .isInMultiWindowMode?.()
-      .then(handleWindowMode)
+    Promise.all([
+      windowModeModule.isInMultiWindowMode?.().catch(() => false) ??
+        Promise.resolve(false),
+      windowModeModule.isInPictureInPictureMode?.().catch(() => false) ??
+        Promise.resolve(false),
+      windowModeModule.hasWindowFocus?.().catch(() => true) ??
+        Promise.resolve(true),
+    ])
+      .then(
+        ([isInMultiWindowMode, isInPictureInPictureMode, hasWindowFocus]) => {
+          handleWindowMode({
+            isInMultiWindowMode,
+            isInPictureInPictureMode,
+            hasWindowFocus,
+          });
+        },
+      )
       .catch(() => {
         // Expo Go and older native builds will not expose this module.
       });
@@ -151,7 +197,7 @@ export function useFairPlayMonitor({
     const subscription = emitter.addListener(
       FAIR_PLAY_WINDOW_MODE_EVENT,
       (payload: FairPlayWindowModePayload) => {
-        handleWindowMode(payload?.isInMultiWindowMode === true);
+        handleWindowMode(payload ?? {});
       },
     );
 
@@ -159,7 +205,7 @@ export function useFairPlayMonitor({
       isMounted = false;
       subscription.remove();
     };
-  }, [enabled, phase, reportFocusLost, reportFocusReturned]);
+  }, [enabled, phase, reportFocusLost]);
 
   useFocusEffect(
     useCallback(() => {

@@ -68,7 +68,9 @@ export type FocusViolationReason =
   | "app_backgrounded"
   | "app_inactive"
   | "screen_blurred"
-  | "multi_window_mode";
+  | "multi_window_mode"
+  | "picture_in_picture_mode"
+  | "window_focus_lost";
 
 export type FairPlayFocusEvent = "lost" | "returned";
 
@@ -1086,7 +1088,8 @@ export class GameWebSocketService {
 
     return (
       !playerId ||
-      String(playerId).trim() === String(this.playerInfo?.player_id ?? "").trim()
+      String(playerId).trim() ===
+        String(this.playerInfo?.player_id ?? "").trim()
     );
   }
 
