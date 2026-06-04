@@ -432,6 +432,14 @@ export class GameWebSocketService {
     questionId: string,
     reason: FocusViolationReason,
   ): boolean {
+    console.log("[FAIR PLAY] WebSocket sending fair_play_focus_lost", {
+      sessionCode: this.sessionCode,
+      playerId: this.playerInfo?.player_id,
+      questionId,
+      reason,
+      isConnected: this.isConnected,
+      connectionState: this.connectionState,
+    });
     return this.sendMessage({
       type: "fair_play_focus_lost",
       data: {

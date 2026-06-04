@@ -601,6 +601,13 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     questionId: string,
     reason: FocusViolationReason,
   ) => {
+    console.log("[FAIR PLAY] GameContainer sending focus lost", {
+      sessionCode,
+      playerId: playerInfo.player_id,
+      questionId,
+      reason,
+      connectionState,
+    });
     gameWebSocket.reportFairPlayFocusLost(questionId, reason);
 
     const isImmediateViolation =
@@ -608,7 +615,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     scheduleFairPlayStatusRecovery(
       `fair_play_focus_lost_${reason}`,
-      isImmediateViolation ? [400, 1000, 2000] : [2200, 3000],
+      isImmediateViolation ? [400, 1000, 2000] : [2150, 2400, 3000],
     );
   };
 
