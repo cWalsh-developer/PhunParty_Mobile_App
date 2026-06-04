@@ -49,11 +49,23 @@ export function useFairPlayMonitor({
   onFocusReturned,
 }: UseFairPlayMonitorOptions) {
   const pendingQuestionRef = useRef<string | null>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const windowFocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
   const [graceQuestionId, setGraceQuestionId] = useState<string | null>(null);
+
   const activeQuestionId = enabled && phase === "question" ? questionId : null;
 
   useEffect(() => {
     pendingQuestionRef.current = null;
+    setGraceQuestionId(null);
+
+    if (windowFocusTimerRef.current) {
+      clearTimeout(windowFocusTimerRef.current);
+      windowFocusTimerRef.current = null;
+    }
   }, [questionId]);
 
   const reportFocusLost = useCallback(
@@ -96,6 +108,7 @@ export function useFairPlayMonitor({
 
   useEffect(() => {
     if (AppState.currentState === "active") {
+      appStateRef.current = "active";
       reportFocusReturned();
     }
   }, [activeQuestionId, reportFocusReturned]);
@@ -108,6 +121,8 @@ export function useFairPlayMonitor({
 
   const handleAppStateChange = useCallback(
     (nextState: AppStateStatus) => {
+      appStateRef.current = nextState;
+
       if (nextState === "active") {
         reportFocusReturned();
         return;
@@ -143,32 +158,69 @@ export function useFairPlayMonitor({
 
     let isMounted = true;
 
+    const clearWindowFocusTimer = () => {
+      if (windowFocusTimerRef.current) {
+        clearTimeout(windowFocusTimerRef.current);
+        windowFocusTimerRef.current = null;
+      }
+    };
+
+    const handleWindowFocusLost = () => {
+      clearWindowFocusTimer();
+
+      /*
+       * Window focus loss is noisy.
+       *
+       * It can mean:
+       * - Google Assistant / overlay appeared while PhunParty is still active
+       * - OR the user is simply leaving/backgrounding the app
+       *
+       * We wait briefly so AppState has time to update. If the app is still
+       * active after the debounce, treat it as an overlay-style violation.
+       * If AppState has become inactive/background, AppState handles it using
+       * the normal Fair Play grace period.
+       */
+      windowFocusTimerRef.current = setTimeout(() => {
+        if (!isMounted || !enabled || phase !== "question") {
+          return;
+        }
+
+        if (appStateRef.current === "active") {
+          reportFocusLost("window_focus_lost");
+        }
+      }, 250);
+    };
+
     const handleWindowMode = (payload: FairPlayWindowModePayload) => {
       if (!isMounted || !enabled || phase !== "question") {
         return;
       }
 
       if (payload.isInPictureInPictureMode === true) {
+        clearWindowFocusTimer();
         reportFocusLost("picture_in_picture_mode");
         return;
       }
 
       if (payload.isInMultiWindowMode === true) {
+        clearWindowFocusTimer();
         reportFocusLost("multi_window_mode");
         return;
       }
 
       if (payload.hasWindowFocus === false) {
-        reportFocusLost("window_focus_lost");
+        handleWindowFocusLost();
         return;
       }
 
       /*
        * Do not call reportFocusReturned() here.
        *
-       * Multi-window, picture-in-picture, and window-focus-loss are immediate
-       * Fair Play violations. Returning from those modes should not clear the
-       * strike/freeze state. The freeze should clear on the next question.
+       * Multi-window and picture-in-picture are immediate Fair Play violations.
+       * Window-focus loss only reports after a debounce if the app remains active.
+       *
+       * Normal app switching/backgrounding is handled by AppState and keeps the
+       * grace-period behaviour.
        */
     };
 
@@ -203,6 +255,7 @@ export function useFairPlayMonitor({
 
     return () => {
       isMounted = false;
+      clearWindowFocusTimer();
       subscription.remove();
     };
   }, [enabled, phase, reportFocusLost]);

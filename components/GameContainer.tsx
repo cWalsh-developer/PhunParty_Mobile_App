@@ -73,6 +73,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const foregroundRefreshTimeoutRef = useRef<any>(null);
   const refreshFairPlayStatusRef = useRef<(source: string) => void>(() => {});
 
+  const fairPlayRecoveryTimeoutsRef = useRef<
+    Array<ReturnType<typeof setTimeout>>
+  >([]);
+
   const inferGameType = (data: any): string | null => {
     const source = data?.current_question ?? data?.question ?? data;
     const explicitType =
@@ -113,9 +117,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const normalizeId = (value: any): string =>
     value === undefined || value === null ? "" : String(value).trim();
 
-  const normalizeFairPlaySettings = (
-    payload: any,
-  ): FairPlaySettings | null => {
+  const normalizeFairPlaySettings = (payload: any): FairPlaySettings | null => {
     const source =
       payload?.fair_play_settings ??
       payload?.fairPlaySettings ??
@@ -145,7 +147,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     return {
       enabled,
-      maxStrikes: Number.isFinite(maxStrikes) && maxStrikes > 0 ? maxStrikes : 3,
+      maxStrikes:
+        Number.isFinite(maxStrikes) && maxStrikes > 0 ? maxStrikes : 3,
     };
   };
 
@@ -156,12 +159,12 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     const hasWrappedStatus = Boolean(
       payload?.fair_play_status ??
-        payload?.fairPlayStatus ??
-        payload?.player_fair_play_status ??
-        payload?.playerFairPlayStatus ??
-        payload?.status ??
-        payload?.fair_play_record ??
-        payload?.fairPlayRecord,
+      payload?.fairPlayStatus ??
+      payload?.player_fair_play_status ??
+      payload?.playerFairPlayStatus ??
+      payload?.status ??
+      payload?.fair_play_record ??
+      payload?.fairPlayRecord,
     );
     const source =
       payload?.fair_play_status ??
@@ -246,7 +249,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       source?.is_kicked ??
       source?.isKicked ??
       (source?.answer_status === "kicked" ||
-        source?.reason === "fair_play_strikes"
+      source?.reason === "fair_play_strikes"
         ? true
         : undefined);
     const status: FairPlayStatus = {
@@ -391,10 +394,13 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       applyFairPlayStatus(normalizedStatus);
 
       if (normalizedStatus.is_kicked || normalizedStatus.isKicked) {
+        clearFairPlayStatusRecovery();
+
         gameWebSocket.stopReconnect();
         setIsConnecting(false);
         setConnectionState("disconnected");
         setConnectionError(null);
+        setIsWaitingForQuestion(false);
       }
     } catch (error) {
       console.warn(
@@ -407,11 +413,43 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     void refreshFairPlayStatus(source);
   };
 
+  const clearFairPlayStatusRecovery = () => {
+    fairPlayRecoveryTimeoutsRef.current.forEach(clearTimeout);
+    fairPlayRecoveryTimeoutsRef.current = [];
+  };
+
+  const scheduleFairPlayStatusRecovery = (
+    source: string,
+    delaysMs: number[] = [300, 1000, 2500],
+  ) => {
+    if (!fairPlaySettings.enabled) {
+      return;
+    }
+
+    clearFairPlayStatusRecovery();
+
+    fairPlayRecoveryTimeoutsRef.current = delaysMs.map((delayMs) =>
+      setTimeout(() => {
+        refreshFairPlayStatusRef.current(`${source}_${delayMs}ms`);
+      }, delayMs),
+    );
+  };
+
   const reportFairPlayFocusLost = (
     questionId: string,
     reason: FocusViolationReason,
   ) => {
     gameWebSocket.reportFairPlayFocusLost(questionId, reason);
+
+    const isImmediateViolation =
+      reason === "multi_window_mode" ||
+      reason === "picture_in_picture_mode" ||
+      reason === "window_focus_lost";
+
+    scheduleFairPlayStatusRecovery(
+      `fair_play_focus_lost_${reason}`,
+      isImmediateViolation ? [400, 1000, 2000] : [2200, 3000],
+    );
   };
 
   const reportFairPlayFocusReturned = (questionId: string) => {
@@ -468,7 +506,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         clearTimeout(foregroundRefreshTimeoutRef.current);
         foregroundRefreshTimeoutRef.current = null;
       }
-
+      clearFairPlayStatusRecovery();
       // Reset refs for potential remount
       hasAttemptedConnection.current = false;
       isCurrentlyConnecting.current = false;
@@ -592,7 +630,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
           status.is_active &&
           !!status.current_question &&
           !status.is_waiting_for_players;
-        console.log("🎮 Game start detection:", {
+        console.log("Game start detection:", {
           is_active: status.is_active,
           has_question: !!status.current_question,
           is_waiting_for_players: status.is_waiting_for_players,
@@ -625,13 +663,22 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
         // Request initial state when connected
         setTimeout(() => {
-          console.log("📊 Requesting session stats after connection");
+          console.log("Requesting session stats after connection");
           gameWebSocket.requestSessionStats();
           void refreshFairPlayStatus("websocket_connected");
         }, 1000);
       } else if (state === "reconnecting") {
-        console.log("🔄 WebSocket reconnecting...");
+        console.log("WebSocket reconnecting...");
+        scheduleFairPlayStatusRecovery(
+          "websocket_reconnecting",
+          [500, 1500, 3000],
+        );
       } else if (state === "disconnected" && !isConnecting) {
+        scheduleFairPlayStatusRecovery(
+          "websocket_disconnected",
+          [500, 1500, 3000],
+        );
+
         // Only show error if we were previously connected
         setConnectionError("Lost connection to game session");
       }
@@ -639,11 +686,17 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     // Maintain backward compatibility with old callback
     gameWebSocket.onConnectionStatusChange = (connected: boolean) => {
-      console.log("🔌 Connection status (legacy):", connected);
+      console.log("Connection status (legacy):", connected);
+
       if (connected) {
         setIsConnecting(false);
         setConnectionError(null);
+        scheduleFairPlayStatusRecovery("legacy_connected", [500, 1500]);
       } else if (!isConnecting) {
+        scheduleFairPlayStatusRecovery(
+          "legacy_disconnected",
+          [500, 1500, 3000],
+        );
         setConnectionError("Lost connection to game session");
       }
     };
@@ -700,19 +753,18 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     };
 
     gameWebSocket.onKickedFromSession = (status: any) => {
-      const kickedStatus =
-        normalizeFairPlayStatus({
-          ...status,
-          is_kicked: true,
-          message:
-            status?.message ||
-            "You have been removed from this session by Fair Play Mode.",
-        }) ?? {
-          player_id: playerInfo.player_id,
-          is_kicked: true,
-          max_strikes: fairPlaySettings.maxStrikes,
-          message: "You have been removed from this session by Fair Play Mode.",
-        };
+      const kickedStatus = normalizeFairPlayStatus({
+        ...status,
+        is_kicked: true,
+        message:
+          status?.message ||
+          "You have been removed from this session by Fair Play Mode.",
+      }) ?? {
+        player_id: playerInfo.player_id,
+        is_kicked: true,
+        max_strikes: fairPlaySettings.maxStrikes,
+        message: "You have been removed from this session by Fair Play Mode.",
+      };
 
       setFairPlayStatus((previous) => {
         const nextMaxStrikes = Number(
@@ -751,22 +803,22 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       setIsConnecting(false);
     };
     const fetchQuestionFromAPI = async () => {
-      console.log("🔄 Fetching current question from API...");
+      console.log("Fetching current question from API...");
       try {
         const API = (await APIGame).default;
         const response = await API.gameSession.getCurrentQuestion(sessionCode);
 
         if (response.isSuccess && response.result) {
-          console.log("✅ Question fetched successfully from API");
+          console.log("Question fetched successfully from API");
           setIsWaitingForQuestion(false);
           // The TriviaGame component will pick this up
         } else {
-          console.error("❌ Failed to fetch question:", response.message);
+          console.error("Failed to fetch question:", response.message);
           // Keep waiting - might arrive via WebSocket still
           setTimeout(fetchQuestionFromAPI, 1000); // Retry in 1 second
         }
       } catch (error) {
-        console.error("❌ Error fetching question:", error);
+        console.error("Error fetching question:", error);
         setTimeout(fetchQuestionFromAPI, 1000); // Retry in 1 second
       }
     };
@@ -774,7 +826,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     gameWebSocket.onGameStarted = (data: any) => {
       console.log(
-        "🚀 GAME STARTED EVENT RECEIVED - Intro beginning, waiting for synchronized question reveal",
+        "GAME STARTED EVENT RECEIVED - Intro beginning, waiting for synchronized question reveal",
       );
       console.log("📦 Game started data:", JSON.stringify(data, null, 2));
 
@@ -782,8 +834,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       if (data && data.isstarted === true) {
         applyFairPlaySettings(data);
         applyFairPlayStatus(data);
-        console.log("🎮 Game started - Intro beginning");
-        console.log("📍 Setting isGameStarted = true");
+        console.log("Game started - Intro beginning");
+        console.log("Setting isGameStarted = true");
 
         gameStartedRef.current = true; // Mark game as started
         setIsGameStarted(true);
@@ -791,7 +843,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         // DO NOT extract or display question here
         // The question will arrive via question_started with start_at timing
         console.log(
-          "⏳ Waiting for synchronized question reveal (question_started + start_at)...",
+          "Waiting for synchronized question reveal (question_started + start_at)...",
         );
       }
 
@@ -809,19 +861,24 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     };
 
     gameWebSocket.onPlayerJoined = (playerInfo: any) => {
-      console.log("👤 Player joined or roster updated:", playerInfo);
+      console.log("Player joined or roster updated:", playerInfo);
       // Handle both individual player_joined and roster_update messages
       // You can add state management here if you want to track connected players
     };
 
     gameWebSocket.onPlayerLeft = (playerInfo: any) => {
-      console.log("👋 Player left:", playerInfo);
+      console.log("Player left:", playerInfo);
       // Handle player leaving
     };
 
     gameWebSocket.onGameEnded = (data: any) => {
-      // Handle game end if needed
-    }; // Attempt connection
+      applyFairPlaySettings(data);
+      applyFairPlayStatus(data);
+
+      scheduleFairPlayStatusRecovery("game_ended", [100, 700, 1500]);
+
+      setGamePhase("ended");
+    };
     const success = await gameWebSocket.connect(sessionCode, playerInfo);
 
     if (!success) {
@@ -1195,21 +1252,27 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       <StatusBar style="light" />
 
       {/* Connection status banner */}
-      {connectionState === "reconnecting" && (
+      {connectionState === "reconnecting" && !isKickedByFairPlay && (
         <View style={styles.reconnectingBanner}>
           <MaterialIcons name="sync" size={16} color={colors.ink[900]} />
-          <Text style={styles.reconnectingText}>🔄 Reconnecting...</Text>
+          <Text style={styles.reconnectingText}>Reconnecting...</Text>
         </View>
       )}
 
-      {connectionState === "disconnected" && !isConnecting && (
-        <View style={styles.disconnectedBanner}>
-          <MaterialIcons name="wifi-off" size={16} color={colors.stone[100]} />
-          <Text style={styles.disconnectedText}>
-            ❌ Connection lost. Please refresh.
-          </Text>
-        </View>
-      )}
+      {connectionState === "disconnected" &&
+        !isConnecting &&
+        !isKickedByFairPlay && (
+          <View style={styles.disconnectedBanner}>
+            <MaterialIcons
+              name="wifi-off"
+              size={16}
+              color={colors.stone[100]}
+            />
+            <Text style={styles.disconnectedText}>
+              Connection lost. Please refresh.
+            </Text>
+          </View>
+        )}
 
       {/* Header with session info and leave button */}
       <View style={styles.header}>
