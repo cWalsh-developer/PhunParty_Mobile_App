@@ -60,9 +60,9 @@ export function useFairPlayMonitor({
     reportedAt: number;
   } | null>(null);
 
-  const windowFocusReturnTimeoutRef = useRef<ReturnType<
-    typeof setTimeout
-  > | null>(null);
+  const strictWindowModeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const appStateReturnTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -78,6 +78,13 @@ export function useFairPlayMonitor({
     if (pendingWindowFocusLossTimeoutRef.current) {
       clearTimeout(pendingWindowFocusLossTimeoutRef.current);
       pendingWindowFocusLossTimeoutRef.current = null;
+    }
+  }, []);
+
+  const cancelStrictWindowModeTimer = useCallback(() => {
+    if (strictWindowModeTimerRef.current) {
+      clearTimeout(strictWindowModeTimerRef.current);
+      strictWindowModeTimerRef.current = null;
     }
   }, []);
 
@@ -330,17 +337,57 @@ export function useFairPlayMonitor({
         return;
       }
 
-      if (payload.isInPictureInPictureMode === true) {
+      const scheduleStableStrictWindowModeCheck = (
+        reason: "multi_window_mode" | "picture_in_picture_mode",
+      ) => {
         clearWindowFocusTimer();
         cancelPendingWindowFocusLoss();
-        reportFocusLost("picture_in_picture_mode");
+        cancelStrictWindowModeTimer();
+
+        /*
+         * Recent Apps / Android system UI can produce brief native-window mode noise.
+         * Only treat multi-window/PiP as an immediate Fair Play violation if it is
+         * still true after a short stability delay while the app is active.
+         */
+        strictWindowModeTimerRef.current = setTimeout(async () => {
+          strictWindowModeTimerRef.current = null;
+
+          if (!isMounted || !enabled || phase !== "question") {
+            return;
+          }
+
+          if (appStateRef.current !== "active") {
+            return;
+          }
+
+          const stillInMultiWindow =
+            (await windowModeModule
+              .isInMultiWindowMode?.()
+              .catch(() => false)) ?? false;
+
+          const stillInPictureInPicture =
+            (await windowModeModule
+              .isInPictureInPictureMode?.()
+              .catch(() => false)) ?? false;
+
+          if (reason === "multi_window_mode" && stillInMultiWindow) {
+            reportFocusLost("multi_window_mode");
+            return;
+          }
+
+          if (reason === "picture_in_picture_mode" && stillInPictureInPicture) {
+            reportFocusLost("picture_in_picture_mode");
+          }
+        }, 500);
+      };
+
+      if (payload.isInPictureInPictureMode === true) {
+        scheduleStableStrictWindowModeCheck("picture_in_picture_mode");
         return;
       }
 
       if (payload.isInMultiWindowMode === true) {
-        clearWindowFocusTimer();
-        cancelPendingWindowFocusLoss();
-        reportFocusLost("multi_window_mode");
+        scheduleStableStrictWindowModeCheck("multi_window_mode");
         return;
       }
 
@@ -421,9 +468,17 @@ export function useFairPlayMonitor({
     return () => {
       isMounted = false;
       clearWindowFocusTimer();
+      cancelPendingWindowFocusLoss();
+      cancelStrictWindowModeTimer();
       subscription.remove();
     };
-  }, [enabled, phase, reportFocusLost]);
+  }, [
+    enabled,
+    phase,
+    reportFocusLost,
+    cancelPendingWindowFocusLoss,
+    cancelStrictWindowModeTimer,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
