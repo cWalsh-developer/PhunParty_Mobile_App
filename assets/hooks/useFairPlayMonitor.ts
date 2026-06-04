@@ -81,9 +81,7 @@ export function useFairPlayMonitor({
       pendingQuestionRef.current = activeQuestionId;
 
       const isImmediateViolation =
-        reason === "multi_window_mode" ||
-        reason === "picture_in_picture_mode" ||
-        reason === "window_focus_lost";
+        reason === "multi_window_mode" || reason === "picture_in_picture_mode";
 
       if (!isImmediateViolation) {
         setGraceQuestionId(activeQuestionId);

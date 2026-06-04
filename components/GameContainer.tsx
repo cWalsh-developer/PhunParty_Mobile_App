@@ -442,9 +442,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     gameWebSocket.reportFairPlayFocusLost(questionId, reason);
 
     const isImmediateViolation =
-      reason === "multi_window_mode" ||
-      reason === "picture_in_picture_mode" ||
-      reason === "window_focus_lost";
+      reason === "multi_window_mode" || reason === "picture_in_picture_mode";
 
     scheduleFairPlayStatusRecovery(
       `fair_play_focus_lost_${reason}`,
@@ -669,16 +667,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         }, 1000);
       } else if (state === "reconnecting") {
         console.log("WebSocket reconnecting...");
-        scheduleFairPlayStatusRecovery(
-          "websocket_reconnecting",
-          [500, 1500, 3000],
-        );
       } else if (state === "disconnected" && !isConnecting) {
-        scheduleFairPlayStatusRecovery(
-          "websocket_disconnected",
-          [500, 1500, 3000],
-        );
-
         // Only show error if we were previously connected
         setConnectionError("Lost connection to game session");
       }
@@ -691,12 +680,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       if (connected) {
         setIsConnecting(false);
         setConnectionError(null);
-        scheduleFairPlayStatusRecovery("legacy_connected", [500, 1500]);
       } else if (!isConnecting) {
-        scheduleFairPlayStatusRecovery(
-          "legacy_disconnected",
-          [500, 1500, 3000],
-        );
         setConnectionError("Lost connection to game session");
       }
     };
