@@ -1,4 +1,3 @@
-import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AppState,
@@ -214,9 +213,19 @@ export function useFairPlayMonitor({
   );
 
   useEffect(() => {
-    if (AppState.currentState === "active") {
-      appStateRef.current = "active";
-      reportFocusReturned();
+    if (AppState.currentState !== "active") {
+      return;
+    }
+
+    appStateRef.current = "active";
+
+    const pendingReason = pendingReasonRef.current;
+
+    if (
+      pendingReason === "app_backgrounded" ||
+      pendingReason === "app_inactive"
+    ) {
+      reportFocusReturned(activeQuestionId);
     }
   }, [activeQuestionId, reportFocusReturned]);
 
@@ -435,21 +444,12 @@ export function useFairPlayMonitor({
       }
 
       if (payload.hasWindowFocus === true) {
-        if (pendingReasonRef.current === "window_focus_lost") {
-          clearWindowFocusTimer();
-
-          windowFocusTimerRef.current = setTimeout(() => {
-            windowFocusTimerRef.current = null;
-
-            if (
-              appStateRef.current === "active" &&
-              pendingReasonRef.current === "window_focus_lost"
-            ) {
-              reportFocusReturned();
-            }
-          }, 750);
-        }
-
+        /*
+         * Do not clear window_focus_lost here.
+         * Notification shade and overlays can bounce focus back while still open.
+         *
+         * App background/recent-app recovery is handled by AppState active instead.
+         */
         return;
       }
     };
@@ -497,18 +497,6 @@ export function useFairPlayMonitor({
     cancelPendingWindowFocusLoss,
     cancelStrictWindowModeTimer,
   ]);
-
-  useFocusEffect(
-    useCallback(() => {
-      reportFocusReturned();
-
-      return () => {
-        // Disabled for now.
-        // Screen blur can happen during internal navigation/component transitions.
-        // AppState + native window mode checks handle Fair Play detection.
-      };
-    }, [reportFocusReturned]),
-  );
 
   return { isInGracePeriod: graceQuestionId === activeQuestionId };
 }
