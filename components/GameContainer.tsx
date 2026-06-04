@@ -2,6 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   AppState,
@@ -72,6 +73,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const countdownIntervalRef = useRef<any>(null);
   const foregroundRefreshTimeoutRef = useRef<any>(null);
   const refreshFairPlayStatusRef = useRef<(source: string) => void>(() => {});
+  const [isCheckingFinalFairPlayStatus, setIsCheckingFinalFairPlayStatus] =
+    useState(false);
 
   const fairPlayRecoveryTimeoutsRef = useRef<
     Array<ReturnType<typeof setTimeout>>
@@ -341,9 +344,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     }
   };
 
-  const refreshFairPlayStatus = async (source: string) => {
+  const refreshFairPlayStatus = async (
+    source: string,
+  ): Promise<FairPlayStatus | null> => {
     if (!sessionCode || !playerInfo.player_id) {
-      return;
+      return null;
     }
 
     try {
@@ -370,6 +375,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         }
       }
 
+      /*
+       * Fallback:
+       * If the dedicated Fair Play endpoint does not return anything,
+       * use the broader session status endpoint and try to normalize from there.
+       */
       if (!statusPayload) {
         const response = await gameSessionApi.getStatus(sessionCode);
 
@@ -379,38 +389,69 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       }
 
       if (!statusPayload) {
-        return;
+        return null;
       }
 
       const effectiveStatusPayload = statusPayload?.result ?? statusPayload;
 
       applyFairPlaySettings(effectiveStatusPayload);
+
       const normalizedStatus = normalizeFairPlayStatus(effectiveStatusPayload);
 
       if (!normalizedStatus) {
-        return;
+        return null;
       }
 
       applyFairPlayStatus(normalizedStatus);
 
-      if (normalizedStatus.is_kicked || normalizedStatus.isKicked) {
+      const wasKicked = Boolean(
+        normalizedStatus.is_kicked ?? normalizedStatus.isKicked,
+      );
+
+      if (wasKicked) {
         clearFairPlayStatusRecovery();
 
+        /*
+         * Kicked state is terminal for this player.
+         * Stop reconnect attempts and prevent the UI from staying on a stale
+         * question / frozen / reconnecting screen.
+         */
         gameWebSocket.stopReconnect();
         setIsConnecting(false);
         setConnectionState("disconnected");
         setConnectionError(null);
         setIsWaitingForQuestion(false);
       }
+
+      return normalizedStatus;
     } catch (error) {
       console.warn(
         `[GameContainer] Could not refresh Fair Play status from ${source}:`,
         error,
       );
+
+      return null;
     }
   };
   refreshFairPlayStatusRef.current = (source: string) => {
     void refreshFairPlayStatus(source);
+  };
+
+  const checkFinalFairPlayStatusBeforeShowingReconnect = async (
+    source: string,
+  ): Promise<FairPlayStatus | null> => {
+    if (!fairPlaySettings.enabled || !sessionCode || !playerInfo.player_id) {
+      return null;
+    }
+
+    setIsCheckingFinalFairPlayStatus(true);
+
+    try {
+      const status = await refreshFairPlayStatus(source);
+      return status;
+    } finally {
+      setIsCheckingFinalFairPlayStatus(false);
+    }
   };
 
   const clearFairPlayStatusRecovery = () => {
@@ -548,10 +589,13 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       }
 
       if (nextState === "active" && fairPlaySettings.enabled) {
-        foregroundRefreshTimeoutRef.current = setTimeout(() => {
+        foregroundRefreshTimeoutRef.current = setTimeout(async () => {
           foregroundRefreshTimeoutRef.current = null;
-          refreshFairPlayStatusRef.current("app_foregrounded");
-        }, 1000);
+
+          await checkFinalFairPlayStatusBeforeShowingReconnect(
+            "app_foregrounded",
+          );
+        }, 250);
       }
     });
 
@@ -862,6 +906,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       scheduleFairPlayStatusRecovery("game_ended", [100, 700, 1500]);
 
       setGamePhase("ended");
+
+      void checkFinalFairPlayStatusBeforeShowingReconnect("game_ended");
     };
     const success = await gameWebSocket.connect(sessionCode, playerInfo);
 
@@ -1176,6 +1222,17 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     );
   }
 
+  if (isCheckingFinalFairPlayStatus) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={colors.tea[500]} />
+          <Text style={styles.loadingText}>Checking session status...</Text>
+        </View>
+      </View>
+    );
+  }
+
   if (isConnecting) {
     return (
       <View style={styles.container}>
@@ -1236,25 +1293,18 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       <StatusBar style="light" />
 
       {/* Connection status banner */}
-      {connectionState === "reconnecting" && !isKickedByFairPlay && (
-        <View style={styles.reconnectingBanner}>
-          <MaterialIcons name="sync" size={16} color={colors.ink[900]} />
-          <Text style={styles.reconnectingText}>Reconnecting...</Text>
-        </View>
-      )}
+      {connectionState === "reconnecting" &&
+        !isKickedByFairPlay &&
+        !isCheckingFinalFairPlayStatus && (
+          <View style={styles.reconnectingBanner}>Reconnecting...</View>
+        )}
 
       {connectionState === "disconnected" &&
         !isConnecting &&
-        !isKickedByFairPlay && (
+        !isKickedByFairPlay &&
+        !isCheckingFinalFairPlayStatus && (
           <View style={styles.disconnectedBanner}>
-            <MaterialIcons
-              name="wifi-off"
-              size={16}
-              color={colors.stone[100]}
-            />
-            <Text style={styles.disconnectedText}>
-              Connection lost. Please refresh.
-            </Text>
+            Connection Lost Please Refresh.
           </View>
         )}
 

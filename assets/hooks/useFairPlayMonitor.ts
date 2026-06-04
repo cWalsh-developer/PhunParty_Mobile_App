@@ -53,6 +53,7 @@ export function useFairPlayMonitor({
   const windowFocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const pendingReasonRef = useRef<FocusViolationReason | null>(null);
 
   const [graceQuestionId, setGraceQuestionId] = useState<string | null>(null);
 
@@ -79,6 +80,7 @@ export function useFairPlayMonitor({
       }
 
       pendingQuestionRef.current = activeQuestionId;
+      pendingReasonRef.current = reason;
 
       const isImmediateViolation =
         reason === "multi_window_mode" || reason === "picture_in_picture_mode";
@@ -100,6 +102,7 @@ export function useFairPlayMonitor({
     }
 
     pendingQuestionRef.current = null;
+    pendingReasonRef.current = null;
     setGraceQuestionId(null);
     onFocusReturned(pendingQuestionId);
   }, [onFocusReturned]);
@@ -122,7 +125,9 @@ export function useFairPlayMonitor({
       appStateRef.current = nextState;
 
       if (nextState === "active") {
-        reportFocusReturned();
+        if (pendingReasonRef.current !== "window_focus_lost") {
+          reportFocusReturned();
+        }
         return;
       }
 
@@ -211,15 +216,12 @@ export function useFairPlayMonitor({
         return;
       }
 
-      /*
-       * Do not call reportFocusReturned() here.
-       *
-       * Multi-window and picture-in-picture are immediate Fair Play violations.
-       * Window-focus loss only reports after a debounce if the app remains active.
-       *
-       * Normal app switching/backgrounding is handled by AppState and keeps the
-       * grace-period behaviour.
-       */
+      if (payload.hasWindowFocus === true) {
+        if (pendingReasonRef.current === "window_focus_lost") {
+          reportFocusReturned();
+        }
+        return;
+      }
     };
 
     Promise.all([
@@ -263,9 +265,11 @@ export function useFairPlayMonitor({
       reportFocusReturned();
 
       return () => {
-        reportFocusLost("screen_blurred");
+        // Disabled for now.
+        // Screen blur can happen during internal navigation/component transitions.
+        // AppState + native window mode checks handle Fair Play detection.
       };
-    }, [reportFocusLost, reportFocusReturned]),
+    }, [reportFocusReturned]),
   );
 
   return { isInGracePeriod: graceQuestionId === activeQuestionId };
