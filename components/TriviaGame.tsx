@@ -1,7 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Dimensions,
   StyleSheet,
@@ -123,7 +122,8 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   const isFrozenForRenderedQuestion =
     isFrozenByFairPlay &&
     !!currentQuestionId &&
-    (!fairPlayFrozenQuestionId || fairPlayFrozenQuestionId === currentQuestionId);
+    (!fairPlayFrozenQuestionId ||
+      fairPlayFrozenQuestionId === currentQuestionId);
   const isFairPlayLocked =
     isKickedByFairPlay ||
     isFrozenForRenderedQuestion ||
@@ -402,10 +402,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         data.is_current_player === true ||
         data.event_type === "answer_submitted";
 
-      if (
-        isMyAnswer &&
-        data.is_correct !== undefined
-      ) {
+      if (isMyAnswer && data.is_correct !== undefined) {
         if (isTextInputResult(data)) {
           console.log(
             "📊 Text input answer result received - keeping mobile in waiting state",
@@ -454,8 +451,8 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       }
     };
 
-    gameWebSocket.onGameEnded = (data: any) => {
-      const showGameEndedAlert = () => {
+    gameWebSocket.onGameEnded = (_data: any) => {
+      const handleEndedState = () => {
         const latestFairPlayStatus = fairPlayStatusRef.current;
         const wasKicked = Boolean(
           latestFairPlayStatus?.is_kicked ?? latestFairPlayStatus?.isKicked,
@@ -466,9 +463,9 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         }
 
         setIsGameActive(false);
-        Alert.alert("Game Over!", data.message || "Thanks for playing!", [
-          { text: "OK", onPress: onGameEnd },
-        ]);
+
+        // Do not show Alert here.
+        // GameContainer owns the dedicated end-game UI.
       };
 
       if (fairPlayEnabledRef.current) {
@@ -476,11 +473,11 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           clearTimeout(gameEndedTimeoutRef.current);
         }
 
-        gameEndedTimeoutRef.current = setTimeout(showGameEndedAlert, 800);
+        gameEndedTimeoutRef.current = setTimeout(handleEndedState, 800);
         return;
       }
 
-      showGameEndedAlert();
+      handleEndedState();
     };
 
     gameWebSocket.onError = (error: string) => {
@@ -533,19 +530,19 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           }),
         );
 
-        console.log("🐛 DEBUG - Answer options created:", {
+        console.log("DEBUG - Answer options created:", {
           source: question.display_options ? "display_options" : "empty",
           options_count: answerOptions.length,
           options: answerOptions.map((a) => a.option),
         });
 
         // ATOMIC UPDATE: Set both question AND answers together
-        console.log("🔧 API fetch: Setting question and answers atomically");
+        console.log("API fetch: Setting question and answers atomically");
         setGameState({
           currentQuestion: question,
           answers: answerOptions,
         });
-        console.log("✅ API fetch: Atomic state update complete");
+        console.log("API fetch: Atomic state update complete");
       } else {
       }
     } catch (error) {}
@@ -848,7 +845,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
               `Fair Play strike ${fairPlayStrikeCount}/${fairPlayMaxStrikes}. You are frozen for this question.`
             : isWarning
               ? `Return to the game within ${fairPlayGraceSeconds} seconds to avoid a Fair Play strike.`
-            : `Fair Play Mode active - ${fairPlayStrikeCount}/${fairPlayMaxStrikes} strikes`}
+              : `Fair Play Mode active - ${fairPlayStrikeCount}/${fairPlayMaxStrikes} strikes`}
         </Text>
       </View>
     );
@@ -901,7 +898,6 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
               returnKeyType="done"
               onSubmitEditing={submitAnswer}
             />
-
           </View>
         ) : (
           <View style={styles.answersContainer}>
@@ -946,15 +942,15 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           !hasSubmitted &&
           !showResults &&
           !isFairPlayLocked && (
-          <View style={styles.submitContainer}>
-            <AppButton
-              title="Submit Answer"
-              onPress={submitAnswer}
-              variant="primary"
-              style={styles.submitButton}
-            />
-          </View>
-        )}
+            <View style={styles.submitContainer}>
+              <AppButton
+                title="Submit Answer"
+                onPress={submitAnswer}
+                variant="primary"
+                style={styles.submitButton}
+              />
+            </View>
+          )}
 
         {hasSubmitted && !showResults && (
           <View style={styles.statusContainer}>

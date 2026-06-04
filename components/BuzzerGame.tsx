@@ -1,7 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Dimensions,
   StyleSheet,
@@ -96,7 +95,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   );
   const fairPlayEnabledRef = useRef(fairPlayEnabled);
   const gameEndedTimeoutRef = useRef<any>(null);
-  const currentQuestionId = currentQuestion?.question_id;
+  const currentQuestionId = currentQuestion?.question_id ?? null;
+  const currentQuestionIdRef = useRef<string | null>(null);
   const fairPlayStrikeCount = Number(
     fairPlayStatus?.strike_count ?? fairPlayStatus?.strikeCount ?? 0,
   );
@@ -126,7 +126,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   const isFrozenForRenderedQuestion =
     isFrozenByFairPlay &&
     !!currentQuestionId &&
-    (!fairPlayFrozenQuestionId || fairPlayFrozenQuestionId === currentQuestionId);
+    (!fairPlayFrozenQuestionId ||
+      fairPlayFrozenQuestionId === currentQuestionId);
   const isFairPlayLocked =
     isKickedByFairPlay ||
     isFrozenForRenderedQuestion ||
@@ -208,6 +209,10 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     return () => clearTimeout(freezeTimeout);
   }, [isFairPlayLocked, currentQuestionId]);
 
+  useEffect(() => {
+    currentQuestionIdRef.current = currentQuestionId;
+  }, [currentQuestionId]);
+
   const fetchCurrentQuestion = async () => {
     try {
       const API = (await APIGame).default;
@@ -271,17 +276,24 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       setHasSubmittedAnswer(false);
     }
 
+    const activeQuestionId = currentQuestionIdRef.current;
+    const effectiveQuestionId = updateQuestionId || activeQuestionId;
+
+    const questionMatches =
+      updateQuestionId && activeQuestionId
+        ? updateQuestionId === activeQuestionId
+        : Boolean(effectiveQuestionId);
+
     const canBuzz =
       buttonState === "active" &&
       acceptingBuzzes &&
       !isTransitioning &&
-      !!currentQuestionId &&
-      (!updateQuestionId || updateQuestionId === currentQuestionId);
+      questionMatches;
 
     setBuzzerState((prev) => ({
       ...prev,
       buttonState,
-      questionId: updateQuestionId || prev.questionId,
+      questionId: effectiveQuestionId || prev.questionId,
       transitioning: isTransitioning,
       acceptingBuzzes,
       winner: data.winner_name || data.winner || prev.winner,
@@ -300,11 +312,12 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
   const applyAuthoritativeBuzzerState = (data: any) => {
     const updateQuestionId = data.question_id ?? data.questionId;
+    const activeQuestionId = currentQuestionIdRef.current;
 
     if (
       updateQuestionId &&
-      currentQuestionId &&
-      updateQuestionId !== currentQuestionId
+      activeQuestionId &&
+      updateQuestionId !== activeQuestionId
     ) {
       return;
     }
@@ -317,8 +330,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       : Array.isArray(data.frozenPlayers)
         ? data.frozenPlayers
         : [];
-    const questionActive =
-      data.question_active ?? data.questionActive ?? true;
+    const questionActive = data.question_active ?? data.questionActive ?? true;
     const isTransitioning = !!(data.transitioning ?? data.isTransitioning);
     const acceptingBuzzes = !!(
       data.accepting_buzzes ??
@@ -349,17 +361,23 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       nextStatusText = "Tap to buzz in first!";
     }
 
+    const effectiveQuestionId = updateQuestionId || activeQuestionId;
+
+    const questionMatches =
+      updateQuestionId && activeQuestionId
+        ? updateQuestionId === activeQuestionId
+        : Boolean(effectiveQuestionId);
+
     const canBuzz =
       nextButtonState === "active" &&
       acceptingBuzzes &&
       !isTransitioning &&
-      !!currentQuestionId &&
-      (!updateQuestionId || updateQuestionId === currentQuestionId);
+      questionMatches;
 
     setBuzzerState((prev) => ({
       ...prev,
       buttonState: nextButtonState,
-      questionId: updateQuestionId || prev.questionId,
+      questionId: effectiveQuestionId || prev.questionId,
       transitioning: isTransitioning,
       acceptingBuzzes,
       winner: currentWinner || null,
@@ -394,7 +412,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         return "Buzzer locked.";
       case "waiting":
       default:
-        return "Waiting for the backend...";
+        return "Waiting for the next question...";
     }
   };
 
@@ -500,7 +518,10 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       return;
     }
 
-    const sent = gameWebSocket.submitAnswer(answer, currentQuestion.question_id);
+    const sent = gameWebSocket.submitAnswer(
+      answer,
+      currentQuestion.question_id,
+    );
 
     if (!sent) {
       onError("Failed to submit answer. Please check your connection.");
@@ -519,9 +540,14 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   };
 
   const handleBuzzerPress = () => {
+    const activeQuestionId =
+      currentQuestionIdRef.current ?? currentQuestion?.question_id ?? null;
+
+    const buzzerQuestionId = buzzerState.questionId ?? activeQuestionId;
+
     const canPressBuzzer =
-      !!currentQuestion?.question_id &&
-      buzzerState.questionId === currentQuestion.question_id &&
+      !!activeQuestionId &&
+      buzzerQuestionId === activeQuestionId &&
       buzzerState.buttonState === "active" &&
       buzzerState.acceptingBuzzes &&
       !buzzerState.transitioning &&
@@ -530,17 +556,14 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       isGameActive &&
       !isFairPlayLocked;
 
-    if (
-      !canPressBuzzer
-    )
-      return;
+    if (!canPressBuzzer) return;
 
     // Immediate visual feedback
     setBuzzerState((prev) => ({ ...prev, canBuzz: false }));
     animateBuzzerPress();
 
     // Send to server
-    const success = gameWebSocket.pressBuzzer(currentQuestion.question_id);
+    const success = gameWebSocket.pressBuzzer(activeQuestionId);
     if (!success) {
       setBuzzerState((prev) => ({ ...prev, canBuzz: true }));
       onError("Failed to register buzzer press. Please check your connection.");
@@ -653,7 +676,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
               `Fair Play strike ${fairPlayStrikeCount}/${fairPlayMaxStrikes}. You are frozen for this question.`
             : isWarning
               ? `Return to the game within ${fairPlayGraceSeconds} seconds to avoid a Fair Play strike.`
-            : `Fair Play Mode active - ${fairPlayStrikeCount}/${fairPlayMaxStrikes} strikes`}
+              : `Fair Play Mode active - ${fairPlayStrikeCount}/${fairPlayMaxStrikes} strikes`}
         </Text>
       </View>
     );
@@ -661,9 +684,14 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
   useEffect(() => {
     gameWebSocket.onQuestionReceived = (question: GameQuestion) => {
+      const nextQuestionId = question.question_id ?? null;
+
+      currentQuestionIdRef.current = nextQuestionId;
+
       setCurrentQuestion(question);
-      resetBuzzerState(question.question_id ?? null);
+      resetBuzzerState(nextQuestionId);
       applyQuestionAnswerData(question);
+
       if (question.button_state || question.buttonState) {
         applyBackendButtonState(question);
       } else {
@@ -711,7 +739,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       } else if (data.button_state || data.buttonState) {
         applyBackendButtonState(data);
       } else if (data.type === "buzzer_reset") {
-        resetBuzzerState();
+        resetBuzzerState(currentQuestionIdRef.current);
         startGlowAnimation();
       } else if (data.type === "question_ended") {
         setBuzzerState((prev) => ({
@@ -754,8 +782,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       onError(data.message || "Your action was rejected.");
     };
 
-    gameWebSocket.onGameEnded = (data: any) => {
-      const showGameEndedAlert = () => {
+    gameWebSocket.onGameEnded = (_data: any) => {
+      const handleEndedState = () => {
         const latestFairPlayStatus = fairPlayStatusRef.current;
         const wasKicked = Boolean(
           latestFairPlayStatus?.is_kicked ?? latestFairPlayStatus?.isKicked,
@@ -766,9 +794,9 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         }
 
         setIsGameActive(false);
-        Alert.alert("Game Over!", data.message || "Thanks for playing!", [
-          { text: "OK", onPress: onGameEnd },
-        ]);
+
+        // Do not show Alert here.
+        // GameContainer owns the dedicated end-game UI.
       };
 
       if (fairPlayEnabledRef.current) {
@@ -776,11 +804,11 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           clearTimeout(gameEndedTimeoutRef.current);
         }
 
-        gameEndedTimeoutRef.current = setTimeout(showGameEndedAlert, 800);
+        gameEndedTimeoutRef.current = setTimeout(handleEndedState, 800);
         return;
       }
 
-      showGameEndedAlert();
+      handleEndedState();
     };
 
     gameWebSocket.onGameStarted = (data: any) => {
@@ -851,7 +879,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
         {buzzerState.canAnswer &&
         !isFairPlayLocked &&
-        (answerOptions.length > 0 || currentQuestion?.ui_mode === "text_input") ? (
+        (answerOptions.length > 0 ||
+          currentQuestion?.ui_mode === "text_input") ? (
           <View style={styles.answerContainer}>
             {answerOptions.length > 0 ? (
               answerOptions.map((option, index) => (
@@ -902,51 +931,51 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           </View>
         ) : (
           <View style={styles.buzzerContainer}>
-          <Animated.View
-            style={[
-              getBuzzerGlowStyle(),
-              { transform: [{ scale: scaleAnimation }] },
-            ]}
-          >
-            <TouchableOpacity
-              style={getBuzzerButtonStyle()}
-              onPress={handleBuzzerPress}
-              disabled={
-                !buzzerState.canBuzz || !buzzerState.isActive || isFairPlayLocked
-              }
-              activeOpacity={0.8}
+            <Animated.View
+              style={[
+                getBuzzerGlowStyle(),
+                { transform: [{ scale: scaleAnimation }] },
+              ]}
             >
-              <View style={styles.buzzerButtonContent}>
-                <MaterialIcons
-                  name={
-                    isFairPlayLocked || buzzerState.buttonState === "frozen"
-                      ? "block"
+              <TouchableOpacity
+                style={getBuzzerButtonStyle()}
+                onPress={handleBuzzerPress}
+                disabled={
+                  !buzzerState.canBuzz ||
+                  !buzzerState.isActive ||
+                  isFairPlayLocked
+                }
+                activeOpacity={0.8}
+              >
+                <View style={styles.buzzerButtonContent}>
+                  <MaterialIcons
+                    name={
+                      isFairPlayLocked || buzzerState.buttonState === "frozen"
+                        ? "block"
+                        : buzzerState.winner
+                          ? "check-circle"
+                          : "touch-app"
+                    }
+                    size={64}
+                    color={colors.white}
+                  />
+                  <Text style={styles.buzzerButtonText}>
+                    {isFairPlayLocked || buzzerState.buttonState === "frozen"
+                      ? "Frozen"
                       : buzzerState.winner
-                        ? "check-circle"
-                        : "touch-app"
-                  }
-                  size={64}
-                  color={colors.white}
-                />
-                <Text style={styles.buzzerButtonText}>
-                  {isFairPlayLocked || buzzerState.buttonState === "frozen"
-                    ? "Frozen"
-                    : buzzerState.winner
-                    ? "Winner!"
-                    : !buzzerState.canBuzz && !buzzerState.winner
-                      ? "Buzzed!"
-                      : buzzerState.isActive
-                        ? "BUZZ!"
-                        : "Wait..."}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </Animated.View>
+                        ? "Winner!"
+                        : !buzzerState.canBuzz && !buzzerState.winner
+                          ? "Buzzed!"
+                          : buzzerState.isActive
+                            ? "BUZZ!"
+                            : "Wait..."}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </Animated.View>
 
-          <Text style={styles.instructionText}>
-            {buzzerState.statusText}
-          </Text>
-        </View>
+            <Text style={styles.instructionText}>{buzzerState.statusText}</Text>
+          </View>
         )}
 
         <View style={styles.statusContainer}>
@@ -955,8 +984,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
             {isFairPlayLocked
               ? "Fair Play freeze. Wait for the next question."
               : buzzerState.isActive
-              ? "Buzzer is LIVE!"
-              : buzzerState.statusText}
+                ? "Buzzer is LIVE!"
+                : buzzerState.statusText}
           </Text>
         </View>
       </View>
