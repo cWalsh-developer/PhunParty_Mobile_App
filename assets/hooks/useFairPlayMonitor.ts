@@ -183,18 +183,35 @@ export function useFairPlayMonitor({
     lastFocusLossRef.current = null;
   }, [activeQuestionId]);
 
-  const reportFocusReturned = useCallback(() => {
-    const pendingQuestionId = pendingQuestionRef.current;
+  const reportFocusReturned = useCallback(
+    (questionIdOverride?: string | null) => {
+      const pendingQuestionId = pendingQuestionRef.current;
+      const questionIdToReturn = pendingQuestionId ?? questionIdOverride;
 
-    if (!pendingQuestionId) {
-      return;
-    }
+      if (!questionIdToReturn) {
+        console.log("[FAIR PLAY] return ignored; no question id available", {
+          pendingQuestionId,
+          questionIdOverride,
+          activeQuestionId,
+        });
+        return;
+      }
 
-    pendingQuestionRef.current = null;
-    pendingReasonRef.current = null;
-    setGraceQuestionId(null);
-    onFocusReturned(pendingQuestionId);
-  }, [onFocusReturned]);
+      console.log("[FAIR PLAY] sending focus returned", {
+        questionIdToReturn,
+        pendingQuestionId,
+        questionIdOverride,
+        pendingReason: pendingReasonRef.current,
+      });
+
+      pendingQuestionRef.current = null;
+      pendingReasonRef.current = null;
+      setGraceQuestionId(null);
+
+      onFocusReturned(questionIdToReturn);
+    },
+    [activeQuestionId, onFocusReturned],
+  );
 
   useEffect(() => {
     if (AppState.currentState === "active") {
@@ -223,20 +240,19 @@ export function useFairPlayMonitor({
             return;
           }
 
-          const pendingReason = pendingReasonRef.current;
-
-          /*
-           * Only clear genuine AppState-based losses after the app has remained
-           * active for a short stable period. This prevents Android state bounces
-           * from clearing the grace window while the app is still closing/backgrounding.
-           */
-          if (
-            pendingReason === "app_backgrounded" ||
-            pendingReason === "app_inactive"
-          ) {
-            reportFocusReturned();
+          if (!enabled || phase !== "question" || !activeQuestionId) {
+            return;
           }
-        }, 600);
+
+          console.log("[FAIR PLAY] AppState active sending return", {
+            activeQuestionId,
+            pendingQuestionId: pendingQuestionRef.current,
+            pendingReason: pendingReasonRef.current,
+            appState: appStateRef.current,
+          });
+
+          reportFocusReturned(activeQuestionId);
+        }, 150);
 
         return;
       }
@@ -267,6 +283,8 @@ export function useFairPlayMonitor({
       activeQuestionId,
       cancelPendingAppStateReturn,
       cancelPendingWindowFocusLoss,
+      enabled,
+      phase,
       reportFocusLost,
       reportFocusReturned,
     ],
@@ -378,7 +396,7 @@ export function useFairPlayMonitor({
           if (reason === "picture_in_picture_mode" && stillInPictureInPicture) {
             reportFocusLost("picture_in_picture_mode");
           }
-        }, 500);
+        }, 3000);
       };
 
       if (payload.isInPictureInPictureMode === true) {
