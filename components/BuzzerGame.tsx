@@ -481,6 +481,39 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     return data.correct_answer ? `Answer: ${data.correct_answer}` : null;
   };
 
+  const isPayloadForCurrentPlayer = (data: any) => {
+    const myPlayerId = gameWebSocket.playerInfo?.player_id;
+    const payloadPlayerId =
+      data?.player_id ?? data?.playerId ?? data?.participant_id;
+
+    if (data?.is_current_player === true || data?.isCurrentPlayer === true) {
+      return true;
+    }
+
+    return (
+      !!myPlayerId &&
+      !!payloadPlayerId &&
+      String(myPlayerId).trim() === String(payloadPlayerId).trim()
+    );
+  };
+
+  const isCurrentPlayerFrozenInPayload = (data: any) => {
+    const myPlayerId = gameWebSocket.playerInfo?.player_id;
+    const frozenPlayers = Array.isArray(data?.frozen_players)
+      ? data.frozen_players
+      : Array.isArray(data?.frozenPlayers)
+        ? data.frozenPlayers
+        : [];
+
+    return (
+      !!myPlayerId &&
+      frozenPlayers.some(
+        (playerId: unknown) =>
+          String(playerId).trim() === String(myPlayerId).trim(),
+      )
+    );
+  };
+
   const applyQuestionAnswerData = (data: any) => {
     const options = data.display_options || data.options || [];
 
@@ -573,7 +606,9 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     }
 
     if (fairPlayEnabled) {
-      const immediateViolation = await hasImmediateFairPlayWindowViolation();
+      const immediateViolation = await hasImmediateFairPlayWindowViolation({
+        includeWindowFocusLoss: false,
+      });
 
       if (immediateViolation) {
         setFairPlayLockedQuestionId(currentQuestion.question_id);
@@ -624,7 +659,9 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     if (!canPressBuzzer) return;
 
     if (fairPlayEnabled) {
-      const immediateViolation = await hasImmediateFairPlayWindowViolation();
+      const immediateViolation = await hasImmediateFairPlayWindowViolation({
+        includeWindowFocusLoss: false,
+      });
 
       if (immediateViolation) {
         setFairPlayLockedQuestionId(activeQuestionId);
@@ -798,18 +835,32 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         data.event_type === "correct_answer"
       ) {
         const matchStatus = getAnswerMatchStatus(data);
+        const isMyAnswer = isPayloadForCurrentPlayer(data);
         setBuzzerState((prev) => ({
           ...prev,
-          buttonState: "locked",
+          buttonState: isMyAnswer ? "locked" : "waiting",
           isActive: false,
           canBuzz: false,
           canAnswer: false,
-          statusText: matchStatus ? `Correct! ${matchStatus}` : "Correct!",
+          transitioning: !isMyAnswer,
+          acceptingBuzzes: false,
+          statusText: isMyAnswer
+            ? matchStatus
+              ? `Correct! ${matchStatus}`
+              : "Correct!"
+            : "Waiting for next question...",
         }));
       } else if (
         data.type === "incorrect_answer" ||
         data.event_type === "incorrect_answer"
       ) {
+        const shouldFreezeCurrentPlayer =
+          isPayloadForCurrentPlayer(data) || isCurrentPlayerFrozenInPayload(data);
+
+        if (!shouldFreezeCurrentPlayer) {
+          return;
+        }
+
         const matchStatus = getAnswerMatchStatus(data);
         clearSubmittedAnswerState();
         setBuzzerState((prev) => ({

@@ -74,48 +74,54 @@ const isAppWindowMateriallyReduced = () => {
   );
 };
 
-export const hasImmediateFairPlayWindowViolation =
-  async (): Promise<FocusViolationReason | null> => {
-    const windowModeModule = getFairPlayWindowModeModule();
+export const hasImmediateFairPlayWindowViolation = async (
+  options: { includeWindowFocusLoss?: boolean } = {},
+): Promise<FocusViolationReason | null> => {
+  const includeWindowFocusLoss = options.includeWindowFocusLoss ?? true;
+  const windowModeModule = getFairPlayWindowModeModule();
 
-    if (!windowModeModule) {
-      return null;
-    }
-
-    const [
-      isInPictureInPictureMode,
-      isInMultiWindowMode,
-      hasWindowFocus,
-      isTopResumedActivity,
-    ] = await Promise.all([
-        windowModeModule.isInPictureInPictureMode?.().catch(() => false) ??
-          Promise.resolve(false),
-        windowModeModule.isInMultiWindowMode?.().catch(() => false) ??
-          Promise.resolve(false),
-        windowModeModule.hasWindowFocus?.().catch(() => true) ??
-          Promise.resolve(true),
-        windowModeModule.isTopResumedActivity?.().catch(() => true) ??
-          Promise.resolve(true),
-      ]);
-
-    if (isInPictureInPictureMode) {
-      return "picture_in_picture_mode";
-    }
-
-    if (isInMultiWindowMode && isAppWindowMateriallyReduced()) {
-      return "multi_window_mode";
-    }
-
-    if (!isTopResumedActivity && AppState.currentState === "active") {
-      return "picture_in_picture_mode";
-    }
-
-    if (!hasWindowFocus && AppState.currentState === "active") {
-      return "window_focus_lost";
-    }
-
+  if (!windowModeModule) {
     return null;
-  };
+  }
+
+  const [
+    isInPictureInPictureMode,
+    isInMultiWindowMode,
+    hasWindowFocus,
+    isTopResumedActivity,
+  ] = await Promise.all([
+    windowModeModule.isInPictureInPictureMode?.().catch(() => false) ??
+      Promise.resolve(false),
+    windowModeModule.isInMultiWindowMode?.().catch(() => false) ??
+      Promise.resolve(false),
+    windowModeModule.hasWindowFocus?.().catch(() => true) ??
+      Promise.resolve(true),
+    windowModeModule.isTopResumedActivity?.().catch(() => true) ??
+      Promise.resolve(true),
+  ]);
+
+  if (isInPictureInPictureMode) {
+    return "picture_in_picture_mode";
+  }
+
+  if (isInMultiWindowMode && isAppWindowMateriallyReduced()) {
+    return "multi_window_mode";
+  }
+
+  if (!isTopResumedActivity && AppState.currentState === "active") {
+    return "picture_in_picture_mode";
+  }
+
+  if (
+    includeWindowFocusLoss &&
+    !hasWindowFocus &&
+    AppState.currentState === "active"
+  ) {
+    return "window_focus_lost";
+  }
+
+  return null;
+};
 
 interface UseFairPlayMonitorOptions {
   enabled: boolean;

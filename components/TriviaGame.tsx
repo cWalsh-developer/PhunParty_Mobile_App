@@ -727,7 +727,9 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       return;
 
     if (fairPlayEnabled) {
-      const immediateViolation = await hasImmediateFairPlayWindowViolation();
+      const immediateViolation = await hasImmediateFairPlayWindowViolation({
+        includeWindowFocusLoss: false,
+      });
 
       if (immediateViolation) {
         setFairPlayLockedQuestionId(currentQuestion.question_id);
@@ -931,8 +933,8 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   }
 
   if (
-    ((hasSubmitted && !showResults) ||
-      submittedQuestionId === currentQuestionId) &&
+    ((hasSubmitted || submittedQuestionId === currentQuestionId) &&
+      !showResults) &&
     !isFairPlayLocked
   ) {
     return (
