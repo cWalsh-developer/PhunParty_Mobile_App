@@ -9,11 +9,14 @@ import {
 import type { FocusViolationReason } from "../api/gameWebSocketService";
 
 const FAIR_PLAY_WINDOW_MODE_EVENT = "FairPlayWindowModeChanged";
+const WINDOW_MODE_CLASSIFICATION_DELAY_MS = 150;
+const USER_LEAVE_HINT_SUPPRESSION_MS = 1500;
 
 type FairPlayWindowModePayload = {
   isInMultiWindowMode?: boolean;
   isInPictureInPictureMode?: boolean;
   hasWindowFocus?: boolean;
+  userLeaveHint?: boolean;
 };
 
 type FairPlayWindowModeModule = {
@@ -70,6 +73,7 @@ export function useFairPlayMonitor({
   const pendingWindowFocusLossTimeoutRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const lastUserLeaveHintAtRef = useRef<number>(0);
 
   const FOCUS_LOSS_DEDUPE_MS = 10000;
 
@@ -100,12 +104,14 @@ export function useFairPlayMonitor({
 
   useEffect(() => {
     pendingQuestionRef.current = null;
-    setGraceQuestionId(null);
+    const resetGraceTimeout = setTimeout(() => setGraceQuestionId(null), 0);
 
     if (windowFocusTimerRef.current) {
       clearTimeout(windowFocusTimerRef.current);
       windowFocusTimerRef.current = null;
     }
+
+    return () => clearTimeout(resetGraceTimeout);
   }, [questionId]);
 
   const reportFocusLost = useCallback(
@@ -162,7 +168,9 @@ export function useFairPlayMonitor({
       pendingReasonRef.current = reason;
 
       const isImmediateViolation =
-        reason === "multi_window_mode" || reason === "picture_in_picture_mode";
+        reason === "multi_window_mode" ||
+        reason === "picture_in_picture_mode" ||
+        reason === "window_focus_lost";
 
       if (!isImmediateViolation) {
         setGraceQuestionId(activeQuestionId);
@@ -333,30 +341,79 @@ export function useFairPlayMonitor({
       }
     };
 
-    const handleWindowFocusLost = () => {
+    const reportImmediateWindowViolationIfActive = (
+      reason:
+        | "multi_window_mode"
+        | "picture_in_picture_mode"
+        | "window_focus_lost",
+    ) => {
       clearWindowFocusTimer();
+      cancelPendingWindowFocusLoss();
+      cancelStrictWindowModeTimer();
 
-      /*
-       * Window focus loss is noisy.
-       *
-       * It can mean:
-       * - Google Assistant / overlay appeared while PhunParty is still active
-       * - OR the user is simply leaving/backgrounding the app
-       *
-       * We wait briefly so AppState has time to update. If the app is still
-       * active after the debounce, treat it as an overlay-style violation.
-       * If AppState has become inactive/background, AppState handles it using
-       * the normal Fair Play grace period.
-       */
-      windowFocusTimerRef.current = setTimeout(() => {
+      windowFocusTimerRef.current = setTimeout(async () => {
+        windowFocusTimerRef.current = null;
+
         if (!isMounted || !enabled || phase !== "question") {
           return;
         }
 
-        if (appStateRef.current === "active") {
-          reportFocusLost("window_focus_lost");
+        if (appStateRef.current !== "active") {
+          return;
         }
-      }, 250);
+
+        const elapsedSinceUserLeaveHint =
+          Date.now() - lastUserLeaveHintAtRef.current;
+
+        if (elapsedSinceUserLeaveHint < USER_LEAVE_HINT_SUPPRESSION_MS) {
+          const remainingMs =
+            USER_LEAVE_HINT_SUPPRESSION_MS - elapsedSinceUserLeaveHint;
+
+          windowFocusTimerRef.current = setTimeout(async () => {
+            windowFocusTimerRef.current = null;
+
+            if (!isMounted || !enabled || phase !== "question") {
+              return;
+            }
+
+            if (appStateRef.current !== "active") {
+              return;
+            }
+
+            const stillInMultiWindow =
+              (await windowModeModule
+                .isInMultiWindowMode?.()
+                .catch(() => false)) ?? false;
+            const stillInPictureInPicture =
+              (await windowModeModule
+                .isInPictureInPictureMode?.()
+                .catch(() => false)) ?? false;
+            const stillMissingWindowFocus =
+              !(
+                (await windowModeModule.hasWindowFocus?.().catch(() => true)) ??
+                true
+              );
+
+            if (reason === "multi_window_mode" && stillInMultiWindow) {
+              reportFocusLost("multi_window_mode");
+            } else if (
+              reason === "picture_in_picture_mode" &&
+              stillInPictureInPicture
+            ) {
+              reportFocusLost("picture_in_picture_mode");
+            } else if (
+              reason === "window_focus_lost" &&
+              stillMissingWindowFocus
+            ) {
+              reportFocusLost("window_focus_lost");
+            }
+          }, remainingMs + WINDOW_MODE_CLASSIFICATION_DELAY_MS);
+
+          return;
+        }
+
+        reportFocusLost(reason);
+      }, WINDOW_MODE_CLASSIFICATION_DELAY_MS);
     };
 
     const handleWindowMode = (payload: FairPlayWindowModePayload) => {
@@ -364,57 +421,31 @@ export function useFairPlayMonitor({
         return;
       }
 
-      const scheduleStableStrictWindowModeCheck = (
-        reason: "multi_window_mode" | "picture_in_picture_mode",
-      ) => {
+      if (payload.userLeaveHint === true) {
+        lastUserLeaveHintAtRef.current = Date.now();
         clearWindowFocusTimer();
         cancelPendingWindowFocusLoss();
         cancelStrictWindowModeTimer();
+        reportFocusLost("app_inactive");
 
-        /*
-         * Recent Apps / Android system UI can produce brief native-window mode noise.
-         * Only treat multi-window/PiP as an immediate Fair Play violation if it is
-         * still true after a short stability delay while the app is active.
-         */
-        strictWindowModeTimerRef.current = setTimeout(async () => {
-          strictWindowModeTimerRef.current = null;
+        if (payload.isInPictureInPictureMode === true) {
+          reportImmediateWindowViolationIfActive("picture_in_picture_mode");
+        } else if (payload.isInMultiWindowMode === true) {
+          reportImmediateWindowViolationIfActive("multi_window_mode");
+        } else if (payload.hasWindowFocus === false) {
+          reportImmediateWindowViolationIfActive("window_focus_lost");
+        }
 
-          if (!isMounted || !enabled || phase !== "question") {
-            return;
-          }
-
-          if (appStateRef.current !== "active") {
-            return;
-          }
-
-          const stillInMultiWindow =
-            (await windowModeModule
-              .isInMultiWindowMode?.()
-              .catch(() => false)) ?? false;
-
-          const stillInPictureInPicture =
-            (await windowModeModule
-              .isInPictureInPictureMode?.()
-              .catch(() => false)) ?? false;
-
-          if (reason === "multi_window_mode" && stillInMultiWindow) {
-            reportFocusLost("multi_window_mode");
-            return;
-          }
-
-          if (reason === "picture_in_picture_mode" && stillInPictureInPicture) {
-            reportFocusLost("picture_in_picture_mode");
-          }
-        }, 3000);
-      };
+        return;
+      }
 
       if (payload.isInPictureInPictureMode === true) {
-        scheduleStableStrictWindowModeCheck("picture_in_picture_mode");
+        reportImmediateWindowViolationIfActive("picture_in_picture_mode");
         return;
       }
 
       if (payload.isInMultiWindowMode === true) {
-        scheduleStableStrictWindowModeCheck("multi_window_mode");
+        reportImmediateWindowViolationIfActive("multi_window_mode");
         return;
       }
 
@@ -425,31 +456,32 @@ export function useFairPlayMonitor({
           clearTimeout(pendingWindowFocusLossTimeoutRef.current);
         }
 
-        /*
-         * Delay window_focus_lost slightly.
-         * If the user is actually leaving the app, AppState should move to
-         * inactive/background and cancel this timer.
-         *
-         * If AppState stays active, this is likely notification shade / overlay.
-         */
         pendingWindowFocusLossTimeoutRef.current = setTimeout(() => {
           pendingWindowFocusLossTimeoutRef.current = null;
-
-          if (appStateRef.current === "active") {
-            handleWindowFocusLost();
-          }
-        }, 250);
+          reportImmediateWindowViolationIfActive("window_focus_lost");
+        }, WINDOW_MODE_CLASSIFICATION_DELAY_MS);
 
         return;
       }
-
       if (payload.hasWindowFocus === true) {
+        cancelPendingWindowFocusLoss();
+        clearWindowFocusTimer();
+
         /*
-         * Do not clear window_focus_lost here.
-         * Notification shade and overlays can bounce focus back while still open.
+         * If the only pending Fair Play event was a window-focus loss and
+         * Android reports focus has returned while the app is still active,
+         * clear the backend grace window.
          *
-         * App background/recent-app recovery is handled by AppState active instead.
+         * Without this, a temporary notification shade / overlay focus loss can
+         * mature into a strike even though the player is still in the app.
          */
+        if (
+          appStateRef.current === "active" &&
+          pendingReasonRef.current === "window_focus_lost"
+        ) {
+          reportFocusReturned(activeQuestionId);
+        }
+
         return;
       }
     };
@@ -491,9 +523,11 @@ export function useFairPlayMonitor({
       subscription.remove();
     };
   }, [
+    activeQuestionId,
     enabled,
     phase,
     reportFocusLost,
+    reportFocusReturned,
     cancelPendingWindowFocusLoss,
     cancelStrictWindowModeTimer,
   ]);

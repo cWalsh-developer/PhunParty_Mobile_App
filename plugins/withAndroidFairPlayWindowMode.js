@@ -56,6 +56,7 @@ class FairPlayWindowModeModule(
     private var lastKnownMultiWindowMode: Boolean = false
     private var lastKnownPictureInPictureMode: Boolean = false
     private var lastKnownWindowFocus: Boolean = true
+    private var lastUserLeaveHintAtMs: Double = 0.0
 
     fun setMultiWindowMode(isInMultiWindowMode: Boolean) {
       lastKnownMultiWindowMode = isInMultiWindowMode
@@ -72,13 +73,20 @@ class FairPlayWindowModeModule(
       emitWindowModeChanged()
     }
 
-    private fun emitWindowModeChanged() {
+    fun noteUserLeaveHint() {
+      lastUserLeaveHintAtMs = System.currentTimeMillis().toDouble()
+      emitWindowModeChanged(userLeaveHint = true)
+    }
+
+    private fun emitWindowModeChanged(userLeaveHint: Boolean = false) {
       val context = sharedReactContext ?: return
 
       val payload = Arguments.createMap().apply {
         putBoolean("isInMultiWindowMode", lastKnownMultiWindowMode)
         putBoolean("isInPictureInPictureMode", lastKnownPictureInPictureMode)
         putBoolean("hasWindowFocus", lastKnownWindowFocus)
+        putBoolean("userLeaveHint", userLeaveHint)
+        putDouble("userLeaveHintAtMs", lastUserLeaveHintAtMs)
       }
 
       try {
@@ -135,15 +143,14 @@ const ensureMainActivityOverrides = (source) => {
     "FairPlayWindowModeModule.setWindowFocus",
   );
 
-  if (
-    hasMultiWindowOverride &&
-    hasPictureInPictureOverride &&
-    hasWindowFocusOverride
-  ) {
-    return source;
-  }
+  const hasUserLeaveHintOverride = source.includes(
+    "FairPlayWindowModeModule.noteUserLeaveHint",
+  );
 
-  const overrides = `
+  const overrideBlocks = [];
+
+  if (!hasMultiWindowOverride) {
+    overrideBlocks.push(`
   override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean) {
     super.onMultiWindowModeChanged(isInMultiWindowMode)
     FairPlayWindowModeModule.setMultiWindowMode(isInMultiWindowMode)
@@ -156,7 +163,11 @@ const ensureMainActivityOverrides = (source) => {
     super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
     FairPlayWindowModeModule.setMultiWindowMode(isInMultiWindowMode)
   }
+`);
+  }
 
+  if (!hasPictureInPictureOverride) {
+    overrideBlocks.push(`
   override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {
     super.onPictureInPictureModeChanged(isInPictureInPictureMode)
     FairPlayWindowModeModule.setPictureInPictureMode(isInPictureInPictureMode)
@@ -169,13 +180,32 @@ const ensureMainActivityOverrides = (source) => {
     super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
     FairPlayWindowModeModule.setPictureInPictureMode(isInPictureInPictureMode)
   }
+`);
+  }
 
+  if (!hasWindowFocusOverride) {
+    overrideBlocks.push(`
   override fun onWindowFocusChanged(hasFocus: Boolean) {
     super.onWindowFocusChanged(hasFocus)
     FairPlayWindowModeModule.setWindowFocus(hasFocus)
   }
+`);
+  }
 
-`;
+  if (!hasUserLeaveHintOverride) {
+    overrideBlocks.push(`
+  override fun onUserLeaveHint() {
+    super.onUserLeaveHint()
+    FairPlayWindowModeModule.noteUserLeaveHint()
+  }
+`);
+  }
+
+  if (overrideBlocks.length === 0) {
+    return source;
+  }
+
+  const overrides = `${overrideBlocks.join("\n")}\n`;
 
   if (source.includes("override fun onCreate")) {
     return source.replace(

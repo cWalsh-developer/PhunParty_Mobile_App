@@ -53,3 +53,5 @@ google-services.json
 *.apk
 *.aab
 build-*.apk
+
+.claude

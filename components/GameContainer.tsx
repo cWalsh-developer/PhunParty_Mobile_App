@@ -611,7 +611,9 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     gameWebSocket.reportFairPlayFocusLost(questionId, reason);
 
     const isImmediateViolation =
-      reason === "multi_window_mode" || reason === "picture_in_picture_mode";
+      reason === "multi_window_mode" ||
+      reason === "picture_in_picture_mode" ||
+      reason === "window_focus_lost";
 
     scheduleFairPlayStatusRecovery(
       `fair_play_focus_lost_${reason}`,
