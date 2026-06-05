@@ -157,6 +157,7 @@ export class GameWebSocketService {
   private pendingQuestions: GameQuestion[] = [];
   private lastQuestion: GameQuestion | null = null;
   private pendingGameStarted: any[] = [];
+  private pendingFairPlayReturns = new Map<string, string>();
   private isReadyForQuestions = false;
   private questionReceived = false;
   private questionRecoveryTimeouts: any[] = [];
@@ -453,15 +454,22 @@ export class GameWebSocketService {
   }
 
   reportFairPlayFocusReturned(questionId: string): boolean {
-    return this.sendMessage({
+    const returnedAt = new Date().toISOString();
+    const sent = this.sendMessage({
       type: "fair_play_focus_returned",
       data: {
         session_code: this.sessionCode,
         player_id: this.playerInfo?.player_id,
         question_id: questionId,
-        returned_at: new Date().toISOString(),
+        returned_at: returnedAt,
       },
     });
+
+    if (!sent) {
+      this.pendingFairPlayReturns.set(questionId, returnedAt);
+    }
+
+    return sent;
   }
 
   requestSessionStats(): boolean {
@@ -686,6 +694,7 @@ export class GameWebSocketService {
             session_code: this.sessionCode,
           },
         });
+        this.flushPendingFairPlayReturns();
         this.requestSync();
         break;
 
@@ -1302,6 +1311,29 @@ export class GameWebSocketService {
     });
   }
 
+  private flushPendingFairPlayReturns(): void {
+    if (this.pendingFairPlayReturns.size === 0) {
+      return;
+    }
+
+    for (const [questionId, returnedAt] of this.pendingFairPlayReturns) {
+      const sent = this.sendMessage({
+        type: "fair_play_focus_returned",
+        data: {
+          session_code: this.sessionCode,
+          player_id: this.playerInfo?.player_id,
+          question_id: questionId,
+          returned_at: returnedAt,
+          flushed_after_reconnect: true,
+        },
+      });
+
+      if (sent) {
+        this.pendingFairPlayReturns.delete(questionId);
+      }
+    }
+  }
+
   private setPhase(phase: GamePhase, data?: any): void {
     this.currentPhase = phase;
     this.onPhaseChange?.(phase, data);
@@ -1407,6 +1439,7 @@ export class GameWebSocketService {
     this.pendingQuestions = [];
     this.lastQuestion = null;
     this.pendingGameStarted = [];
+    this.pendingFairPlayReturns.clear();
     this.isReadyForQuestions = false;
     this.questionReceived = false;
     this.processedEvents.clear();

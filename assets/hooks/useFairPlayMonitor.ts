@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AppState,
   AppStateStatus,
+  Dimensions,
   NativeEventEmitter,
   NativeModules,
   Platform,
@@ -10,21 +11,35 @@ import type { FocusViolationReason } from "../api/gameWebSocketService";
 
 const FAIR_PLAY_WINDOW_MODE_EVENT = "FairPlayWindowModeChanged";
 const WINDOW_MODE_CLASSIFICATION_DELAY_MS = 150;
-const WINDOW_FOCUS_LOSS_CLASSIFICATION_DELAY_MS = 800;
+const WINDOW_FOCUS_LOSS_CLASSIFICATION_DELAY_MS = 1200;
+const WINDOW_MODE_POLL_INTERVAL_MS = 750;
 const USER_LEAVE_HINT_SUPPRESSION_MS = 1500;
+const MULTI_WINDOW_REDUCTION_RATIO = 0.92;
 
 type FairPlayWindowModePayload = {
   isInMultiWindowMode?: boolean;
   isInPictureInPictureMode?: boolean;
   hasWindowFocus?: boolean;
   userLeaveHint?: boolean;
+  userLeaveHintAtMs?: number;
   activityState?: "resumed" | "paused" | "stopped";
+  eventSource?:
+    | "activity_state_changed"
+    | "multi_window_changed"
+    | "picture_in_picture_changed"
+    | "poll"
+    | "snapshot"
+    | "system_dialog_closed"
+    | "user_leave_hint"
+    | "window_focus_changed";
+  systemDialogReason?: string;
 };
 
 type FairPlayWindowModeModule = {
   isInMultiWindowMode?: () => Promise<boolean>;
   isInPictureInPictureMode?: () => Promise<boolean>;
   hasWindowFocus?: () => Promise<boolean>;
+  getActivityState?: () => Promise<"resumed" | "paused" | "stopped">;
   addListener?: (eventName: string) => void;
   removeListeners?: (count: number) => void;
 };
@@ -35,6 +50,25 @@ const getFairPlayWindowModeModule = (): FairPlayWindowModeModule | null => {
   }
 
   return (NativeModules.FairPlayWindowMode as FairPlayWindowModeModule) ?? null;
+};
+
+const isAppWindowMateriallyReduced = () => {
+  const windowSize = Dimensions.get("window");
+  const screenSize = Dimensions.get("screen");
+
+  if (
+    !windowSize.width ||
+    !windowSize.height ||
+    !screenSize.width ||
+    !screenSize.height
+  ) {
+    return false;
+  }
+
+  return (
+    windowSize.width / screenSize.width < MULTI_WINDOW_REDUCTION_RATIO ||
+    windowSize.height / screenSize.height < MULTI_WINDOW_REDUCTION_RATIO
+  );
 };
 
 interface UseFairPlayMonitorOptions {
@@ -382,6 +416,22 @@ export function useFairPlayMonitor({
               return;
             }
 
+            const activityState =
+              (await windowModeModule
+                .getActivityState?.()
+                .catch(() => "resumed")) ?? "resumed";
+
+            if (activityState !== "resumed") {
+              appStateRef.current =
+                activityState === "stopped" ? "background" : "inactive";
+              reportFocusLost(
+                activityState === "stopped"
+                  ? "app_backgrounded"
+                  : "app_inactive",
+              );
+              return;
+            }
+
             const stillInMultiWindow =
               (await windowModeModule
                 .isInMultiWindowMode?.()
@@ -397,7 +447,9 @@ export function useFairPlayMonitor({
               );
 
             if (reason === "multi_window_mode" && stillInMultiWindow) {
-              reportFocusLost("multi_window_mode");
+              if (isAppWindowMateriallyReduced()) {
+                reportFocusLost("multi_window_mode");
+              }
             } else if (
               reason === "picture_in_picture_mode" &&
               stillInPictureInPicture
@@ -424,6 +476,28 @@ export function useFairPlayMonitor({
       }
 
       if (
+        typeof payload.userLeaveHintAtMs === "number" &&
+        payload.userLeaveHintAtMs > lastUserLeaveHintAtRef.current
+      ) {
+        lastUserLeaveHintAtRef.current = payload.userLeaveHintAtMs;
+      }
+
+      if (
+        payload.eventSource === "system_dialog_closed" &&
+        (payload.systemDialogReason === "recentapps" ||
+          payload.systemDialogReason === "homekey" ||
+          payload.systemDialogReason === "lock")
+      ) {
+        lastUserLeaveHintAtRef.current = Date.now();
+        appStateRef.current = "inactive";
+        clearWindowFocusTimer();
+        cancelPendingWindowFocusLoss();
+        cancelStrictWindowModeTimer();
+        reportFocusLost("app_inactive");
+        return;
+      }
+
+      if (
         payload.activityState === "paused" ||
         payload.activityState === "stopped"
       ) {
@@ -441,20 +515,9 @@ export function useFairPlayMonitor({
         return;
       }
 
-      if (payload.activityState === "resumed") {
-        appStateRef.current = "active";
-        cancelPendingWindowFocusLoss();
-        clearWindowFocusTimer();
-
-        if (
-          pendingReasonRef.current === "app_inactive" ||
-          pendingReasonRef.current === "app_backgrounded"
-        ) {
-          reportFocusReturned(activeQuestionId);
-        }
-
-        return;
-      }
+      const hasRecentUserLeaveHint =
+        Date.now() - lastUserLeaveHintAtRef.current <
+        USER_LEAVE_HINT_SUPPRESSION_MS;
 
       if (payload.userLeaveHint === true) {
         lastUserLeaveHintAtRef.current = Date.now();
@@ -479,28 +542,71 @@ export function useFairPlayMonitor({
       }
 
       if (payload.isInMultiWindowMode === true) {
-        reportImmediateWindowViolationIfActive("multi_window_mode");
+        if (isAppWindowMateriallyReduced()) {
+          reportImmediateWindowViolationIfActive("multi_window_mode");
+        }
         return;
       }
 
-      if (payload.hasWindowFocus === false) {
+      if (
+        (payload.eventSource === "window_focus_changed" ||
+          payload.eventSource === "poll") &&
+        payload.hasWindowFocus === false
+      ) {
         clearWindowFocusTimer();
 
+        if (hasRecentUserLeaveHint) {
+          appStateRef.current = "inactive";
+          cancelStrictWindowModeTimer();
+          reportFocusLost("app_inactive");
+          return;
+        }
+
         if (pendingWindowFocusLossTimeoutRef.current) {
-          clearTimeout(pendingWindowFocusLossTimeoutRef.current);
+          return;
         }
 
         pendingWindowFocusLossTimeoutRef.current = setTimeout(() => {
           pendingWindowFocusLossTimeoutRef.current = null;
 
-          if (
-            pendingReasonRef.current === "app_inactive" ||
-            pendingReasonRef.current === "app_backgrounded"
-          ) {
-            return;
-          }
+          void (async () => {
+            const activityState =
+              (await windowModeModule
+                .getActivityState?.()
+                .catch(() => "resumed")) ?? "resumed";
 
-          reportImmediateWindowViolationIfActive("window_focus_lost");
+            if (activityState !== "resumed") {
+              appStateRef.current =
+                activityState === "stopped" ? "background" : "inactive";
+              reportFocusLost(
+                activityState === "stopped"
+                  ? "app_backgrounded"
+                  : "app_inactive",
+              );
+              return;
+            }
+
+            if (
+              pendingReasonRef.current === "app_inactive" ||
+              pendingReasonRef.current === "app_backgrounded"
+            ) {
+              return;
+            }
+
+            if (appStateRef.current !== "active") {
+              return;
+            }
+
+            const stillMissingWindowFocus =
+              !(
+                (await windowModeModule.hasWindowFocus?.().catch(() => true)) ??
+                true
+              );
+
+            if (stillMissingWindowFocus) {
+              reportFocusLost("window_focus_lost");
+            }
+          })();
         }, WINDOW_FOCUS_LOSS_CLASSIFICATION_DELAY_MS);
 
         return;
@@ -528,28 +634,72 @@ export function useFairPlayMonitor({
 
         return;
       }
+
+      if (
+        payload.activityState === "resumed" &&
+        payload.hasWindowFocus !== false
+      ) {
+        appStateRef.current = "active";
+        lastUserLeaveHintAtRef.current = 0;
+        cancelPendingWindowFocusLoss();
+        clearWindowFocusTimer();
+
+        if (
+          pendingReasonRef.current === "app_inactive" ||
+          pendingReasonRef.current === "app_backgrounded"
+        ) {
+          reportFocusReturned(activeQuestionId);
+        }
+
+        return;
+      }
     };
 
-    Promise.all([
-      windowModeModule.isInMultiWindowMode?.().catch(() => false) ??
-        Promise.resolve(false),
-      windowModeModule.isInPictureInPictureMode?.().catch(() => false) ??
-        Promise.resolve(false),
-      windowModeModule.hasWindowFocus?.().catch(() => true) ??
-        Promise.resolve(true),
-    ])
-      .then(
-        ([isInMultiWindowMode, isInPictureInPictureMode, hasWindowFocus]) => {
-          handleWindowMode({
-            isInMultiWindowMode,
-            isInPictureInPictureMode,
-            hasWindowFocus,
-          });
-        },
-      )
-      .catch(() => {
-        // Expo Go and older native builds will not expose this module.
+    const pollWindowModeSnapshot = async (eventSource: "poll" | "snapshot") => {
+      const [
+        isInMultiWindowMode,
+        isInPictureInPictureMode,
+        hasWindowFocus,
+        activityState,
+      ] = await Promise.all([
+        windowModeModule.isInMultiWindowMode?.().catch(() => false) ??
+          Promise.resolve(false),
+        windowModeModule.isInPictureInPictureMode?.().catch(() => false) ??
+          Promise.resolve(false),
+        windowModeModule.hasWindowFocus?.().catch(() => true) ??
+          Promise.resolve(true),
+        windowModeModule.getActivityState?.().catch(() => "resumed") ??
+          Promise.resolve("resumed" as const),
+      ]);
+
+      handleWindowMode({
+        activityState: activityState as FairPlayWindowModePayload["activityState"],
+        eventSource,
+        hasWindowFocus,
+        isInMultiWindowMode,
+        isInPictureInPictureMode,
       });
+    };
+
+    pollWindowModeSnapshot("snapshot").catch(() => {
+      // Expo Go and older native builds will not expose this module.
+    });
+
+    let pollInFlight = false;
+    const pollInterval = setInterval(() => {
+      if (pollInFlight || !enabled || phase !== "question") {
+        return;
+      }
+
+      pollInFlight = true;
+      pollWindowModeSnapshot("poll")
+        .catch(() => {
+          // Native polling is best-effort on older development builds.
+        })
+        .finally(() => {
+          pollInFlight = false;
+        });
+    }, WINDOW_MODE_POLL_INTERVAL_MS);
 
     const emitter = new NativeEventEmitter(windowModeModule as any);
     const subscription = emitter.addListener(
@@ -564,6 +714,7 @@ export function useFairPlayMonitor({
       clearWindowFocusTimer();
       cancelPendingWindowFocusLoss();
       cancelStrictWindowModeTimer();
+      clearInterval(pollInterval);
       subscription.remove();
     };
   }, [

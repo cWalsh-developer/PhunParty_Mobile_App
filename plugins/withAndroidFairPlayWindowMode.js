@@ -11,6 +11,11 @@ const PACKAGE_FILE = "FairPlayWindowModePackage.kt";
 
 const moduleSource = `package com.phunparty.mobileapp
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -23,23 +28,29 @@ class FairPlayWindowModeModule(
 ) : ReactContextBaseJavaModule(reactContext) {
   init {
     sharedReactContext = reactContext
+    registerSystemDialogReceiver(reactContext)
   }
 
   override fun getName(): String = NAME
 
   @ReactMethod
   fun isInMultiWindowMode(promise: Promise) {
-    promise.resolve(lastKnownMultiWindowMode)
+    promise.resolve(getCurrentMultiWindowMode())
   }
 
   @ReactMethod
   fun isInPictureInPictureMode(promise: Promise) {
-    promise.resolve(lastKnownPictureInPictureMode)
+    promise.resolve(getCurrentPictureInPictureMode())
   }
 
   @ReactMethod
   fun hasWindowFocus(promise: Promise) {
-    promise.resolve(lastKnownWindowFocus)
+    promise.resolve(getCurrentWindowFocus())
+  }
+
+  @ReactMethod
+  fun getActivityState(promise: Promise) {
+    promise.resolve(lastKnownActivityState)
   }
 
   @ReactMethod
@@ -58,45 +69,91 @@ class FairPlayWindowModeModule(
     private var lastKnownWindowFocus: Boolean = true
     private var lastUserLeaveHintAtMs: Double = 0.0
     private var lastKnownActivityState: String = "resumed"
+    private var lastSystemDialogReason: String? = null
+
+    private var systemDialogReceiverRegistered: Boolean = false
+
+    private fun getCurrentMultiWindowMode(): Boolean {
+      val activity = sharedReactContext?.currentActivity
+      return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        activity?.isInMultiWindowMode ?: lastKnownMultiWindowMode
+      } else {
+        lastKnownMultiWindowMode
+      }
+    }
+
+    private fun getCurrentPictureInPictureMode(): Boolean {
+      val activity = sharedReactContext?.currentActivity
+      return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        activity?.isInPictureInPictureMode ?: lastKnownPictureInPictureMode
+      } else {
+        lastKnownPictureInPictureMode
+      }
+    }
+
+    private fun getCurrentWindowFocus(): Boolean {
+      val activity = sharedReactContext?.currentActivity
+      return activity?.window?.decorView?.hasWindowFocus() ?: lastKnownWindowFocus
+    }
 
     fun setMultiWindowMode(isInMultiWindowMode: Boolean) {
       lastKnownMultiWindowMode = isInMultiWindowMode
-      emitWindowModeChanged()
+      emitWindowModeChanged(eventSource = "multi_window_changed")
     }
 
     fun setPictureInPictureMode(isInPictureInPictureMode: Boolean) {
       lastKnownPictureInPictureMode = isInPictureInPictureMode
-      emitWindowModeChanged()
+      emitWindowModeChanged(eventSource = "picture_in_picture_changed")
     }
 
     fun setWindowFocus(hasWindowFocus: Boolean) {
       lastKnownWindowFocus = hasWindowFocus
-      emitWindowModeChanged()
+      emitWindowModeChanged(eventSource = "window_focus_changed")
     }
 
     fun noteUserLeaveHint() {
       lastUserLeaveHintAtMs = System.currentTimeMillis().toDouble()
-      emitWindowModeChanged(userLeaveHint = true)
+      emitWindowModeChanged(userLeaveHint = true, eventSource = "user_leave_hint")
+    }
+
+    fun noteSystemDialogReason(reason: String?) {
+      lastSystemDialogReason = reason
+
+      if (
+        reason == "recentapps" ||
+        reason == "homekey" ||
+        reason == "lock"
+      ) {
+        lastUserLeaveHintAtMs = System.currentTimeMillis().toDouble()
+      }
+
+      emitWindowModeChanged(eventSource = "system_dialog_closed")
     }
 
     fun setActivityState(activityState: String) {
       lastKnownActivityState = activityState
-      emitWindowModeChanged(activityState = activityState)
+      emitWindowModeChanged(
+        activityState = activityState,
+        eventSource = "activity_state_changed"
+      )
     }
 
     private fun emitWindowModeChanged(
       userLeaveHint: Boolean = false,
-      activityState: String? = null
+      activityState: String? = null,
+      eventSource: String = "snapshot"
     ) {
       val context = sharedReactContext ?: return
 
       val payload = Arguments.createMap().apply {
-        putBoolean("isInMultiWindowMode", lastKnownMultiWindowMode)
-        putBoolean("isInPictureInPictureMode", lastKnownPictureInPictureMode)
-        putBoolean("hasWindowFocus", lastKnownWindowFocus)
+        putBoolean("isInMultiWindowMode", getCurrentMultiWindowMode())
+        putBoolean("isInPictureInPictureMode", getCurrentPictureInPictureMode())
+        putBoolean("hasWindowFocus", getCurrentWindowFocus())
         putBoolean("userLeaveHint", userLeaveHint)
         putDouble("userLeaveHintAtMs", lastUserLeaveHintAtMs)
         putString("activityState", activityState ?: lastKnownActivityState)
+        putString("eventSource", eventSource)
+        lastSystemDialogReason?.let { putString("systemDialogReason", it) }
       }
 
       try {
@@ -105,6 +162,34 @@ class FairPlayWindowModeModule(
           .emit(EVENT_NAME, payload)
       } catch (_: Exception) {
         // The JS bridge may not be ready during startup/shutdown.
+      }
+    }
+
+    fun registerSystemDialogReceiver(context: Context) {
+      if (systemDialogReceiverRegistered) {
+        return
+      }
+
+      val receiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+          if (intent?.action != Intent.ACTION_CLOSE_SYSTEM_DIALOGS) {
+            return
+          }
+
+          noteSystemDialogReason(intent.getStringExtra("reason"))
+        }
+      }
+
+      try {
+        val filter = IntentFilter(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+          context.registerReceiver(receiver, filter)
+        }
+        systemDialogReceiverRegistered = true
+      } catch (_: Exception) {
+        // Some Android versions restrict system-dialog broadcasts.
       }
     }
   }

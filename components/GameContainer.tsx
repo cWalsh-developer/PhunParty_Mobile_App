@@ -73,6 +73,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const countdownIntervalRef = useRef<any>(null);
   const foregroundRefreshTimeoutRef = useRef<any>(null);
   const refreshFairPlayStatusRef = useRef<(source: string) => void>(() => {});
+  const gameStateRef = useRef<GameState | null>(null);
+  const fairPlayStatusRef = useRef<FairPlayStatus | null>(null);
+  const fairPlaySettingsRef = useRef<FairPlaySettings>(fairPlaySettings);
+  const gamePhaseRef = useRef<GamePhase>(gamePhase);
   const [isCheckingFinalFairPlayStatus, setIsCheckingFinalFairPlayStatus] =
     useState(false);
 
@@ -102,6 +106,40 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     }
 
     return null;
+  };
+
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
+  useEffect(() => {
+    fairPlayStatusRef.current = fairPlayStatus;
+  }, [fairPlayStatus]);
+
+  useEffect(() => {
+    fairPlaySettingsRef.current = fairPlaySettings;
+  }, [fairPlaySettings]);
+
+  useEffect(() => {
+    gamePhaseRef.current = gamePhase;
+  }, [gamePhase]);
+
+  const getFairPlayReturnQuestionId = (): string | null => {
+    const status = fairPlayStatusRef.current as any;
+    const state = gameStateRef.current as any;
+    const currentQuestion = state?.current_question ?? state?.currentQuestion;
+
+    return (
+      status?.question_id ??
+      status?.questionId ??
+      status?.frozen_question_id ??
+      status?.frozenQuestionId ??
+      currentQuestion?.question_id ??
+      currentQuestion?.questionId ??
+      state?.current_question_id ??
+      state?.currentQuestionId ??
+      null
+    );
   };
 
   const parseOptionalNumber = (...values: any[]): number | undefined => {
@@ -723,6 +761,17 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
         foregroundRefreshTimeoutRef.current = setTimeout(async () => {
           foregroundRefreshTimeoutRef.current = null;
+
+          if (
+            fairPlaySettingsRef.current.enabled &&
+            gamePhaseRef.current === "question"
+          ) {
+            const returnQuestionId = getFairPlayReturnQuestionId();
+
+            if (returnQuestionId) {
+              gameWebSocket.reportFairPlayFocusReturned(returnQuestionId);
+            }
+          }
 
           const status = await refreshFairPlayStatus("app_foregrounded");
 
