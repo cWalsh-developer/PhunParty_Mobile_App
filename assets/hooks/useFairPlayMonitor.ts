@@ -10,6 +10,7 @@ import type { FocusViolationReason } from "../api/gameWebSocketService";
 
 const FAIR_PLAY_WINDOW_MODE_EVENT = "FairPlayWindowModeChanged";
 const WINDOW_MODE_CLASSIFICATION_DELAY_MS = 150;
+const WINDOW_FOCUS_LOSS_CLASSIFICATION_DELAY_MS = 800;
 const USER_LEAVE_HINT_SUPPRESSION_MS = 1500;
 
 type FairPlayWindowModePayload = {
@@ -17,6 +18,7 @@ type FairPlayWindowModePayload = {
   isInPictureInPictureMode?: boolean;
   hasWindowFocus?: boolean;
   userLeaveHint?: boolean;
+  activityState?: "resumed" | "paused" | "stopped";
 };
 
 type FairPlayWindowModeModule = {
@@ -421,8 +423,42 @@ export function useFairPlayMonitor({
         return;
       }
 
+      if (
+        payload.activityState === "paused" ||
+        payload.activityState === "stopped"
+      ) {
+        lastUserLeaveHintAtRef.current = Date.now();
+        appStateRef.current =
+          payload.activityState === "stopped" ? "background" : "inactive";
+        clearWindowFocusTimer();
+        cancelPendingWindowFocusLoss();
+        cancelStrictWindowModeTimer();
+        reportFocusLost(
+          payload.activityState === "stopped"
+            ? "app_backgrounded"
+            : "app_inactive",
+        );
+        return;
+      }
+
+      if (payload.activityState === "resumed") {
+        appStateRef.current = "active";
+        cancelPendingWindowFocusLoss();
+        clearWindowFocusTimer();
+
+        if (
+          pendingReasonRef.current === "app_inactive" ||
+          pendingReasonRef.current === "app_backgrounded"
+        ) {
+          reportFocusReturned(activeQuestionId);
+        }
+
+        return;
+      }
+
       if (payload.userLeaveHint === true) {
         lastUserLeaveHintAtRef.current = Date.now();
+        appStateRef.current = "inactive";
         clearWindowFocusTimer();
         cancelPendingWindowFocusLoss();
         cancelStrictWindowModeTimer();
@@ -432,8 +468,6 @@ export function useFairPlayMonitor({
           reportImmediateWindowViolationIfActive("picture_in_picture_mode");
         } else if (payload.isInMultiWindowMode === true) {
           reportImmediateWindowViolationIfActive("multi_window_mode");
-        } else if (payload.hasWindowFocus === false) {
-          reportImmediateWindowViolationIfActive("window_focus_lost");
         }
 
         return;
@@ -458,8 +492,16 @@ export function useFairPlayMonitor({
 
         pendingWindowFocusLossTimeoutRef.current = setTimeout(() => {
           pendingWindowFocusLossTimeoutRef.current = null;
+
+          if (
+            pendingReasonRef.current === "app_inactive" ||
+            pendingReasonRef.current === "app_backgrounded"
+          ) {
+            return;
+          }
+
           reportImmediateWindowViolationIfActive("window_focus_lost");
-        }, WINDOW_MODE_CLASSIFICATION_DELAY_MS);
+        }, WINDOW_FOCUS_LOSS_CLASSIFICATION_DELAY_MS);
 
         return;
       }
@@ -477,7 +519,9 @@ export function useFairPlayMonitor({
          */
         if (
           appStateRef.current === "active" &&
-          pendingReasonRef.current === "window_focus_lost"
+          (pendingReasonRef.current === "window_focus_lost" ||
+            pendingReasonRef.current === "app_inactive" ||
+            pendingReasonRef.current === "app_backgrounded")
         ) {
           reportFocusReturned(activeQuestionId);
         }

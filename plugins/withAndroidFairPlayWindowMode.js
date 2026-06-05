@@ -57,6 +57,7 @@ class FairPlayWindowModeModule(
     private var lastKnownPictureInPictureMode: Boolean = false
     private var lastKnownWindowFocus: Boolean = true
     private var lastUserLeaveHintAtMs: Double = 0.0
+    private var lastKnownActivityState: String = "resumed"
 
     fun setMultiWindowMode(isInMultiWindowMode: Boolean) {
       lastKnownMultiWindowMode = isInMultiWindowMode
@@ -78,7 +79,15 @@ class FairPlayWindowModeModule(
       emitWindowModeChanged(userLeaveHint = true)
     }
 
-    private fun emitWindowModeChanged(userLeaveHint: Boolean = false) {
+    fun setActivityState(activityState: String) {
+      lastKnownActivityState = activityState
+      emitWindowModeChanged(activityState = activityState)
+    }
+
+    private fun emitWindowModeChanged(
+      userLeaveHint: Boolean = false,
+      activityState: String? = null
+    ) {
       val context = sharedReactContext ?: return
 
       val payload = Arguments.createMap().apply {
@@ -87,6 +96,7 @@ class FairPlayWindowModeModule(
         putBoolean("hasWindowFocus", lastKnownWindowFocus)
         putBoolean("userLeaveHint", userLeaveHint)
         putDouble("userLeaveHintAtMs", lastUserLeaveHintAtMs)
+        putString("activityState", activityState ?: lastKnownActivityState)
       }
 
       try {
@@ -147,6 +157,10 @@ const ensureMainActivityOverrides = (source) => {
     "FairPlayWindowModeModule.noteUserLeaveHint",
   );
 
+  const hasActivityStateOverride = source.includes(
+    "FairPlayWindowModeModule.setActivityState",
+  );
+
   const overrideBlocks = [];
 
   if (!hasMultiWindowOverride) {
@@ -197,6 +211,25 @@ const ensureMainActivityOverrides = (source) => {
   override fun onUserLeaveHint() {
     super.onUserLeaveHint()
     FairPlayWindowModeModule.noteUserLeaveHint()
+  }
+`);
+  }
+
+  if (!hasActivityStateOverride) {
+    overrideBlocks.push(`
+  override fun onResume() {
+    super.onResume()
+    FairPlayWindowModeModule.setActivityState("resumed")
+  }
+
+  override fun onPause() {
+    FairPlayWindowModeModule.setActivityState("paused")
+    super.onPause()
+  }
+
+  override fun onStop() {
+    FairPlayWindowModeModule.setActivityState("stopped")
+    super.onStop()
   }
 `);
   }
