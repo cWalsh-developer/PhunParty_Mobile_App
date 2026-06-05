@@ -19,7 +19,10 @@ import {
   gameWebSocket,
 } from "../assets/api/gameWebSocketService";
 import { AppCard } from "../assets/components/AppCard";
-import { useFairPlayMonitor } from "../assets/hooks/useFairPlayMonitor";
+import {
+  hasImmediateFairPlayWindowViolation,
+  useFairPlayMonitor,
+} from "../assets/hooks/useFairPlayMonitor";
 import { colors } from "../assets/theme/colors";
 import { typography } from "../assets/theme/typography";
 
@@ -80,6 +83,9 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   const [answerOptions, setAnswerOptions] = useState<string[]>([]);
   const [answerText, setAnswerText] = useState("");
   const [hasSubmittedAnswer, setHasSubmittedAnswer] = useState(false);
+  const [submittedQuestionId, setSubmittedQuestionId] = useState<string | null>(
+    null,
+  );
   const [isGameActive, setIsGameActive] = useState(true);
   const [glowIntensity, setGlowIntensity] = useState(0);
   const [fairPlayLockedQuestionId, setFairPlayLockedQuestionId] = useState<
@@ -97,6 +103,11 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   const gameEndedTimeoutRef = useRef<any>(null);
   const currentQuestionId = currentQuestion?.question_id ?? null;
   const currentQuestionIdRef = useRef<string | null>(null);
+  const submittedQuestionIdRef = useRef<string | null>(null);
+  const lastFairPlayViolationRef = useRef<{
+    key: string;
+    reportedAt: number;
+  } | null>(null);
   const fairPlayStrikeCount = Number(
     fairPlayStatus?.strike_count ?? fairPlayStatus?.strikeCount ?? 0,
   );
@@ -124,17 +135,31 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     fairPlayStatus?.is_kicked ?? fairPlayStatus?.isKicked,
   );
   const isFrozenForRenderedQuestion =
+    fairPlayEnabled &&
     isFrozenByFairPlay &&
     !!currentQuestionId &&
     (!fairPlayFrozenQuestionId ||
       fairPlayFrozenQuestionId === currentQuestionId);
-  const isFairPlayLocked =
-    isKickedByFairPlay ||
-    isFrozenForRenderedQuestion ||
-    (!!currentQuestionId && fairPlayLockedQuestionId === currentQuestionId);
+  const isBackendFairPlayLocked =
+    fairPlayEnabled &&
+    (isKickedByFairPlay ||
+      isFrozenForRenderedQuestion ||
+      (!!currentQuestionId && fairPlayLockedQuestionId === currentQuestionId));
 
   const handleFairPlayViolation = useCallback(
     (questionId: string, reason: FocusViolationReason) => {
+      const now = Date.now();
+      const key = `${questionId}:${reason}`;
+      const lastViolation = lastFairPlayViolationRef.current;
+
+      if (
+        lastViolation?.key === key &&
+        now - lastViolation.reportedAt < 10000
+      ) {
+        return;
+      }
+
+      lastFairPlayViolationRef.current = { key, reportedAt: now };
       onFairPlayFocusLost?.(questionId, reason);
     },
     [onFairPlayFocusLost],
@@ -147,7 +172,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     [onFairPlayFocusReturned],
   );
 
-  const { isInGracePeriod } = useFairPlayMonitor({
+  const { isImmediateViolationPending, isInGracePeriod } = useFairPlayMonitor({
     enabled: fairPlayEnabled,
     questionId: currentQuestionId,
     phase: gamePhase,
@@ -155,10 +180,18 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     onFocusReturned: handleFairPlayReturned,
   });
 
+  const isFairPlayLocked =
+    fairPlayEnabled &&
+    (isBackendFairPlayLocked || isImmediateViolationPending);
+
   useEffect(() => {
     fairPlayStatusRef.current = fairPlayStatus;
     fairPlayEnabledRef.current = fairPlayEnabled;
   }, [fairPlayEnabled, fairPlayStatus]);
+
+  useEffect(() => {
+    submittedQuestionIdRef.current = submittedQuestionId;
+  }, [submittedQuestionId]);
 
   useEffect(() => {
     if (isFrozenForRenderedQuestion && currentQuestionId) {
@@ -191,6 +224,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
     const freezeTimeout = setTimeout(() => {
       setHasSubmittedAnswer(false);
+      setSubmittedQuestionId(null);
       if (glowIntervalRef.current) {
         clearInterval(glowIntervalRef.current);
         glowIntervalRef.current = null;
@@ -237,12 +271,24 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   };
   void fetchCurrentQuestion;
 
+  const clearSubmittedAnswerState = () => {
+    submittedQuestionIdRef.current = null;
+    setHasSubmittedAnswer(false);
+    setSubmittedQuestionId(null);
+  };
+
   const resetBuzzerState = (
     questionId: string | null = currentQuestionId ?? null,
   ) => {
+    const isSubmittedQuestion =
+      !!questionId && submittedQuestionIdRef.current === questionId;
+
     setAnswerOptions([]);
-    setAnswerText("");
-    setHasSubmittedAnswer(false);
+    if (!isSubmittedQuestion) {
+      setAnswerText("");
+      clearSubmittedAnswerState();
+    }
+
     setBuzzerState({
       isActive: true,
       winner: null,
@@ -255,7 +301,10 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       transitioning: false,
       acceptingBuzzes: true,
     });
-    stopWinnerAnimation();
+
+    if (!isSubmittedQuestion) {
+      stopWinnerAnimation();
+    }
   };
 
   const applyBackendButtonState = (data: any) => {
@@ -273,7 +322,11 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
     if (buttonState === "answer_mode" && isCurrentPlayer) {
       applyQuestionAnswerData(data);
-      setHasSubmittedAnswer(false);
+      clearSubmittedAnswerState();
+    }
+
+    if (buttonState === "frozen") {
+      clearSubmittedAnswerState();
     }
 
     const activeQuestionId = currentQuestionIdRef.current;
@@ -349,10 +402,11 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     } else if (isFrozen) {
       nextButtonState = "frozen";
       nextStatusText = "You're frozen for this question.";
+      clearSubmittedAnswerState();
     } else if (isWinner) {
       nextButtonState = "answer_mode";
       nextStatusText = "You buzzed first. Choose your answer.";
-      setHasSubmittedAnswer(false);
+      clearSubmittedAnswerState();
     } else if (currentWinner) {
       nextButtonState = "waiting";
       nextStatusText = "Another player buzzed first.";
@@ -508,7 +562,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     });
   };
 
-  const submitBuzzerAnswer = (answer: string) => {
+  const submitBuzzerAnswer = async (answer: string) => {
     if (
       !currentQuestion?.question_id ||
       !answer ||
@@ -516,6 +570,16 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       isFairPlayLocked
     ) {
       return;
+    }
+
+    if (fairPlayEnabled) {
+      const immediateViolation = await hasImmediateFairPlayWindowViolation();
+
+      if (immediateViolation) {
+        setFairPlayLockedQuestionId(currentQuestion.question_id);
+        handleFairPlayViolation(currentQuestion.question_id, immediateViolation);
+        return;
+      }
     }
 
     const sent = gameWebSocket.submitAnswer(
@@ -529,6 +593,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     }
 
     setHasSubmittedAnswer(true);
+    setSubmittedQuestionId(currentQuestion.question_id);
     setBuzzerState((prev) => ({
       ...prev,
       buttonState: "locked",
@@ -539,7 +604,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     }));
   };
 
-  const handleBuzzerPress = () => {
+  const handleBuzzerPress = async () => {
     const activeQuestionId =
       currentQuestionIdRef.current ?? currentQuestion?.question_id ?? null;
 
@@ -557,6 +622,16 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       !isFairPlayLocked;
 
     if (!canPressBuzzer) return;
+
+    if (fairPlayEnabled) {
+      const immediateViolation = await hasImmediateFairPlayWindowViolation();
+
+      if (immediateViolation) {
+        setFairPlayLockedQuestionId(activeQuestionId);
+        handleFairPlayViolation(activeQuestionId, immediateViolation);
+        return;
+      }
+    }
 
     // Immediate visual feedback
     setBuzzerState((prev) => ({ ...prev, canBuzz: false }));
@@ -641,23 +716,31 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       return null;
     }
 
-    const isWarning = isInGracePeriod && !isFairPlayLocked;
+    const isConfirmedLocked = isBackendFairPlayLocked;
+    const isLocalCheckPending =
+      isImmediateViolationPending && !isConfirmedLocked;
+    const isWarning =
+      (isInGracePeriod || isLocalCheckPending) && !isConfirmedLocked;
 
     return (
       <View
         style={[
           styles.fairPlayBanner,
           isWarning && styles.fairPlayBannerGrace,
-          isFairPlayLocked && styles.fairPlayBannerWarning,
+          isConfirmedLocked && styles.fairPlayBannerWarning,
         ]}
       >
         <MaterialIcons
           name={
-            isFairPlayLocked ? "block" : isWarning ? "timer" : "verified-user"
+            isConfirmedLocked
+              ? "block"
+              : isWarning
+                ? "timer"
+                : "verified-user"
           }
           size={20}
           color={
-            isFairPlayLocked
+            isConfirmedLocked
               ? colors.red[500]
               : isWarning
                 ? colors.peach[500]
@@ -668,14 +751,16 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           style={[
             styles.fairPlayText,
             isWarning && styles.fairPlayTextGrace,
-            isFairPlayLocked && styles.fairPlayTextWarning,
+            isConfirmedLocked && styles.fairPlayTextWarning,
           ]}
         >
-          {isFairPlayLocked
+          {isConfirmedLocked
             ? fairPlayStatus?.message ||
               `Fair Play strike ${fairPlayStrikeCount}/${fairPlayMaxStrikes}. You are frozen for this question.`
             : isWarning
-              ? `Return to the game within ${fairPlayGraceSeconds} seconds to avoid a Fair Play strike.`
+              ? isLocalCheckPending
+                ? "Fair Play check in progress. Return to the game to avoid a strike."
+                : `Return to the game within ${fairPlayGraceSeconds} seconds to avoid a Fair Play strike.`
               : `Fair Play Mode active - ${fairPlayStrikeCount}/${fairPlayMaxStrikes} strikes`}
         </Text>
       </View>
@@ -726,6 +811,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         data.event_type === "incorrect_answer"
       ) {
         const matchStatus = getAnswerMatchStatus(data);
+        clearSubmittedAnswerState();
         setBuzzerState((prev) => ({
           ...prev,
           buttonState: "frozen",
@@ -764,6 +850,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     gameWebSocket.onAnswerRejected = (data: any) => {
       if (data.reason === "fair_play_restriction") {
         setHasSubmittedAnswer(false);
+        setSubmittedQuestionId(null);
         stopGlowAnimation();
         setBuzzerState((prev) => ({
           ...prev,
@@ -779,6 +866,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       }
 
       setHasSubmittedAnswer(false);
+      setSubmittedQuestionId(null);
       onError(data.message || "Your action was rejected.");
     };
 
@@ -840,6 +928,34 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
             color={colors.tea[500]}
           />
           <Text style={styles.waitingText}>Get ready to buzz in!</Text>
+          <Text style={styles.sessionCode}>Session: {sessionCode}</Text>
+        </AppCard>
+      </View>
+    );
+  }
+
+  const isSubmittedAnswerWaiting =
+    (hasSubmittedAnswer || submittedQuestionId === currentQuestionId) &&
+    buzzerState.buttonState !== "frozen";
+  const isQuestionTransitionWaiting =
+    buzzerState.buttonState === "waiting" &&
+    !buzzerState.acceptingBuzzes &&
+    (buzzerState.transitioning ||
+      /next question/i.test(buzzerState.statusText));
+  const isWaitingForNextQuestion =
+    (isSubmittedAnswerWaiting || isQuestionTransitionWaiting) &&
+    !isFairPlayLocked;
+
+  if (isWaitingForNextQuestion) {
+    return (
+      <View style={styles.container}>
+        <AppCard style={styles.waitingCard}>
+          <MaterialIcons
+            name="hourglass-empty"
+            size={48}
+            color={colors.tea[500]}
+          />
+          <Text style={styles.waitingText}>Waiting for next question...</Text>
           <Text style={styles.sessionCode}>Session: {sessionCode}</Text>
         </AppCard>
       </View>

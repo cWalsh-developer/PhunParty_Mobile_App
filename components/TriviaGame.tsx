@@ -19,7 +19,10 @@ import {
 } from "../assets/api/gameWebSocketService";
 import { AppButton } from "../assets/components/AppButton";
 import { AppCard } from "../assets/components/AppCard";
-import { useFairPlayMonitor } from "../assets/hooks/useFairPlayMonitor";
+import {
+  hasImmediateFairPlayWindowViolation,
+  useFairPlayMonitor,
+} from "../assets/hooks/useFairPlayMonitor";
 import { colors } from "../assets/theme/colors";
 import { typography } from "../assets/theme/typography";
 
@@ -70,6 +73,9 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [submittedQuestionId, setSubmittedQuestionId] = useState<string | null>(
+    null,
+  );
   const [showResults, setShowResults] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [isGameActive, setIsGameActive] = useState(true);
@@ -86,6 +92,11 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   );
   const fairPlayEnabledRef = useRef(fairPlayEnabled);
   const gameEndedTimeoutRef = useRef<any>(null);
+  const submittedQuestionIdRef = useRef<string | null>(null);
+  const lastFairPlayViolationRef = useRef<{
+    key: string;
+    reportedAt: number;
+  } | null>(null);
 
   // Derived values for backward compatibility
   const currentQuestion = gameState.currentQuestion;
@@ -120,17 +131,31 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     fairPlayStatus?.is_kicked ?? fairPlayStatus?.isKicked,
   );
   const isFrozenForRenderedQuestion =
+    fairPlayEnabled &&
     isFrozenByFairPlay &&
     !!currentQuestionId &&
     (!fairPlayFrozenQuestionId ||
       fairPlayFrozenQuestionId === currentQuestionId);
-  const isFairPlayLocked =
-    isKickedByFairPlay ||
-    isFrozenForRenderedQuestion ||
-    (!!currentQuestionId && fairPlayLockedQuestionId === currentQuestionId);
+  const isBackendFairPlayLocked =
+    fairPlayEnabled &&
+    (isKickedByFairPlay ||
+      isFrozenForRenderedQuestion ||
+      (!!currentQuestionId && fairPlayLockedQuestionId === currentQuestionId));
 
   const handleFairPlayViolation = useCallback(
     (questionId: string, reason: FocusViolationReason) => {
+      const now = Date.now();
+      const key = `${questionId}:${reason}`;
+      const lastViolation = lastFairPlayViolationRef.current;
+
+      if (
+        lastViolation?.key === key &&
+        now - lastViolation.reportedAt < 10000
+      ) {
+        return;
+      }
+
+      lastFairPlayViolationRef.current = { key, reportedAt: now };
       onFairPlayFocusLost?.(questionId, reason);
     },
     [onFairPlayFocusLost],
@@ -143,7 +168,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     [onFairPlayFocusReturned],
   );
 
-  const { isInGracePeriod } = useFairPlayMonitor({
+  const { isImmediateViolationPending, isInGracePeriod } = useFairPlayMonitor({
     enabled: fairPlayEnabled,
     questionId: currentQuestionId,
     phase: gamePhase,
@@ -151,10 +176,18 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     onFocusReturned: handleFairPlayReturned,
   });
 
+  const isFairPlayLocked =
+    fairPlayEnabled &&
+    (isBackendFairPlayLocked || isImmediateViolationPending);
+
   useEffect(() => {
     fairPlayStatusRef.current = fairPlayStatus;
     fairPlayEnabledRef.current = fairPlayEnabled;
   }, [fairPlayEnabled, fairPlayStatus]);
+
+  useEffect(() => {
+    submittedQuestionIdRef.current = submittedQuestionId;
+  }, [submittedQuestionId]);
 
   useEffect(() => {
     if (isFrozenForRenderedQuestion && currentQuestionId) {
@@ -190,6 +223,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     }
 
     setHasSubmitted(false);
+    setSubmittedQuestionId(null);
     setShowResults(false);
   }, [isFairPlayLocked, currentQuestionId]);
 
@@ -237,7 +271,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     });
 
     if (gameState.currentQuestion && currentQuestionId) {
-      resetForNewQuestion();
+      resetForNewQuestion(currentQuestionId);
       animateQuestionEntry();
     }
   }, [currentQuestionId]); // Only reset when question ID changes
@@ -423,11 +457,13 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     gameWebSocket.onAnswerRejected = (data: any) => {
       if (data.reason === "fair_play_restriction") {
         setHasSubmitted(false);
+        setSubmittedQuestionId(null);
         setShowResults(false);
         return;
       }
 
       setHasSubmitted(false);
+      setSubmittedQuestionId(null);
       onError(data.message || "Your answer was rejected.");
     };
 
@@ -615,13 +651,20 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   };
   void fetchInitialQuestion;
 
-  const resetForNewQuestion = () => {
+  const resetForNewQuestion = (questionId?: string | null) => {
     if (revealTimeoutRef.current) {
       clearTimeout(revealTimeoutRef.current);
       revealTimeoutRef.current = null;
     }
-    setSelectedAnswer(null);
-    setHasSubmitted(false);
+    const isSubmittedQuestion =
+      !!questionId && submittedQuestionIdRef.current === questionId;
+
+    if (!isSubmittedQuestion) {
+      setSelectedAnswer(null);
+      setHasSubmitted(false);
+      setSubmittedQuestionId(null);
+    }
+
     setShowResults(false);
     setTimeLeft(0);
     fadeAnimation.setValue(0);
@@ -683,7 +726,18 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     if (!answerToSubmit || !currentQuestion || hasSubmitted || isFairPlayLocked)
       return;
 
+    if (fairPlayEnabled) {
+      const immediateViolation = await hasImmediateFairPlayWindowViolation();
+
+      if (immediateViolation) {
+        setFairPlayLockedQuestionId(currentQuestion.question_id);
+        handleFairPlayViolation(currentQuestion.question_id, immediateViolation);
+        return;
+      }
+    }
+
     setHasSubmitted(true);
+    setSubmittedQuestionId(currentQuestion.question_id);
     console.log("🎯 Submitting answer:", {
       answer: answerToSubmit,
       question_id: currentQuestion.question_id,
@@ -706,11 +760,13 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
         if (!apiResult?.isSuccess) {
           setHasSubmitted(false);
+          setSubmittedQuestionId(null);
           onError("Failed to submit answer. Please check your connection.");
           return;
         }
       } catch (error) {
         setHasSubmitted(false);
+        setSubmittedQuestionId(null);
         onError("Failed to submit answer. Please check your connection.");
         return;
       }
@@ -811,22 +867,27 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       return null;
     }
 
-    const isLocked = isFairPlayLocked;
-    const isWarning = isInGracePeriod && !isLocked;
+    const isConfirmedLocked = isBackendFairPlayLocked;
+    const isLocalCheckPending =
+      isImmediateViolationPending && !isConfirmedLocked;
+    const isWarning =
+      (isInGracePeriod || isLocalCheckPending) && !isConfirmedLocked;
 
     return (
       <View
         style={[
           styles.fairPlayBanner,
           isWarning && styles.fairPlayBannerGrace,
-          isLocked && styles.fairPlayBannerWarning,
+          isConfirmedLocked && styles.fairPlayBannerWarning,
         ]}
       >
         <MaterialIcons
-          name={isLocked ? "block" : isWarning ? "timer" : "verified-user"}
+          name={
+            isConfirmedLocked ? "block" : isWarning ? "timer" : "verified-user"
+          }
           size={20}
           color={
-            isLocked
+            isConfirmedLocked
               ? colors.red[500]
               : isWarning
                 ? colors.peach[500]
@@ -837,14 +898,16 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
           style={[
             styles.fairPlayText,
             isWarning && styles.fairPlayTextGrace,
-            isLocked && styles.fairPlayTextWarning,
+            isConfirmedLocked && styles.fairPlayTextWarning,
           ]}
         >
-          {isLocked
+          {isConfirmedLocked
             ? fairPlayStatus?.message ||
               `Fair Play strike ${fairPlayStrikeCount}/${fairPlayMaxStrikes}. You are frozen for this question.`
             : isWarning
-              ? `Return to the game within ${fairPlayGraceSeconds} seconds to avoid a Fair Play strike.`
+              ? isLocalCheckPending
+                ? "Fair Play check in progress. Return to the game to avoid a strike."
+                : `Return to the game within ${fairPlayGraceSeconds} seconds to avoid a Fair Play strike.`
               : `Fair Play Mode active - ${fairPlayStrikeCount}/${fairPlayMaxStrikes} strikes`}
         </Text>
       </View>
@@ -852,6 +915,26 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   };
 
   if (!currentQuestion) {
+    return (
+      <View style={styles.container}>
+        <AppCard style={styles.waitingCard}>
+          <MaterialIcons
+            name="hourglass-empty"
+            size={48}
+            color={colors.tea[500]}
+          />
+          <Text style={styles.waitingText}>Waiting for next question...</Text>
+          <Text style={styles.sessionCode}>Session: {sessionCode}</Text>
+        </AppCard>
+      </View>
+    );
+  }
+
+  if (
+    ((hasSubmitted && !showResults) ||
+      submittedQuestionId === currentQuestionId) &&
+    !isFairPlayLocked
+  ) {
     return (
       <View style={styles.container}>
         <AppCard style={styles.waitingCard}>

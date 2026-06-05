@@ -1446,7 +1446,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             />
             <Text style={styles.statusTitle}>Game Ended</Text>
             <Text style={styles.statusText}>
-              Checking whether you were removed from the session...
+              Thanks for playing. Hope you enjoyed the game!
             </Text>
             <View style={styles.actionButtons}>
               <AppButton

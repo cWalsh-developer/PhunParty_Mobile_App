@@ -49,6 +49,11 @@ class FairPlayWindowModeModule(
   }
 
   @ReactMethod
+  fun isTopResumedActivity(promise: Promise) {
+    promise.resolve(lastKnownTopResumedActivity)
+  }
+
+  @ReactMethod
   fun getActivityState(promise: Promise) {
     promise.resolve(lastKnownActivityState)
   }
@@ -67,6 +72,7 @@ class FairPlayWindowModeModule(
     private var lastKnownMultiWindowMode: Boolean = false
     private var lastKnownPictureInPictureMode: Boolean = false
     private var lastKnownWindowFocus: Boolean = true
+    private var lastKnownTopResumedActivity: Boolean = true
     private var lastUserLeaveHintAtMs: Double = 0.0
     private var lastKnownActivityState: String = "resumed"
     private var lastSystemDialogReason: String? = null
@@ -111,6 +117,11 @@ class FairPlayWindowModeModule(
       emitWindowModeChanged(eventSource = "window_focus_changed")
     }
 
+    fun setTopResumedActivity(isTopResumedActivity: Boolean) {
+      lastKnownTopResumedActivity = isTopResumedActivity
+      emitWindowModeChanged(eventSource = "top_resumed_changed")
+    }
+
     fun noteUserLeaveHint() {
       lastUserLeaveHintAtMs = System.currentTimeMillis().toDouble()
       emitWindowModeChanged(userLeaveHint = true, eventSource = "user_leave_hint")
@@ -149,6 +160,7 @@ class FairPlayWindowModeModule(
         putBoolean("isInMultiWindowMode", getCurrentMultiWindowMode())
         putBoolean("isInPictureInPictureMode", getCurrentPictureInPictureMode())
         putBoolean("hasWindowFocus", getCurrentWindowFocus())
+        putBoolean("isTopResumedActivity", lastKnownTopResumedActivity)
         putBoolean("userLeaveHint", userLeaveHint)
         putDouble("userLeaveHintAtMs", lastUserLeaveHintAtMs)
         putString("activityState", activityState ?: lastKnownActivityState)
@@ -238,6 +250,10 @@ const ensureMainActivityOverrides = (source) => {
     "FairPlayWindowModeModule.setWindowFocus",
   );
 
+  const hasTopResumedOverride = source.includes(
+    "FairPlayWindowModeModule.setTopResumedActivity",
+  );
+
   const hasUserLeaveHintOverride = source.includes(
     "FairPlayWindowModeModule.noteUserLeaveHint",
   );
@@ -287,6 +303,15 @@ const ensureMainActivityOverrides = (source) => {
   override fun onWindowFocusChanged(hasFocus: Boolean) {
     super.onWindowFocusChanged(hasFocus)
     FairPlayWindowModeModule.setWindowFocus(hasFocus)
+  }
+`);
+  }
+
+  if (!hasTopResumedOverride) {
+    overrideBlocks.push(`
+  override fun onTopResumedActivityChanged(isTopResumedActivity: Boolean) {
+    super.onTopResumedActivityChanged(isTopResumedActivity)
+    FairPlayWindowModeModule.setTopResumedActivity(isTopResumedActivity)
   }
 `);
   }
