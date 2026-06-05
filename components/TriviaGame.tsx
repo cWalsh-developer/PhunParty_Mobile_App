@@ -32,6 +32,7 @@ interface TriviaGameProps {
   fairPlayEnabled?: boolean;
   maxFairPlayStrikes?: number;
   fairPlayStatus?: FairPlayStatus | null;
+  transitionWaitingQuestionId?: string | null;
   onFairPlayFocusLost?: (
     questionId: string,
     reason: FocusViolationReason,
@@ -59,6 +60,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   fairPlayEnabled = false,
   maxFairPlayStrikes = 3,
   fairPlayStatus,
+  transitionWaitingQuestionId: externalTransitionWaitingQuestionId,
   onFairPlayFocusLost,
   onFairPlayFocusReturned,
   onGameEnd,
@@ -76,6 +78,11 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   const [submittedQuestionId, setSubmittedQuestionId] = useState<string | null>(
     null,
   );
+  const [waitingForNextQuestionId, setWaitingForNextQuestionId] = useState<
+    string | null
+  >(null);
+  const [transitionWaitingQuestionId, setTransitionWaitingQuestionId] =
+    useState<string | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [isGameActive, setIsGameActive] = useState(true);
@@ -93,6 +100,8 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   const fairPlayEnabledRef = useRef(fairPlayEnabled);
   const gameEndedTimeoutRef = useRef<any>(null);
   const submittedQuestionIdRef = useRef<string | null>(null);
+  const waitingForNextQuestionIdRef = useRef<string | null>(null);
+  const transitionWaitingQuestionIdRef = useRef<string | null>(null);
   const lastFairPlayViolationRef = useRef<{
     key: string;
     reportedAt: number;
@@ -176,9 +185,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     onFocusReturned: handleFairPlayReturned,
   });
 
-  const isFairPlayLocked =
-    fairPlayEnabled &&
-    (isBackendFairPlayLocked || isImmediateViolationPending);
+  const isFairPlayLocked = fairPlayEnabled && isBackendFairPlayLocked;
 
   useEffect(() => {
     fairPlayStatusRef.current = fairPlayStatus;
@@ -188,6 +195,24 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   useEffect(() => {
     submittedQuestionIdRef.current = submittedQuestionId;
   }, [submittedQuestionId]);
+
+  useEffect(() => {
+    waitingForNextQuestionIdRef.current = waitingForNextQuestionId;
+  }, [waitingForNextQuestionId]);
+
+  useEffect(() => {
+    transitionWaitingQuestionIdRef.current = transitionWaitingQuestionId;
+  }, [transitionWaitingQuestionId]);
+
+  useEffect(() => {
+    if (
+      externalTransitionWaitingQuestionId &&
+      externalTransitionWaitingQuestionId === currentQuestionId
+    ) {
+      transitionWaitingQuestionIdRef.current = externalTransitionWaitingQuestionId;
+      setTransitionWaitingQuestionId(externalTransitionWaitingQuestionId);
+    }
+  }, [currentQuestionId, externalTransitionWaitingQuestionId]);
 
   useEffect(() => {
     if (isFrozenForRenderedQuestion && currentQuestionId) {
@@ -222,8 +247,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       return;
     }
 
-    setHasSubmitted(false);
-    setSubmittedQuestionId(null);
+    clearSubmittedQuestionState();
     setShowResults(false);
   }, [isFairPlayLocked, currentQuestionId]);
 
@@ -277,6 +301,32 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   }, [currentQuestionId]); // Only reset when question ID changes
 
   const setupWebSocketListeners = () => {
+    const markCurrentQuestionTransitionWaiting = (data?: any) => {
+      const action = data?.action ?? data?.game_state?.action;
+
+      if (action !== "next_question" && action !== "game_ended") {
+        return false;
+      }
+
+      const transitionQuestionId =
+        data?.question_id ??
+        data?.questionId ??
+        data?.current_question_id ??
+        data?.game_state?.question_id ??
+        data?.game_state?.questionId ??
+        currentQuestionRef.current?.question_id ??
+        null;
+
+      if (!transitionQuestionId) {
+        return false;
+      }
+
+      transitionWaitingQuestionIdRef.current = transitionQuestionId;
+      setTransitionWaitingQuestionId(transitionQuestionId);
+      setShowResults(false);
+      return true;
+    };
+
     gameWebSocket.onQuestionReceived = (question: GameQuestion) => {
       const receiveTime = Date.now();
       console.log(
@@ -417,6 +467,10 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     };
 
     gameWebSocket.onAnswerSubmitted = (data: any) => {
+      if (markCurrentQuestionTransitionWaiting(data)) {
+        return;
+      }
+
       console.log("✅ Answer submission result:", {
         is_correct: data.is_correct,
         correct_answer: data.correct_answer,
@@ -456,14 +510,12 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
     gameWebSocket.onAnswerRejected = (data: any) => {
       if (data.reason === "fair_play_restriction") {
-        setHasSubmitted(false);
-        setSubmittedQuestionId(null);
+        clearSubmittedQuestionState();
         setShowResults(false);
         return;
       }
 
-      setHasSubmitted(false);
-      setSubmittedQuestionId(null);
+      clearSubmittedQuestionState();
       onError(data.message || "Your answer was rejected.");
     };
 
@@ -475,6 +527,17 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       ) {
         showCorrectAnswer(data.correct_option);
       } else if (data.type === "question_ended") {
+        const endedQuestionId =
+          data.question_id ??
+          data.questionId ??
+          currentQuestionRef.current?.question_id ??
+          null;
+
+        if (endedQuestionId) {
+          transitionWaitingQuestionIdRef.current = endedQuestionId;
+          setTransitionWaitingQuestionId(endedQuestionId);
+        }
+
         if (isTextInputResult(data)) {
           setShowResults(false);
           return;
@@ -658,16 +721,44 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     }
     const isSubmittedQuestion =
       !!questionId && submittedQuestionIdRef.current === questionId;
+    const isWaitingQuestion =
+      !!questionId && waitingForNextQuestionIdRef.current === questionId;
+    const isTransitionWaitingQuestion =
+      !!questionId && transitionWaitingQuestionIdRef.current === questionId;
 
-    if (!isSubmittedQuestion) {
+    if (
+      !isSubmittedQuestion &&
+      !isWaitingQuestion &&
+      !isTransitionWaitingQuestion
+    ) {
       setSelectedAnswer(null);
-      setHasSubmitted(false);
-      setSubmittedQuestionId(null);
+      clearSubmittedQuestionState();
+    }
+
+    if (questionId && !isTransitionWaitingQuestion) {
+      transitionWaitingQuestionIdRef.current = null;
+      setTransitionWaitingQuestionId(null);
     }
 
     setShowResults(false);
     setTimeLeft(0);
     fadeAnimation.setValue(0);
+  };
+
+  const setSubmittedQuestionState = (questionId: string) => {
+    submittedQuestionIdRef.current = questionId;
+    waitingForNextQuestionIdRef.current = questionId;
+    setHasSubmitted(true);
+    setSubmittedQuestionId(questionId);
+    setWaitingForNextQuestionId(questionId);
+  };
+
+  const clearSubmittedQuestionState = () => {
+    submittedQuestionIdRef.current = null;
+    waitingForNextQuestionIdRef.current = null;
+    setHasSubmitted(false);
+    setSubmittedQuestionId(null);
+    setWaitingForNextQuestionId(null);
   };
 
   const animateQuestionEntry = () => {
@@ -732,14 +823,11 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
       });
 
       if (immediateViolation) {
-        setFairPlayLockedQuestionId(currentQuestion.question_id);
         handleFairPlayViolation(currentQuestion.question_id, immediateViolation);
-        return;
       }
     }
 
-    setHasSubmitted(true);
-    setSubmittedQuestionId(currentQuestion.question_id);
+    setSubmittedQuestionState(currentQuestion.question_id);
     console.log("🎯 Submitting answer:", {
       answer: answerToSubmit,
       question_id: currentQuestion.question_id,
@@ -761,14 +849,12 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         );
 
         if (!apiResult?.isSuccess) {
-          setHasSubmitted(false);
-          setSubmittedQuestionId(null);
+          clearSubmittedQuestionState();
           onError("Failed to submit answer. Please check your connection.");
           return;
         }
       } catch (error) {
-        setHasSubmitted(false);
-        setSubmittedQuestionId(null);
+        clearSubmittedQuestionState();
         onError("Failed to submit answer. Please check your connection.");
         return;
       }
@@ -932,10 +1018,16 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     );
   }
 
+  const isWaitingForSubmittedQuestion =
+    waitingForNextQuestionId === currentQuestionId ||
+    submittedQuestionId === currentQuestionId ||
+    (hasSubmitted && !showResults);
+  const isWaitingForQuestionTransition =
+    transitionWaitingQuestionId === currentQuestionId;
+
   if (
-    ((hasSubmitted || submittedQuestionId === currentQuestionId) &&
-      !showResults) &&
-    !isFairPlayLocked
+    isWaitingForQuestionTransition ||
+    (isWaitingForSubmittedQuestion && !isFairPlayLocked)
   ) {
     return (
       <View style={styles.container}>

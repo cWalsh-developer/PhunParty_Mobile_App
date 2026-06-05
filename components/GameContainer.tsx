@@ -60,6 +60,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const [countdownQuestionStartAt, setCountdownQuestionStartAt] = useState<
     string | null
   >(null);
+  const [transitionWaitingQuestionId, setTransitionWaitingQuestionId] =
+    useState<string | null>(null);
   const [countdownRemainingMs, setCountdownRemainingMs] = useState(0);
   const [pulseAnimation] = useState(new Animated.Value(1));
 
@@ -77,6 +79,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const fairPlayStatusRef = useRef<FairPlayStatus | null>(null);
   const fairPlaySettingsRef = useRef<FairPlaySettings>(fairPlaySettings);
   const gamePhaseRef = useRef<GamePhase>(gamePhase);
+  const transitionWaitingQuestionIdRef = useRef<string | null>(null);
   const [isCheckingFinalFairPlayStatus, setIsCheckingFinalFairPlayStatus] =
     useState(false);
 
@@ -123,6 +126,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   useEffect(() => {
     gamePhaseRef.current = gamePhase;
   }, [gamePhase]);
+
+  useEffect(() => {
+    transitionWaitingQuestionIdRef.current = transitionWaitingQuestionId;
+  }, [transitionWaitingQuestionId]);
 
   const getFairPlayReturnQuestionId = (): string | null => {
     const status = fairPlayStatusRef.current as any;
@@ -916,6 +923,17 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     };
 
     gameWebSocket.onGameStateUpdate = (state: GameState) => {
+      const action = (state as any)?.action ?? (state as any)?.game_state?.action;
+      const previousQuestionId = getFairPlayReturnQuestionId();
+
+      if (
+        previousQuestionId &&
+        (action === "next_question" || action === "game_ended")
+      ) {
+        transitionWaitingQuestionIdRef.current = previousQuestionId;
+        setTransitionWaitingQuestionId(previousQuestionId);
+      }
+
       setGameState(state);
       applyFairPlaySettings(state);
       applyFairPlayStatus(state);
@@ -935,6 +953,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       if (phase === "lobby" || phase === "waiting") {
         setIsGameStarted(false);
         setCountdownQuestionStartAt(null);
+        transitionWaitingQuestionIdRef.current = null;
+        setTransitionWaitingQuestionId(null);
         return;
       }
 
@@ -942,6 +962,26 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
       if (phase !== "countdown") {
         setCountdownQuestionStartAt(null);
+      }
+
+      if (phase === "question") {
+        const nextQuestion =
+          data?.current_question ?? data?.currentQuestion ?? data?.question ?? data;
+        const nextQuestionId =
+          nextQuestion?.question_id ??
+          nextQuestion?.questionId ??
+          data?.current_question_id ??
+          data?.currentQuestionId ??
+          null;
+
+        if (
+          nextQuestionId &&
+          transitionWaitingQuestionIdRef.current &&
+          nextQuestionId !== transitionWaitingQuestionIdRef.current
+        ) {
+          transitionWaitingQuestionIdRef.current = null;
+          setTransitionWaitingQuestionId(null);
+        }
       }
 
       const nextGameType = inferGameType(data);
@@ -1352,6 +1392,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             fairPlayEnabled={fairPlaySettings.enabled}
             maxFairPlayStrikes={fairPlaySettings.maxStrikes}
             fairPlayStatus={fairPlayStatus}
+            transitionWaitingQuestionId={transitionWaitingQuestionId}
             onFairPlayFocusLost={reportFairPlayFocusLost}
             onFairPlayFocusReturned={reportFairPlayFocusReturned}
             onGameEnd={handleGameEnd}
@@ -1367,6 +1408,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             fairPlayEnabled={fairPlaySettings.enabled}
             maxFairPlayStrikes={fairPlaySettings.maxStrikes}
             fairPlayStatus={fairPlayStatus}
+            transitionWaitingQuestionId={transitionWaitingQuestionId}
             onFairPlayFocusLost={reportFairPlayFocusLost}
             onFairPlayFocusReturned={reportFairPlayFocusReturned}
             onGameEnd={handleGameEnd}
@@ -1382,6 +1424,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             fairPlayEnabled={fairPlaySettings.enabled}
             maxFairPlayStrikes={fairPlaySettings.maxStrikes}
             fairPlayStatus={fairPlayStatus}
+            transitionWaitingQuestionId={transitionWaitingQuestionId}
             onFairPlayFocusLost={reportFairPlayFocusLost}
             onFairPlayFocusReturned={reportFairPlayFocusReturned}
             onGameEnd={handleGameEnd}

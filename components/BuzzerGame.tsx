@@ -32,6 +32,7 @@ interface BuzzerGameProps {
   fairPlayEnabled?: boolean;
   maxFairPlayStrikes?: number;
   fairPlayStatus?: FairPlayStatus | null;
+  transitionWaitingQuestionId?: string | null;
   onFairPlayFocusLost?: (
     questionId: string,
     reason: FocusViolationReason,
@@ -60,6 +61,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   fairPlayEnabled = false,
   maxFairPlayStrikes = 3,
   fairPlayStatus,
+  transitionWaitingQuestionId: externalTransitionWaitingQuestionId,
   onFairPlayFocusLost,
   onFairPlayFocusReturned,
   onGameEnd,
@@ -86,6 +88,9 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   const [submittedQuestionId, setSubmittedQuestionId] = useState<string | null>(
     null,
   );
+  const [waitingForNextQuestionId, setWaitingForNextQuestionId] = useState<
+    string | null
+  >(null);
   const [isGameActive, setIsGameActive] = useState(true);
   const [glowIntensity, setGlowIntensity] = useState(0);
   const [fairPlayLockedQuestionId, setFairPlayLockedQuestionId] = useState<
@@ -104,6 +109,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   const currentQuestionId = currentQuestion?.question_id ?? null;
   const currentQuestionIdRef = useRef<string | null>(null);
   const submittedQuestionIdRef = useRef<string | null>(null);
+  const waitingForNextQuestionIdRef = useRef<string | null>(null);
   const lastFairPlayViolationRef = useRef<{
     key: string;
     reportedAt: number;
@@ -180,9 +186,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     onFocusReturned: handleFairPlayReturned,
   });
 
-  const isFairPlayLocked =
-    fairPlayEnabled &&
-    (isBackendFairPlayLocked || isImmediateViolationPending);
+  const isFairPlayLocked = fairPlayEnabled && isBackendFairPlayLocked;
 
   useEffect(() => {
     fairPlayStatusRef.current = fairPlayStatus;
@@ -192,6 +196,31 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   useEffect(() => {
     submittedQuestionIdRef.current = submittedQuestionId;
   }, [submittedQuestionId]);
+
+  useEffect(() => {
+    waitingForNextQuestionIdRef.current = waitingForNextQuestionId;
+  }, [waitingForNextQuestionId]);
+
+  useEffect(() => {
+    if (
+      externalTransitionWaitingQuestionId &&
+      externalTransitionWaitingQuestionId === currentQuestionId
+    ) {
+      waitingForNextQuestionIdRef.current = externalTransitionWaitingQuestionId;
+      setWaitingForNextQuestionId(externalTransitionWaitingQuestionId);
+      setBuzzerState((prev) => ({
+        ...prev,
+        buttonState: "waiting",
+        isActive: false,
+        canBuzz: false,
+        canAnswer: false,
+        transitioning: true,
+        acceptingBuzzes: false,
+        statusText: "Waiting for next question...",
+      }));
+      stopGlowAnimation();
+    }
+  }, [currentQuestionId, externalTransitionWaitingQuestionId]);
 
   useEffect(() => {
     if (isFrozenForRenderedQuestion && currentQuestionId) {
@@ -223,8 +252,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     }
 
     const freezeTimeout = setTimeout(() => {
-      setHasSubmittedAnswer(false);
-      setSubmittedQuestionId(null);
+      clearSubmittedAnswerState();
       if (glowIntervalRef.current) {
         clearInterval(glowIntervalRef.current);
         glowIntervalRef.current = null;
@@ -273,8 +301,18 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
   const clearSubmittedAnswerState = () => {
     submittedQuestionIdRef.current = null;
+    waitingForNextQuestionIdRef.current = null;
     setHasSubmittedAnswer(false);
     setSubmittedQuestionId(null);
+    setWaitingForNextQuestionId(null);
+  };
+
+  const setSubmittedAnswerState = (questionId: string) => {
+    submittedQuestionIdRef.current = questionId;
+    waitingForNextQuestionIdRef.current = questionId;
+    setHasSubmittedAnswer(true);
+    setSubmittedQuestionId(questionId);
+    setWaitingForNextQuestionId(questionId);
   };
 
   const resetBuzzerState = (
@@ -282,9 +320,11 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   ) => {
     const isSubmittedQuestion =
       !!questionId && submittedQuestionIdRef.current === questionId;
+    const isWaitingQuestion =
+      !!questionId && waitingForNextQuestionIdRef.current === questionId;
 
     setAnswerOptions([]);
-    if (!isSubmittedQuestion) {
+    if (!isSubmittedQuestion && !isWaitingQuestion) {
       setAnswerText("");
       clearSubmittedAnswerState();
     }
@@ -611,9 +651,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       });
 
       if (immediateViolation) {
-        setFairPlayLockedQuestionId(currentQuestion.question_id);
         handleFairPlayViolation(currentQuestion.question_id, immediateViolation);
-        return;
       }
     }
 
@@ -627,8 +665,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       return;
     }
 
-    setHasSubmittedAnswer(true);
-    setSubmittedQuestionId(currentQuestion.question_id);
+    setSubmittedAnswerState(currentQuestion.question_id);
     setBuzzerState((prev) => ({
       ...prev,
       buttonState: "locked",
@@ -664,9 +701,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       });
 
       if (immediateViolation) {
-        setFairPlayLockedQuestionId(activeQuestionId);
         handleFairPlayViolation(activeQuestionId, immediateViolation);
-        return;
       }
     }
 
@@ -900,8 +935,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
     gameWebSocket.onAnswerRejected = (data: any) => {
       if (data.reason === "fair_play_restriction") {
-        setHasSubmittedAnswer(false);
-        setSubmittedQuestionId(null);
+        clearSubmittedAnswerState();
         stopGlowAnimation();
         setBuzzerState((prev) => ({
           ...prev,
@@ -916,8 +950,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
         return;
       }
 
-      setHasSubmittedAnswer(false);
-      setSubmittedQuestionId(null);
+      clearSubmittedAnswerState();
       onError(data.message || "Your action was rejected.");
     };
 
@@ -986,7 +1019,9 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   }
 
   const isSubmittedAnswerWaiting =
-    (hasSubmittedAnswer || submittedQuestionId === currentQuestionId) &&
+    (hasSubmittedAnswer ||
+      submittedQuestionId === currentQuestionId ||
+      waitingForNextQuestionId === currentQuestionId) &&
     buzzerState.buttonState !== "frozen";
   const isQuestionTransitionWaiting =
     buzzerState.buttonState === "waiting" &&
@@ -994,8 +1029,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     (buzzerState.transitioning ||
       /next question/i.test(buzzerState.statusText));
   const isWaitingForNextQuestion =
-    (isSubmittedAnswerWaiting || isQuestionTransitionWaiting) &&
-    !isFairPlayLocked;
+    isQuestionTransitionWaiting ||
+    (isSubmittedAnswerWaiting && !isFairPlayLocked);
 
   if (isWaitingForNextQuestion) {
     return (
