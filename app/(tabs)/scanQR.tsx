@@ -115,10 +115,7 @@ export default function QRScannerScreen() {
           playerId: user.player_id,
         });
 
-        const joinResponse = await API.gameSession.join(
-          sessionCode,
-          user.player_id,
-        );
+        const joinResponse = await API.gameSession.join(sessionCode);
 
         console.log("📞 Join API response:", {
           isSuccess: joinResponse.isSuccess,
@@ -148,10 +145,8 @@ export default function QRScannerScreen() {
 
                 if (leaveResult) {
                   // Retry join
-                  const retryJoinResponse = await API.gameSession.join(
-                    sessionCode,
-                    user.player_id,
-                  );
+                  const retryJoinResponse =
+                    await API.gameSession.join(sessionCode);
 
                   if (retryJoinResponse.isSuccess) {
                     // Continue to navigation

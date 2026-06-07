@@ -302,10 +302,7 @@ export class GameWebSocketService {
 
     try {
       const API = (await APIGame).default;
-      const joinResponse = await API.gameSession.join(
-        sessionCode,
-        playerInfo.player_id,
-      );
+      const joinResponse = await API.gameSession.join(sessionCode);
 
       if (
         !joinResponse.isSuccess &&
@@ -503,7 +500,6 @@ export class GameWebSocketService {
       const API = (await APIGame).default;
       return await API.gameSession.submitAnswer(
         this.sessionCode,
-        this.playerInfo.player_id,
         questionId,
         answer,
       );

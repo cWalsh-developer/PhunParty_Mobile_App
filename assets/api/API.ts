@@ -36,10 +36,9 @@ const API = {
   // Game Session Management
   gameSession: {
     // Join a game session
-    join: (sessionCode: string, playerId: string) =>
+    join: (sessionCode: string) =>
       callFetch("/game/join", "POST", {
         session_code: sessionCode,
-        player_id: playerId,
       }),
 
     // Get session join information (includes WebSocket URL)
@@ -66,13 +65,11 @@ const API = {
     // Submit player answer
     submitAnswer: (
       sessionCode: string,
-      playerId: string,
       questionId: string,
       playerAnswer: string
     ) =>
       callFetch("/game-logic/submit-answer", "POST", {
         session_code: sessionCode,
-        player_id: playerId,
         question_id: questionId,
         player_answer: playerAnswer,
       }),

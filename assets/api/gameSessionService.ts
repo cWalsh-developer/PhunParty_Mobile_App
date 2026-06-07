@@ -51,10 +51,7 @@ export class GameSessionService {
         `🎮 [GameSessionService] Joining session ${sessionCode} for player ${playerInfo.player_name} (${playerInfo.player_id})`
       );
 
-      const joinResponse = await API.gameSession.join(
-        sessionCode,
-        playerInfo.player_id
-      );
+      const joinResponse = await API.gameSession.join(sessionCode);
 
       console.log("🎮 [GameSessionService] Join response:", {
         isSuccess: joinResponse.isSuccess,
