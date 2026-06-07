@@ -63,18 +63,8 @@ export default function ChangePasswordModal({
   const handleChangePassword = async () => {
     if (!validatePasswords()) return;
 
-    // Check if user exists and has phone number
     if (!user) {
       Alert.alert("Error", "User not found. Please log in again.");
-      return;
-    }
-
-    const phoneNumber = user.player_mobile;
-    if (!phoneNumber) {
-      Alert.alert(
-        "Error",
-        "Phone number is required for password change. Please update your profile."
-      );
       return;
     }
 
@@ -83,7 +73,6 @@ export default function ChangePasswordModal({
       const result = await changePassword(
         currentPassword,
         newPassword,
-        phoneNumber,
         setUser
       );
 

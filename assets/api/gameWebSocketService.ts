@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import { getToken } from "../authentication-storage/authStorage";
 import * as APIGame from "./API";
 
 export interface GameWebSocketMessage {
@@ -81,6 +82,10 @@ export interface FairPlaySettings {
 
 export interface FairPlayStatus {
   player_id?: string;
+  roster_player_id?: string;
+  rosterPlayerId?: string;
+  public_player_id?: string;
+  player_key?: string;
   playerId?: string;
   participant_id?: string;
   strike_count?: number;
@@ -120,8 +125,10 @@ export interface FairPlayStatus {
 export interface BuzzerStateUpdate {
   question_id?: string;
   current_buzzer_winner?: string | null;
+  current_buzzer_winner_roster_id?: string | null;
   currentBuzzerWinner?: string | null;
   frozen_players?: string[];
+  frozen_roster_player_ids?: string[];
   frozenPlayers?: string[];
   question_active?: boolean;
   questionActive?: boolean;
@@ -146,6 +153,7 @@ export class GameWebSocketService {
   private connectionState: ConnectionState = "disconnected";
   private clockOffset = 0;
   private wsId: string | null = null;
+  private rosterPlayerId: string | null = null;
   private processedEvents = new Set<string>();
   private currentPhase: GamePhase = "lobby";
   private isConnecting = false;
@@ -318,7 +326,7 @@ export class GameWebSocketService {
         return false;
       }
 
-      const wsUrl = this.buildWebSocketUrl(
+      const wsUrl = await this.buildWebSocketUrl(
         joinInfoResponse.result.websocket_url,
         sessionCode,
         playerInfo,
@@ -544,6 +552,7 @@ export class GameWebSocketService {
     connectionState: ConnectionState;
     sessionCode: string | null;
     playerId: string | null;
+    rosterPlayerId: string | null;
     wsId: string | null;
     reconnectAttempts: number;
     isConnecting: boolean;
@@ -563,6 +572,7 @@ export class GameWebSocketService {
       connectionState: this.connectionState,
       sessionCode: this.sessionCode,
       playerId: this.playerInfo?.player_id || null,
+      rosterPlayerId: this.rosterPlayerId,
       wsId: this.wsId,
       reconnectAttempts: this.reconnectAttempts,
       isConnecting: this.isConnecting,
@@ -609,6 +619,7 @@ export class GameWebSocketService {
       this.isConnecting = false;
       this.isConnected = false;
       this.wsId = null;
+      this.rosterPlayerId = null;
       this.stopHeartbeat();
 
       if (event.code === 4003) {
@@ -682,6 +693,7 @@ export class GameWebSocketService {
     switch (message.type) {
       case "connection_established":
         this.wsId = message.data?.ws_id || null;
+        this.rosterPlayerId = message.data?.roster_player_id || null;
         this.isConnected = true;
         this.reconnectAttempts = 0;
         this.setConnectionState("connected");
@@ -1434,6 +1446,7 @@ export class GameWebSocketService {
   private resetConnectionState(): void {
     this.ws = null;
     this.wsId = null;
+    this.rosterPlayerId = null;
     this.isConnected = false;
     this.clearScheduledQuestionStart();
     this.pendingQuestions = [];
@@ -1456,24 +1469,21 @@ export class GameWebSocketService {
     );
   }
 
-  private buildWebSocketUrl(
+  private async buildWebSocketUrl(
     backendUrl: string | undefined,
     sessionCode: string,
     playerInfo: PlayerInfo,
-  ): string {
+  ): Promise<string> {
     const baseUrl =
       backendUrl || `${this.getWebSocketBaseUrl()}/ws/session/${sessionCode}`;
     const params = new URLSearchParams();
-    const apiKey =
-      Constants.expoConfig?.extra?.API_KEY || process.env.EXPO_PUBLIC_API_KEY;
-
-    if (apiKey) {
-      params.append("api_key", apiKey);
-    }
+    const token = await getToken();
 
     params.append("client_type", "mobile");
-    params.append("player_id", playerInfo.player_id);
     params.append("player_name", playerInfo.player_name);
+    if (token) {
+      params.append("token", token);
+    }
 
     if (playerInfo.player_photo) {
       params.append("player_photo", playerInfo.player_photo);

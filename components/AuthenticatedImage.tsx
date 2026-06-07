@@ -32,19 +32,9 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
         }
 
         // Get authentication headers for private images
-        const apiKey =
-          Constants.expoConfig?.extra?.API_KEY ||
-          process.env.EXPO_PUBLIC_API_KEY;
         const token = await SecureStore.getItemAsync("jwt");
 
-        if (!apiKey) {
-          setImageSource(photoUrl);
-          return;
-        }
-
-        const headers: Record<string, string> = {
-          "X-API-Key": apiKey,
-        };
+        const headers: Record<string, string> = {};
 
         if (token) {
           headers["Authorization"] = `Bearer ${token}`;

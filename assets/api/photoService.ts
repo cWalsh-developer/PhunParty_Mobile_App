@@ -4,8 +4,6 @@ import * as ImagePicker from "expo-image-picker";
 import API from "./API";
 
 const { API_URL } = Constants.expoConfig?.extra || {};
-const API_KEY =
-  Constants.expoConfig?.extra?.API_KEY || process.env.EXPO_PUBLIC_API_KEY || "";
 
 export interface PhotoUploadResponse {
   photo_url: string;
@@ -291,9 +289,7 @@ export class PhotoService {
         // Continue without token - some endpoints might not require it
       }
 
-      const headers: any = {
-        "X-API-Key": API_KEY || Constants.expoConfig?.extra?.API_KEY || "",
-      };
+      const headers: any = {};
 
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;

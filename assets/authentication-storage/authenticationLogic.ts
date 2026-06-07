@@ -4,6 +4,8 @@ import dataAccess from "../../databaseAccess/dataAccess";
 import API from "../api/API";
 import { decodeToken, getToken } from "./authStorage";
 
+const PASSWORD_RESET_TOKEN_KEY = "password_reset_token";
+
 export interface LoginRequest {
   email: string;
   password: string;
@@ -154,17 +156,20 @@ export const resetPassword = async (phone: string) => {
   }
 };
 
-export const verifyResetCode = async (phone: string, code: string) => {
+export const verifyResetCode = async (
+  phone: string,
+  code: string
+): Promise<string | null> => {
   try {
     // Validate inputs
     if (!phone || !code) {
       alert("Verification failed: Phone number and code are required");
-      return false;
+      return null;
     }
 
     if (!PasswordResetVerificationEndpoint) {
       alert("Verification failed: Configuration error");
-      return false;
+      return null;
     }
 
     const result = await API.post(
@@ -177,19 +182,26 @@ export const verifyResetCode = async (phone: string, code: string) => {
     );
 
     if (result.isSuccess) {
-      return true;
+      const resetToken = result.result?.reset_token;
+      if (!resetToken) {
+        alert("Verification failed: Invalid server response");
+        return null;
+      }
+
+      await SecureStore.setItemAsync(PASSWORD_RESET_TOKEN_KEY, resetToken);
+      return resetToken;
     } else {
       alert(
         "Reset code verification failed: " + (result.message || "Invalid code")
       );
-      return false;
+      return null;
     }
   } catch (error: any) {
     alert(
       "Verification failed: " +
         (error.message || "An unexpected error occurred")
     );
-    return false;
+    return null;
   }
 };
 
@@ -210,10 +222,17 @@ export const updatePassword = async (
       return false;
     }
 
+    const resetToken = await SecureStore.getItemAsync(PASSWORD_RESET_TOKEN_KEY);
+    if (!resetToken) {
+      alert("Password update failed: Please verify your reset code again");
+      return false;
+    }
+
     const result = await API.put(
       PasswordUpdateEndpoint,
       {
         phone_number: number,
+        reset_token: resetToken,
         new_password: newPassword,
       },
       false
@@ -227,6 +246,7 @@ export const updatePassword = async (
 
       try {
         await SecureStore.setItemAsync("jwt", result.result.access_token);
+        await SecureStore.deleteItemAsync(PASSWORD_RESET_TOKEN_KEY);
         await createUserContext(setUser);
         return true;
       } catch (storageError: any) {
@@ -249,54 +269,17 @@ export const updatePassword = async (
   }
 };
 
-const verifyCurrentPassword = async (
-  email: string,
-  password: string
-): Promise<boolean> => {
-  try {
-    // Validate inputs
-    if (!email || !password) {
-      return false;
-    }
-
-    if (!AuthenticationEndpoint) {
-      return false;
-    }
-
-    const result = await API.post(
-      AuthenticationEndpoint,
-      {
-        player_email: email,
-        password: password,
-      },
-      false
-    );
-
-    return result.isSuccess;
-  } catch (error: any) {
-    return false;
-  }
-};
-
 export const changePassword = async (
   currentPassword: string,
   newPassword: string,
-  phoneNumber: string,
   setUser: (user: any) => void
 ) => {
   try {
     // Validate inputs
-    if (!currentPassword || !newPassword || !phoneNumber) {
+    if (!currentPassword || !newPassword) {
       return {
         success: false,
         message: "All fields are required",
-      };
-    }
-
-    if (!PasswordUpdateEndpoint) {
-      return {
-        success: false,
-        message: "Configuration error",
       };
     }
 
@@ -316,40 +299,9 @@ export const changePassword = async (
       };
     }
 
-    let currentUser;
-    try {
-      currentUser = await dataAccess.getPlayerById(decodedToken.sub);
-    } catch (error: any) {
-      return {
-        success: false,
-        message: "Unable to retrieve user information",
-      };
-    }
-
-    const userEmail = currentUser?.player_email;
-    if (!userEmail) {
-      return {
-        success: false,
-        message: "Unable to retrieve user email for verification",
-      };
-    }
-
-    const isCurrentPasswordValid = await verifyCurrentPassword(
-      userEmail,
-      currentPassword
-    );
-
-    if (!isCurrentPasswordValid) {
-      return {
-        success: false,
-        message: "Current password is incorrect",
-      };
-    }
-
     const result = await API.put(
-      PasswordUpdateEndpoint,
+      "/auth/change-password",
       {
-        phone_number: phoneNumber,
         current_password: currentPassword,
         new_password: newPassword,
       },

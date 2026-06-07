@@ -703,12 +703,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
         }
       }
 
-      // Try to start the game if not active
-      try {
-        await API.put(`/game-logic/start-game/${sessionCode}`);
-      } catch (startError) {}
-
-      // Get current question after starting
+      // Host controls game start; mobile only fetches the current question.
       await fetchCurrentQuestionNow();
     } catch (error) {}
   };

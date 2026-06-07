@@ -83,6 +83,9 @@ export interface SessionScore {
   score_id: string;
   session_code: string;
   player_id: string;
+  roster_player_id?: string;
+  display_name?: string;
+  player_photo_url?: string | null;
   score: number;
   result?: "win" | "lose" | "draw";
 }

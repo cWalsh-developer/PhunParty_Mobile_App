@@ -418,12 +418,23 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     }
 
     const myPlayerId = gameWebSocket.playerInfo?.player_id;
+    const myRosterPlayerId =
+      gameWebSocket.getConnectionDiagnostics().rosterPlayerId;
     const currentWinner =
       data.current_buzzer_winner ?? data.currentBuzzerWinner ?? null;
+    const currentWinnerRosterId =
+      data.current_buzzer_winner_roster_id ??
+      data.currentBuzzerWinnerRosterId ??
+      null;
     const frozenPlayers = Array.isArray(data.frozen_players)
       ? data.frozen_players
       : Array.isArray(data.frozenPlayers)
         ? data.frozenPlayers
+        : [];
+    const frozenRosterPlayers = Array.isArray(data.frozen_roster_player_ids)
+      ? data.frozen_roster_player_ids
+      : Array.isArray(data.frozenRosterPlayerIds)
+        ? data.frozenRosterPlayerIds
         : [];
     const questionActive = data.question_active ?? data.questionActive ?? true;
     const isTransitioning = !!(data.transitioning ?? data.isTransitioning);
@@ -432,8 +443,12 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       data.acceptingBuzzes ??
       questionActive
     );
-    const isFrozen = !!myPlayerId && frozenPlayers.includes(myPlayerId);
-    const isWinner = !!myPlayerId && currentWinner === myPlayerId;
+    const isFrozen =
+      (!!myPlayerId && frozenPlayers.includes(myPlayerId)) ||
+      (!!myRosterPlayerId && frozenRosterPlayers.includes(myRosterPlayerId));
+    const isWinner =
+      (!!myPlayerId && currentWinner === myPlayerId) ||
+      (!!myRosterPlayerId && currentWinnerRosterId === myRosterPlayerId);
 
     let nextButtonState: BuzzerState["buttonState"] = "locked";
     let nextStatusText = "Buzzer locked.";
@@ -525,34 +540,53 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
   const isPayloadForCurrentPlayer = (data: any) => {
     const myPlayerId = gameWebSocket.playerInfo?.player_id;
+    const myRosterPlayerId =
+      gameWebSocket.getConnectionDiagnostics().rosterPlayerId;
     const payloadPlayerId =
-      data?.player_id ?? data?.playerId ?? data?.participant_id;
+      data?.player_id ??
+      data?.playerId ??
+      data?.participant_id ??
+      data?.roster_player_id ??
+      data?.rosterPlayerId;
 
     if (data?.is_current_player === true || data?.isCurrentPlayer === true) {
       return true;
     }
 
     return (
-      !!myPlayerId &&
+      (!!myPlayerId || !!myRosterPlayerId) &&
       !!payloadPlayerId &&
-      String(myPlayerId).trim() === String(payloadPlayerId).trim()
+      (String(myPlayerId).trim() === String(payloadPlayerId).trim() ||
+        String(myRosterPlayerId).trim() === String(payloadPlayerId).trim())
     );
   };
 
   const isCurrentPlayerFrozenInPayload = (data: any) => {
     const myPlayerId = gameWebSocket.playerInfo?.player_id;
+    const myRosterPlayerId =
+      gameWebSocket.getConnectionDiagnostics().rosterPlayerId;
     const frozenPlayers = Array.isArray(data?.frozen_players)
       ? data.frozen_players
       : Array.isArray(data?.frozenPlayers)
         ? data.frozenPlayers
         : [];
+    const frozenRosterPlayers = Array.isArray(data?.frozen_roster_player_ids)
+      ? data.frozen_roster_player_ids
+      : Array.isArray(data?.frozenRosterPlayerIds)
+        ? data.frozenRosterPlayerIds
+        : [];
 
     return (
-      !!myPlayerId &&
-      frozenPlayers.some(
-        (playerId: unknown) =>
-          String(playerId).trim() === String(myPlayerId).trim(),
-      )
+      (!!myPlayerId &&
+        frozenPlayers.some(
+          (playerId: unknown) =>
+            String(playerId).trim() === String(myPlayerId).trim(),
+        )) ||
+      (!!myRosterPlayerId &&
+        frozenRosterPlayers.some(
+          (playerId: unknown) =>
+            String(playerId).trim() === String(myRosterPlayerId).trim(),
+        ))
     );
   };
 

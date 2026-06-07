@@ -1,5 +1,4 @@
 import Constants from "expo-constants";
-import { getToken } from "../authentication-storage/authStorage";
 
 export class ImageService {
   // Create an authenticated image URL by adding auth headers as query params
@@ -13,20 +12,6 @@ export class ImageService {
 
       if (photoUrl.startsWith("http")) {
         return photoUrl; // Already absolute URL
-      }
-
-      // Get API key and token
-      const apiKey =
-        Constants.expoConfig?.extra?.API_KEY ||
-        process.env.EXPO_PUBLIC_API_KEY ||
-        "";
-      let token = null;
-
-      try {
-        token = await getToken();
-      } catch (tokenError: any) {
-        console.error("ImageService: Failed to get token:", tokenError);
-        // Continue without token
       }
 
       const baseUrl =

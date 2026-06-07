@@ -115,11 +115,7 @@ const callFetch = async <T = any>(
   dataObj: DataObject | null = null,
   withAuth: boolean = true
 ): Promise<APIResponse<T>> => {
-  const apiKey =
-    Constants.expoConfig?.extra?.API_KEY || process.env.EXPO_PUBLIC_API_KEY || "";
-
   const headers: HeadersInit = {
-    "X-API-Key": apiKey,
     "Content-Type": "application/json",
   };
 
@@ -131,9 +127,13 @@ const callFetch = async <T = any>(
     }
   }
 
-  // Use endpoint directly if it's a full URL, otherwise combine with base URL
-  const baseUrl = Constants.expoConfig?.extra?.API_URL;
-  const url = endpoint.startsWith("https")
+  // Use endpoint directly if it's a full URL, otherwise combine with base URL.
+  // Local development endpoints commonly use http://, so treat both schemes as absolute.
+  const baseUrl =
+    Constants.expoConfig?.extra?.API_BASE_URL ||
+    Constants.expoConfig?.extra?.API_URL;
+  const isAbsoluteUrl = /^https?:\/\//i.test(endpoint);
+  const url = isAbsoluteUrl
     ? endpoint
     : baseUrl
     ? `${baseUrl.replace(/\/$/, "")}/${endpoint.replace(/^\//, "")}`

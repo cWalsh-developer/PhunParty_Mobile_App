@@ -36,6 +36,9 @@ interface GameContainerProps {
   onLeaveGame: () => void;
 }
 
+const COUNTDOWN_DURATION_MS = 3000;
+const MAX_COUNTDOWN_SECONDS = COUNTDOWN_DURATION_MS / 1000;
+
 export const GameContainer: React.FC<GameContainerProps> = ({
   sessionCode,
   playerInfo,
@@ -109,6 +112,52 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     }
 
     return null;
+  };
+
+  const hasQuestionPayload = (question: any): boolean =>
+    !!question && (!!question.question_id || !!question.questionId || !!question.question);
+
+  const sanitizeGameStateUpdate = (state: GameState): GameState => {
+    const sanitized = { ...(state as any) };
+
+    if (
+      "currentQuestion" in sanitized &&
+      !hasQuestionPayload(sanitized.currentQuestion)
+    ) {
+      delete sanitized.currentQuestion;
+    }
+
+    if (
+      "current_question" in sanitized &&
+      !hasQuestionPayload(sanitized.current_question)
+    ) {
+      delete sanitized.current_question;
+    }
+
+    if ("question" in sanitized && !hasQuestionPayload(sanitized.question)) {
+      delete sanitized.question;
+    }
+
+    return sanitized as GameState;
+  };
+
+  const resolveCountdownQuestionStartAt = (data?: any): string => {
+    if (typeof data?.question_start_at === "string") {
+      return data.question_start_at;
+    }
+
+    if (typeof data?.questionStartAt === "string") {
+      return data.questionStartAt;
+    }
+
+    const durationMs =
+      typeof data?.duration_ms === "number"
+        ? data.duration_ms
+        : typeof data?.durationMs === "number"
+          ? data.durationMs
+          : COUNTDOWN_DURATION_MS;
+
+    return new Date(Date.now() + durationMs).toISOString();
   };
 
   useEffect(() => {
@@ -206,6 +255,9 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     }
 
     const currentPlayerId = normalizeId(playerInfo.player_id);
+    const currentRosterPlayerId = normalizeId(
+      (gameWebSocket as any).getConnectionDiagnostics?.()?.rosterPlayerId,
+    );
 
     const source =
       payload?.fair_play_status ??
@@ -254,7 +306,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       }
 
       return normalizeId(
-        candidate?.player_id ??
+          candidate?.player_id ??
+          candidate?.roster_player_id ??
+          candidate?.rosterPlayerId ??
+          candidate?.public_player_id ??
+          candidate?.player_key ??
           candidate?.playerId ??
           candidate?.participant_id ??
           candidate?.participantId ??
@@ -265,7 +321,14 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     };
 
     const removedPlayerMatch = removedPlayers.find(
-      (candidate) => getCandidatePlayerId(candidate) === currentPlayerId,
+      (candidate) => {
+        const candidatePlayerId = getCandidatePlayerId(candidate);
+        return (
+          candidatePlayerId === currentPlayerId ||
+          Boolean(currentRosterPlayerId) &&
+            candidatePlayerId === currentRosterPlayerId
+        );
+      },
     );
 
     const removedPlayerData =
@@ -287,6 +350,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     const hasStatusFields = [
       "player_id",
+      "roster_player_id",
+      "rosterPlayerId",
+      "public_player_id",
+      "player_key",
       "playerId",
       "participant_id",
       "participantId",
@@ -923,6 +990,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     };
 
     gameWebSocket.onGameStateUpdate = (state: GameState) => {
+      const sanitizedState = sanitizeGameStateUpdate(state);
       const action = (state as any)?.action ?? (state as any)?.game_state?.action;
       const previousQuestionId = getFairPlayReturnQuestionId();
 
@@ -934,10 +1002,22 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         setTransitionWaitingQuestionId(previousQuestionId);
       }
 
-      setGameState(state);
+      setGameState((previous) => ({
+        ...(previous ?? {}),
+        ...(sanitizedState as any),
+      }));
       applyFairPlaySettings(state);
       applyFairPlayStatus(state);
-      const nextGameType = inferGameType(state);
+
+      if (
+        hasQuestionPayload((sanitizedState as any).current_question) ||
+        hasQuestionPayload((sanitizedState as any).currentQuestion) ||
+        hasQuestionPayload((sanitizedState as any).question)
+      ) {
+        setIsWaitingForQuestion(false);
+      }
+
+      const nextGameType = inferGameType(sanitizedState);
 
       if (nextGameType && nextGameType !== currentGameType) {
         console.log(
@@ -962,6 +1042,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
       if (phase !== "countdown") {
         setCountdownQuestionStartAt(null);
+      } else {
+        setCountdownQuestionStartAt(resolveCountdownQuestionStartAt(data));
       }
 
       if (phase === "question") {
@@ -1254,15 +1336,6 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   };
 
   const renderGameContent = () => {
-    console.log("Rendering game content:", {
-      currentGameType,
-      gameState,
-      isGameStarted,
-      isWaitingForQuestion,
-      isConnecting,
-      connectionError,
-    });
-
     // Show lobby screen if game hasn't started yet
     if (!isGameStarted) {
       return (
@@ -1337,12 +1410,16 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     if (gamePhase === "countdown") {
       const seconds = Math.ceil(countdownRemainingMs / 1000);
+      const displaySeconds =
+        countdownRemainingMs > 0
+          ? Math.max(1, Math.min(MAX_COUNTDOWN_SECONDS, seconds))
+          : 0;
 
       return (
         <View style={styles.centerContainer}>
           <AppCard style={styles.loadingCard}>
             <MaterialIcons name="timer" size={64} color={colors.tea[500]} />
-            <Text style={styles.countdownNumber}>{Math.max(0, seconds)}</Text>
+            <Text style={styles.countdownNumber}>{displaySeconds}</Text>
             <Text style={styles.loadingTitle}>Get ready...</Text>
             <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
             {renderFairPlayNotice()}

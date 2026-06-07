@@ -9,7 +9,6 @@ const extra = {
   PasswordUpdateEndpoint: process.env.EXPO_PUBLIC_PASSWORD_UPDATE_ENDPOINT,
   RetrievePlayerEndpoint: process.env.EXPO_PUBLIC_RETRIEVE_PLAYER_ENDPOINT,
   PlayerLeaveEndpoint: process.env.EXPO_PUBLIC_PLAYER_LEAVE_ENDPOINT,
-  API_KEY: process.env.EXPO_PUBLIC_API_KEY || process.env.EXPO_API_KEY,
   API_URL: process.env.EXPO_PUBLIC_API_URL,
   API_BASE_URL:
     process.env.EXPO_PUBLIC_API_URL || process.env.EXPO_PUBLIC_API_BASE_URL,
