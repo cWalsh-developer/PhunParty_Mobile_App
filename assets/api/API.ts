@@ -18,17 +18,17 @@ const API = {
   post: <T = any>(
     endpoint: string,
     data?: DataObject,
-    withAuth: boolean = true
+    withAuth: boolean = true,
   ) => callFetch<T>(endpoint, "POST", data, withAuth),
   put: <T = any>(
     endpoint: string,
     data?: DataObject,
-    withAuth: boolean = true
+    withAuth: boolean = true,
   ) => callFetch<T>(endpoint, "PUT", data, withAuth),
   patch: <T = any>(
     endpoint: string,
     data?: DataObject,
-    withAuth: boolean = true
+    withAuth: boolean = true,
   ) => callFetch<T>(endpoint, "PATCH", data, withAuth),
   delete: <T = any>(endpoint: string, withAuth: boolean = true) =>
     callFetch<T>(endpoint, "DELETE", null, withAuth),
@@ -66,7 +66,7 @@ const API = {
     submitAnswer: (
       sessionCode: string,
       questionId: string,
-      playerAnswer: string
+      playerAnswer: string,
     ) =>
       callFetch("/game-logic/submit-answer", "POST", {
         session_code: sessionCode,
@@ -92,7 +92,7 @@ const API = {
       hostName: string,
       numberOfQuestions: number,
       gameCode: string,
-      ownerPlayerId: string
+      ownerPlayerId: string,
     ) =>
       callFetch("/game/create/session", "POST", {
         host_name: hostName,
@@ -110,7 +110,7 @@ const callFetch = async <T = any>(
   endpoint: string,
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   dataObj: DataObject | null = null,
-  withAuth: boolean = true
+  withAuth: boolean = true,
 ): Promise<APIResponse<T>> => {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -133,8 +133,8 @@ const callFetch = async <T = any>(
   const url = isAbsoluteUrl
     ? endpoint
     : baseUrl
-    ? `${baseUrl.replace(/\/$/, "")}/${endpoint.replace(/^\//, "")}`
-    : endpoint;
+      ? `${baseUrl.replace(/\/$/, "")}/${endpoint.replace(/^\//, "")}`
+      : endpoint;
 
   const requestObj: RequestInit = {
     method,
@@ -153,12 +153,18 @@ const callFetch = async <T = any>(
       };
     }
 
-    // Handle response parsing
+    // Handle response parsing- some endpoints may return no content (204) or non-JSON responses
     let result = null;
     if (response.status !== 204) {
       try {
         const text = await response.text();
-        result = text ? JSON.parse(text) : null;
+        if (
+          response.headers.get("Content-Type")?.includes("application/json")
+        ) {
+          result = text ? JSON.parse(text) : null;
+        } else {
+          result = text;
+        }
       } catch (parseError: any) {
         console.error("Failed to parse response:", parseError);
         return {
@@ -176,7 +182,7 @@ const callFetch = async <T = any>(
         result?.detail ||
         result?.message ||
         result?.error ||
-        (typeof result === 'string' ? result : JSON.stringify(result)) ||
+        (typeof result === "string" ? result : JSON.stringify(result)) ||
         `Request failed with status ${response.status}: ${response.statusText}`;
 
       if (response.status === 401 && withAuth) {
@@ -194,7 +200,10 @@ const callFetch = async <T = any>(
       } else if (response.status === 400 || response.status === 403) {
         // Client errors - often expected (validation, permissions, etc.)
         const lowerMsg = errorMessage.toLowerCase();
-        if (lowerMsg.includes("already in") || lowerMsg.includes("already joined")) {
+        if (
+          lowerMsg.includes("already in") ||
+          lowerMsg.includes("already joined")
+        ) {
           // This is expected - player trying to rejoin
           console.log(`ℹ️ API Info (${method} ${url}): ${errorMessage}`);
         } else {
