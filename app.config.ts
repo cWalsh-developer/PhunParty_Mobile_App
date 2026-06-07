@@ -15,7 +15,7 @@ const extra = {
 };
 
 const config: ExpoConfig = {
-  name: "PhunParty_Mobile_App",
+  name: "PhunParty",
   slug: "PhunParty_Mobile_App",
   version: "1.0.0",
   orientation: "portrait",
