@@ -95,8 +95,6 @@ export default function LoginForm({
                   onChangeText={setName}
                   placeholder="Enter your name"
                   style={{ marginBottom: 16 }}
-                  horizontalScrollEnabled={true}
-                  maxWidth={320}
                 />
 
                 <AppInput
@@ -106,8 +104,6 @@ export default function LoginForm({
                   placeholder="Enter your mobile number"
                   keyboardType="phone-pad"
                   style={{ marginBottom: 16 }}
-                  horizontalScrollEnabled={true}
-                  maxWidth={320}
                 />
               </>
             )}
@@ -121,8 +117,6 @@ export default function LoginForm({
               keyboardType="email-address"
               autoCapitalize="none"
               style={{ marginBottom: 16 }}
-              horizontalScrollEnabled={true}
-              maxWidth={320}
             />
             <AppInput
               label="Password"
@@ -132,8 +126,6 @@ export default function LoginForm({
               autoCapitalize="none"
               secureTextEntry
               style={{ marginBottom: 24 }}
-              horizontalScrollEnabled={true}
-              maxWidth={320}
             />
 
             {/* Accept TOS and PP check box button with links to https://terms-and-privacy.nexusgit.info/desktop-apps/terms */}
@@ -154,6 +146,8 @@ export default function LoginForm({
                     borderRadius: 6,
                     marginRight: 12,
                     backgroundColor: colors.ink[900],
+                    alignItems: "center",
+                    justifyContent: "center",
                   }}
                   onPress={() => {
                     // Toggle termsAccepted state
@@ -165,7 +159,6 @@ export default function LoginForm({
                       name="check"
                       size={20}
                       color={colors.tea[400]}
-                      style={{ marginTop: 1, marginLeft: 1 }}
                     />
                   )}
                 </TouchableOpacity>

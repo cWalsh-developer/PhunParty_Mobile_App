@@ -3,6 +3,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -555,19 +557,31 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   };
 
   const applyQuestionAnswerData = (data: any) => {
-    const options = data.display_options || data.options || [];
+    const difficulty = String(data?.difficulty || "").toLowerCase();
+    const shouldUseTextInput =
+      data?.ui_mode === "text_input" ||
+      data?.uiMode === "text_input" ||
+      difficulty === "hard";
+    const options = shouldUseTextInput
+      ? []
+      : data.display_options || data.options || [];
+    const uiMode = shouldUseTextInput
+      ? "text_input"
+      : data.ui_mode || data.uiMode || "buzzer";
 
     if (data.question_id || data.question) {
       setCurrentQuestion((prev) => ({
         ...(prev ?? {
           game_type: "buzzer",
-          ui_mode: data.ui_mode || "buzzer",
+          ui_mode: uiMode,
           question_id: data.question_id,
           question: data.question,
         }),
         ...data,
         game_type: data.game_type || "buzzer",
-        ui_mode: data.ui_mode || prev?.ui_mode || "buzzer",
+        ui_mode: uiMode || prev?.ui_mode || "buzzer",
+        display_options: options,
+        options,
       }));
     }
 
@@ -1031,6 +1045,10 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   const isWaitingForNextQuestion =
     isQuestionTransitionWaiting ||
     (isSubmittedAnswerWaiting && !isFairPlayLocked);
+  const isTextInputAnswerMode =
+    currentQuestion.ui_mode === "text_input" ||
+    String(currentQuestion.difficulty || "").toLowerCase() === "hard";
+  const visibleAnswerOptions = isTextInputAnswerMode ? [] : answerOptions;
 
   if (isWaitingForNextQuestion) {
     return (
@@ -1049,7 +1067,11 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 16 : 0}
+    >
       <View style={styles.gameContent}>
         <AppCard style={styles.questionCard}>
           <Text style={styles.questionText}>{currentQuestion.question}</Text>
@@ -1081,11 +1103,10 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
         {buzzerState.canAnswer &&
         !isFairPlayLocked &&
-        (answerOptions.length > 0 ||
-          currentQuestion?.ui_mode === "text_input") ? (
+        (visibleAnswerOptions.length > 0 || isTextInputAnswerMode) ? (
           <View style={styles.answerContainer}>
-            {answerOptions.length > 0 ? (
-              answerOptions.map((option, index) => (
+            {visibleAnswerOptions.length > 0 ? (
+              visibleAnswerOptions.map((option, index) => (
                 <TouchableOpacity
                   key={`${option}-${index}`}
                   style={[
@@ -1111,23 +1132,31 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
                   placeholder="Type your answer"
                   placeholderTextColor={colors.stone[400]}
                   editable={!hasSubmittedAnswer && !isFairPlayLocked}
+                  autoCapitalize="none"
+                  autoCorrect
+                  returnKeyType="done"
+                  onSubmitEditing={() => {
+                    const trimmedAnswer = answerText.trim();
+                    if (
+                      trimmedAnswer &&
+                      !hasSubmittedAnswer &&
+                      !isFairPlayLocked
+                    ) {
+                      submitBuzzerAnswer(trimmedAnswer);
+                    }
+                  }}
                 />
-                <TouchableOpacity
-                  style={[
-                    styles.submitAnswerButton,
-                    (!answerText.trim() ||
-                      hasSubmittedAnswer ||
-                      isFairPlayLocked) &&
-                      styles.optionButtonDisabled,
-                  ]}
-                  onPress={() => submitBuzzerAnswer(answerText.trim())}
-                  disabled={
-                    !answerText.trim() || hasSubmittedAnswer || isFairPlayLocked
-                  }
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.submitAnswerText}>Submit Answer</Text>
-                </TouchableOpacity>
+                {!!answerText.trim() &&
+                  !hasSubmittedAnswer &&
+                  !isFairPlayLocked && (
+                    <TouchableOpacity
+                      style={styles.submitAnswerButton}
+                      onPress={() => submitBuzzerAnswer(answerText.trim())}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.submitAnswerText}>Submit Answer</Text>
+                    </TouchableOpacity>
+                  )}
               </>
             )}
           </View>
@@ -1191,7 +1220,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           </Text>
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 

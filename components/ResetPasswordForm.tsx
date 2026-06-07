@@ -99,8 +99,6 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({
                 keyboardType="phone-pad"
                 style={{ marginBottom: 24 }}
                 editable={!loading}
-                horizontalScrollEnabled={true}
-                maxWidth={280}
               />
             ) : (
               /* Verification Code Input */
