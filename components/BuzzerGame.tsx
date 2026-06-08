@@ -353,55 +353,150 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     const buttonState = (data.button_state ||
       data.buttonState ||
       "waiting") as BuzzerState["buttonState"];
+
     const isCurrentPlayer = !!(data.is_current_player || data.isCurrentPlayer);
-    const updateQuestionId = data.question_id ?? data.questionId ?? null;
+
+    const updateQuestionId =
+      data.question_id ??
+      data.questionId ??
+      data.question?.question_id ??
+      data.question?.questionId ??
+      null;
+
     const isTransitioning = !!(data.transitioning ?? data.isTransitioning);
+
     const acceptingBuzzes = !!(
       data.accepting_buzzes ??
       data.acceptingBuzzes ??
       buttonState === "active"
     );
 
+    const message =
+      data.message || getStatusTextForButtonState(buttonState, data);
+
+    /*
+    Treat backend button_state/ui_update as authoritative.
+    Do not reject it just because currentQuestionIdRef is stale.
+  */
+    if (updateQuestionId) {
+      currentQuestionIdRef.current = updateQuestionId;
+    }
+
+    const effectiveQuestionId =
+      updateQuestionId || currentQuestionIdRef.current;
+
+    console.log("[BuzzerGame] applyBackendButtonState", {
+      buttonState,
+      isCurrentPlayer,
+      updateQuestionId,
+      effectiveQuestionId,
+      acceptingBuzzes,
+      isTransitioning,
+    });
+
     if (buttonState === "answer_mode" && isCurrentPlayer) {
+      if (!effectiveQuestionId) {
+        console.log(
+          "[BuzzerGame] Refusing answer_mode without question_id",
+          data,
+        );
+        return;
+      }
+
+      currentQuestionIdRef.current = effectiveQuestionId;
+
+      /*
+      This is the ONLY place answer data should be applied.
+      The backend sends options/text-input payload here for the buzzer winner.
+    */
       applyQuestionAnswerData(data);
       clearSubmittedAnswerState();
+
+      setBuzzerState((prev) => ({
+        ...prev,
+        buttonState: "answer_mode",
+        questionId: effectiveQuestionId,
+        transitioning: false,
+        acceptingBuzzes: false,
+        winner: data.winner_name || data.winner || prev.winner,
+        isActive: false,
+        canBuzz: false,
+        canAnswer: true,
+        statusText: message || "You buzzed first. Answer now!",
+      }));
+
+      stopGlowAnimation();
+      return;
+    }
+
+    if (buttonState === "active") {
+      setBuzzerState((prev) => ({
+        ...prev,
+        buttonState: "active",
+        questionId: effectiveQuestionId || prev.questionId,
+        transitioning: false,
+        acceptingBuzzes: true,
+        isActive: true,
+        canBuzz: true,
+        canAnswer: false,
+        statusText: message || "Press to buzz in!",
+      }));
+
+      startGlowAnimation();
+      return;
+    }
+
+    if (buttonState === "waiting") {
+      setBuzzerState((prev) => ({
+        ...prev,
+        buttonState: "waiting",
+        questionId: effectiveQuestionId || prev.questionId,
+        transitioning: isTransitioning,
+        acceptingBuzzes: false,
+        isActive: false,
+        canBuzz: false,
+        canAnswer: false,
+        statusText: message || "Waiting...",
+      }));
+
+      stopGlowAnimation();
+      return;
     }
 
     if (buttonState === "frozen") {
       clearSubmittedAnswerState();
+
+      setBuzzerState((prev) => ({
+        ...prev,
+        buttonState: "frozen",
+        questionId: effectiveQuestionId || prev.questionId,
+        transitioning: false,
+        acceptingBuzzes: false,
+        isActive: false,
+        canBuzz: false,
+        canAnswer: false,
+        statusText: message || "You're frozen out this round!",
+      }));
+
+      stopGlowAnimation();
+      return;
     }
 
-    const activeQuestionId = currentQuestionIdRef.current;
-    const effectiveQuestionId = updateQuestionId || activeQuestionId;
+    if (buttonState === "locked") {
+      setBuzzerState((prev) => ({
+        ...prev,
+        buttonState: "locked",
+        questionId: effectiveQuestionId || prev.questionId,
+        transitioning: isTransitioning,
+        acceptingBuzzes: false,
+        isActive: false,
+        canBuzz: false,
+        canAnswer: false,
+        statusText: message || "Buzzer locked.",
+      }));
 
-    const questionMatches =
-      updateQuestionId && activeQuestionId
-        ? updateQuestionId === activeQuestionId
-        : Boolean(effectiveQuestionId);
-
-    const canBuzz =
-      buttonState === "active" &&
-      acceptingBuzzes &&
-      !isTransitioning &&
-      questionMatches;
-
-    setBuzzerState((prev) => ({
-      ...prev,
-      buttonState,
-      questionId: effectiveQuestionId || prev.questionId,
-      transitioning: isTransitioning,
-      acceptingBuzzes,
-      winner: data.winner_name || data.winner || prev.winner,
-      isActive: canBuzz,
-      canBuzz,
-      canAnswer: buttonState === "answer_mode" && isCurrentPlayer,
-      statusText: getStatusTextForButtonState(buttonState, data),
-    }));
-
-    if (canBuzz) {
-      startGlowAnimation();
-    } else {
       stopGlowAnimation();
+      return;
     }
   };
 
@@ -699,72 +794,151 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       });
 
       if (immediateViolation) {
-        handleFairPlayViolation(currentQuestion.question_id, immediateViolation);
+        handleFairPlayViolation(
+          currentQuestion.question_id,
+          immediateViolation,
+        );
       }
     }
 
-    const sent = gameWebSocket.submitAnswer(
-      answer,
-      currentQuestion.question_id,
-    );
+    const answerValue = String(answer).trim();
+
+    const activeQuestionId = currentQuestionIdRef.current;
+    const renderedQuestionId = currentQuestion?.question_id ?? null;
+    const buzzerQuestionId = buzzerState.questionId ?? null;
+
+    if (!answerValue) {
+      onError("Please enter an answer.");
+      return;
+    }
+
+    if (!activeQuestionId || !renderedQuestionId) {
+      console.log(
+        "[BuzzerGame] Blocked answer submit because no active question exists",
+        {
+          activeQuestionId,
+          renderedQuestionId,
+          buzzerQuestionId,
+        },
+      );
+
+      onError("No active question to answer.");
+      return;
+    }
+
+    if (
+      renderedQuestionId !== activeQuestionId ||
+      (buzzerQuestionId && buzzerQuestionId !== activeQuestionId)
+    ) {
+      console.log("[BuzzerGame] Blocked stale answer submit", {
+        activeQuestionId,
+        renderedQuestionId,
+        buzzerQuestionId,
+        answerValue,
+      });
+
+      setAnswerText("");
+      setAnswerOptions([]);
+      clearSubmittedAnswerState();
+
+      setBuzzerState((prev) => ({
+        ...prev,
+        buttonState: "waiting",
+        isActive: false,
+        canBuzz: false,
+        canAnswer: false,
+        transitioning: true,
+        acceptingBuzzes: false,
+        statusText: "Syncing next question...",
+      }));
+
+      gameWebSocket.requestCurrentQuestion();
+      return;
+    }
+
+    const sent = gameWebSocket.submitAnswer(answerValue, activeQuestionId);
 
     if (!sent) {
       onError("Failed to submit answer. Please check your connection.");
       return;
     }
 
-    setSubmittedAnswerState(currentQuestion.question_id);
+    setSubmittedAnswerState(activeQuestionId);
+
     setBuzzerState((prev) => ({
       ...prev,
       buttonState: "locked",
       isActive: false,
       canBuzz: false,
       canAnswer: false,
+      transitioning: true,
+      acceptingBuzzes: false,
       statusText: "Answer submitted. Waiting for result...",
     }));
   };
 
-  const handleBuzzerPress = async () => {
-    const activeQuestionId =
-      currentQuestionIdRef.current ?? currentQuestion?.question_id ?? null;
+  const handleBuzzerPress = () => {
+    const questionId =
+      currentQuestionIdRef.current ||
+      currentQuestion?.question_id ||
+      buzzerState.questionId ||
+      null;
 
-    const buzzerQuestionId = buzzerState.questionId ?? activeQuestionId;
+    console.log("[BuzzerGame] Buzzer press attempted", {
+      questionId,
+      currentQuestionRef: currentQuestionIdRef.current,
+      currentQuestionId: currentQuestion?.question_id,
+      buzzerQuestionId: buzzerState.questionId,
+      buttonState: buzzerState.buttonState,
+      canBuzz: buzzerState.canBuzz,
+      acceptingBuzzes: buzzerState.acceptingBuzzes,
+      transitioning: buzzerState.transitioning,
+      isFairPlayLocked,
+      isImmediateViolationPending,
+      isInGracePeriod,
+    });
 
-    const canPressBuzzer =
-      !!activeQuestionId &&
-      buzzerQuestionId === activeQuestionId &&
-      buzzerState.buttonState === "active" &&
-      buzzerState.acceptingBuzzes &&
-      !buzzerState.transitioning &&
-      buzzerState.canBuzz &&
-      buzzerState.isActive &&
-      isGameActive &&
-      !isFairPlayLocked;
-
-    if (!canPressBuzzer) return;
-
-    if (fairPlayEnabled) {
-      const immediateViolation = await hasImmediateFairPlayWindowViolation({
-        includeWindowFocusLoss: false,
-      });
-
-      if (immediateViolation) {
-        handleFairPlayViolation(activeQuestionId, immediateViolation);
-      }
+    if (isFairPlayLocked) {
+      console.log("[BuzzerGame] Buzzer blocked by Fair Play lock");
+      return;
     }
 
-    // Immediate visual feedback
-    setBuzzerState((prev) => ({ ...prev, canBuzz: false }));
-    animateBuzzerPress();
-
-    // Send to server
-    const success = gameWebSocket.pressBuzzer(activeQuestionId);
-    if (!success) {
-      setBuzzerState((prev) => ({ ...prev, canBuzz: true }));
-      onError("Failed to register buzzer press. Please check your connection.");
+    if (isImmediateViolationPending || isInGracePeriod) {
+      console.log("[BuzzerGame] Buzzer blocked by Fair Play grace period");
+      return;
     }
+
+    if (!questionId) {
+      console.log("[BuzzerGame] Buzzer blocked because no question ID exists");
+      gameWebSocket.requestCurrentQuestion();
+      return;
+    }
+
+    const sent = gameWebSocket.pressBuzzer(questionId);
+
+    console.log("[BuzzerGame] Buzzer press sent", {
+      sent,
+      questionId,
+    });
+
+    if (!sent) {
+      onError("Failed to buzz in. Please check your connection.");
+      return;
+    }
+
+    // Temporary local pending state only.
+    // The real winner/waiting/answer_mode state must come back from the backend.
+    setBuzzerState((prev) => ({
+      ...prev,
+      buttonState: "waiting",
+      isActive: false,
+      canBuzz: false,
+      canAnswer: false,
+      transitioning: false,
+      acceptingBuzzes: false,
+      statusText: "Buzz sent...",
+    }));
   };
-
   const animateBuzzerPress = () => {
     Animated.sequence([
       Animated.timing(scaleAnimation, {
@@ -852,11 +1026,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       >
         <MaterialIcons
           name={
-            isConfirmedLocked
-              ? "block"
-              : isWarning
-                ? "timer"
-                : "verified-user"
+            isConfirmedLocked ? "block" : isWarning ? "timer" : "verified-user"
           }
           size={20}
           color={
@@ -890,42 +1060,112 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   useEffect(() => {
     gameWebSocket.onQuestionReceived = (question: GameQuestion) => {
       const nextQuestionId = question.question_id ?? null;
+      const previousQuestionId = currentQuestionIdRef.current;
 
-      currentQuestionIdRef.current = nextQuestionId;
+      console.log("[BuzzerGame] Question received", {
+        nextQuestionId,
+        previousQuestionId,
+        buttonState: question.button_state || question.buttonState,
+        uiMode: question.ui_mode,
+      });
+
+      if (!nextQuestionId) {
+        console.log(
+          "[BuzzerGame] Ignoring question without question_id",
+          question,
+        );
+        return;
+      }
+
+      const isNewQuestion = nextQuestionId !== previousQuestionId;
+
+      if (isNewQuestion) {
+        console.log(
+          "[BuzzerGame] New question detected, clearing old answer state",
+          {
+            previousQuestionId,
+            nextQuestionId,
+          },
+        );
+
+        currentQuestionIdRef.current = nextQuestionId;
+
+        setAnswerText("");
+        setAnswerOptions([]);
+        clearSubmittedAnswerState();
+        setFairPlayLockedQuestionId(null);
+        stopWinnerAnimation();
+        stopGlowAnimation();
+      } else {
+        currentQuestionIdRef.current = nextQuestionId;
+      }
 
       setCurrentQuestion(question);
-      resetBuzzerState(nextQuestionId);
-      applyQuestionAnswerData(question);
 
-      if (question.button_state || question.buttonState) {
+      const buttonState = question.button_state || question.buttonState;
+
+      resetBuzzerState(nextQuestionId);
+
+      if (buttonState) {
         applyBackendButtonState(question);
       } else {
         startGlowAnimation();
       }
     };
-
     gameWebSocket.onBuzzerUpdate = (data: any) => {
-      if (data.type === "buzzer_winner") {
-        handleBuzzerWinner(data.winner_name);
-        Vibration.vibrate(500); // Haptic feedback
-      } else if (
-        data.type === "buzzer_state_update" ||
-        data.event_type === "buzzer_state_update"
-      ) {
+      const eventType = data.type || data.event_type;
+      const buttonState = data.button_state || data.buttonState || null;
+
+      console.log("[BuzzerGame] onBuzzerUpdate", {
+        eventType,
+        buttonState,
+        questionId: data.question_id ?? data.questionId,
+        isCurrentPlayer: data.is_current_player ?? data.isCurrentPlayer,
+        acceptingBuzzes: data.accepting_buzzes ?? data.acceptingBuzzes,
+        transitioning: data.transitioning ?? data.isTransitioning,
+      });
+
+      /*
+    MOST IMPORTANT:
+    Personal backend UI updates must win.
+
+    The backend sends:
+      winner: button_state = "answer_mode", is_current_player = true
+      others: button_state = "waiting"
+
+    So handle button_state before generic buzzer_state_update.
+  */
+      if (buttonState) {
+        applyBackendButtonState(data);
+        return;
+      }
+
+      /*
+    Do not change the button state from buzzer_winner.
+    This event is broadcast to everyone and does not contain enough UI authority.
+    The real per-player state arrives as ui_update/button_state.
+  */
+      if (eventType === "buzzer_winner") {
+        Vibration.vibrate(500);
+        return;
+      }
+
+      if (eventType === "buzzer_state_update") {
         applyAuthoritativeBuzzerState(data);
-      } else if (
-        data.type === "correct_answer" ||
-        data.event_type === "correct_answer"
-      ) {
+        return;
+      }
+
+      if (eventType === "correct_answer") {
         const matchStatus = getAnswerMatchStatus(data);
         const isMyAnswer = isPayloadForCurrentPlayer(data);
+
         setBuzzerState((prev) => ({
           ...prev,
           buttonState: isMyAnswer ? "locked" : "waiting",
           isActive: false,
           canBuzz: false,
           canAnswer: false,
-          transitioning: !isMyAnswer,
+          transitioning: true,
           acceptingBuzzes: false,
           statusText: isMyAnswer
             ? matchStatus
@@ -933,35 +1173,51 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
               : "Correct!"
             : "Waiting for next question...",
         }));
-      } else if (
-        data.type === "incorrect_answer" ||
-        data.event_type === "incorrect_answer"
-      ) {
+
+        stopGlowAnimation();
+        return;
+      }
+
+      if (eventType === "incorrect_answer") {
         const shouldFreezeCurrentPlayer =
-          isPayloadForCurrentPlayer(data) || isCurrentPlayerFrozenInPayload(data);
+          isPayloadForCurrentPlayer(data) ||
+          isCurrentPlayerFrozenInPayload(data);
 
         if (!shouldFreezeCurrentPlayer) {
           return;
         }
 
         const matchStatus = getAnswerMatchStatus(data);
+
         clearSubmittedAnswerState();
+
         setBuzzerState((prev) => ({
           ...prev,
           buttonState: "frozen",
           isActive: false,
           canBuzz: false,
           canAnswer: false,
+          transitioning: false,
+          acceptingBuzzes: false,
           statusText: matchStatus
             ? `Not quite. ${matchStatus}`
             : "Not quite. You're frozen for this question.",
         }));
-      } else if (data.button_state || data.buttonState) {
-        applyBackendButtonState(data);
-      } else if (data.type === "buzzer_reset") {
+
+        stopGlowAnimation();
+        return;
+      }
+
+      if (eventType === "buzzer_reset") {
+        clearSubmittedAnswerState();
+        setAnswerText("");
+        setAnswerOptions([]);
         resetBuzzerState(currentQuestionIdRef.current);
         startGlowAnimation();
-      } else if (data.type === "question_ended") {
+        return;
+      }
+
+      if (eventType === "question_ended") {
         setBuzzerState((prev) => ({
           ...prev,
           isActive: false,
@@ -972,12 +1228,39 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
           acceptingBuzzes: false,
           statusText: "Waiting for next question...",
         }));
+
         stopGlowAnimation();
-      } else if (data.type === "next_question" && data.question) {
+        return;
+      }
+
+      if (eventType === "next_question" && data.question) {
+        const nextQuestionId =
+          data.question.question_id ?? data.question.questionId ?? null;
+
+        if (!nextQuestionId) {
+          console.log(
+            "[BuzzerGame] next_question ignored because question_id is missing",
+            data,
+          );
+          return;
+        }
+
+        console.log("[BuzzerGame] next_question received", {
+          previousQuestionId: currentQuestionIdRef.current,
+          nextQuestionId,
+        });
+
+        currentQuestionIdRef.current = nextQuestionId;
+
+        setAnswerText("");
+        setAnswerOptions([]);
+        clearSubmittedAnswerState();
+        setFairPlayLockedQuestionId(null);
+
         setCurrentQuestion(data.question);
-        resetBuzzerState(data.question.question_id ?? null);
-        applyQuestionAnswerData(data.question);
+        resetBuzzerState(nextQuestionId);
         startGlowAnimation();
+        return;
       }
     };
 
