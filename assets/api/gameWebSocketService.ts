@@ -408,7 +408,16 @@ export class GameWebSocketService {
   }
 
   pressBuzzer(questionId?: string): boolean {
-    return this.sendMessage({
+    console.log("📣 Sending buzzer_press:", {
+      sessionCode: this.sessionCode,
+      playerId: this.playerInfo?.player_id,
+      questionId,
+      connected: this.isConnected,
+      readyState: this.ws?.readyState,
+      connectionState: this.connectionState,
+    });
+
+    const sent = this.sendMessage({
       type: "buzzer_press",
       data: {
         session_code: this.sessionCode,
@@ -416,6 +425,13 @@ export class GameWebSocketService {
         question_id: questionId,
       },
     });
+
+    console.log("📣 buzzer_press send result:", {
+      sent,
+      questionId,
+    });
+
+    return sent;
   }
 
   reportFocusViolation(
@@ -858,6 +874,23 @@ export class GameWebSocketService {
       case "correct_answer":
       case "incorrect_answer":
       case "buzzer_state_update":
+      case "question_failed":
+      case "question_ended":
+      case "buzzer_reset":
+      case "next_question":
+        console.log("WebSocket buzzer/UI event received:", {
+          messageType: message.type,
+          dataType: message.data?.type,
+          buttonState: message.data?.button_state ?? message.data?.buttonState,
+          questionId:
+            message.data?.question_id ??
+            message.data?.questionId ??
+            message.data?.question?.question_id ??
+            message.data?.question?.questionId,
+          isCurrentPlayer:
+            message.data?.is_current_player ?? message.data?.isCurrentPlayer,
+        });
+
         this.onBuzzerUpdate?.({
           ...(message.data ?? {}),
           event_type: message.type,

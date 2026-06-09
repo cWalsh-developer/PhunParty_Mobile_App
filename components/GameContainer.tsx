@@ -115,7 +115,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   };
 
   const hasQuestionPayload = (question: any): boolean =>
-    !!question && (!!question.question_id || !!question.questionId || !!question.question);
+    !!question &&
+    (!!question.question_id || !!question.questionId || !!question.question);
 
   const sanitizeGameStateUpdate = (state: GameState): GameState => {
     const sanitized = { ...(state as any) };
@@ -306,7 +307,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       }
 
       return normalizeId(
-          candidate?.player_id ??
+        candidate?.player_id ??
           candidate?.roster_player_id ??
           candidate?.rosterPlayerId ??
           candidate?.public_player_id ??
@@ -320,16 +321,14 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       );
     };
 
-    const removedPlayerMatch = removedPlayers.find(
-      (candidate) => {
-        const candidatePlayerId = getCandidatePlayerId(candidate);
-        return (
-          candidatePlayerId === currentPlayerId ||
-          Boolean(currentRosterPlayerId) &&
-            candidatePlayerId === currentRosterPlayerId
-        );
-      },
-    );
+    const removedPlayerMatch = removedPlayers.find((candidate) => {
+      const candidatePlayerId = getCandidatePlayerId(candidate);
+      return (
+        candidatePlayerId === currentPlayerId ||
+        (Boolean(currentRosterPlayerId) &&
+          candidatePlayerId === currentRosterPlayerId)
+      );
+    });
 
     const removedPlayerData =
       removedPlayerMatch && typeof removedPlayerMatch === "object"
@@ -626,6 +625,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         playerId: playerInfo.player_id,
         effectiveStatusPayload,
       });
+
+      gameWebSocket.requestCurrentQuestion();
 
       applyFairPlaySettings(effectiveStatusPayload);
 
@@ -991,7 +992,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     gameWebSocket.onGameStateUpdate = (state: GameState) => {
       const sanitizedState = sanitizeGameStateUpdate(state);
-      const action = (state as any)?.action ?? (state as any)?.game_state?.action;
+      const action =
+        (state as any)?.action ?? (state as any)?.game_state?.action;
       const previousQuestionId = getFairPlayReturnQuestionId();
 
       if (
@@ -1048,7 +1050,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
       if (phase === "question") {
         const nextQuestion =
-          data?.current_question ?? data?.currentQuestion ?? data?.question ?? data;
+          data?.current_question ??
+          data?.currentQuestion ??
+          data?.question ??
+          data;
         const nextQuestionId =
           nextQuestion?.question_id ??
           nextQuestion?.questionId ??
