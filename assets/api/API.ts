@@ -141,6 +141,10 @@ const callFetch = async <T = any>(
     headers,
     ...(dataObj && { body: JSON.stringify(dataObj) }),
   };
+  const isBestEffortPresenceEndpoint =
+    endpoint === "/presence/heartbeat" ||
+    endpoint === "/presence/offline" ||
+    endpoint === "/friends/presence";
 
   try {
     const response = await fetch(url, requestObj);
@@ -190,7 +194,14 @@ const callFetch = async <T = any>(
       }
 
       // Log at appropriate level - 400 errors are often expected business logic errors
-      if (response.status >= 500) {
+      if (response.status >= 500 && isBestEffortPresenceEndpoint) {
+        // Presence is best-effort. Avoid flooding development logs during a
+        // temporary backend/proxy outage while still returning failure state.
+        console.log(`Presence request failed (${method} ${url}):`, {
+          status: response.status,
+          statusText: response.statusText,
+        });
+      } else if (response.status >= 500) {
         // Server errors - these are unexpected
         console.error(`API Error (${method} ${url}):`, {
           status: response.status,
