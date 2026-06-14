@@ -772,7 +772,10 @@ export class GameWebSocketService {
         this.questionReceived = false;
         this.lastQuestion = null;
         this.pendingQuestions = [];
-        if (this.isBeatClockGameType(message.data)) {
+        if (
+          this.isBeatClockGameType(message.data) &&
+          (message.data?.phase === "question" || message.data?.ends_at)
+        ) {
           this.clearQuestionRecoveryTimeouts();
           this.setReadyForQuestions(true);
           this.setPhase("question", message.data);

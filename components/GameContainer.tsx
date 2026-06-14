@@ -1405,10 +1405,9 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     }
 
     if (
-      !isBeatClockGame &&
-      (gamePhase === "waiting_for_host_intro" ||
-        gamePhase === "intro_audio" ||
-        gamePhase === "countdown_pending")
+      gamePhase === "waiting_for_host_intro" ||
+      gamePhase === "intro_audio" ||
+      gamePhase === "countdown_pending"
     ) {
       const waitingText =
         gamePhase === "countdown_pending"
