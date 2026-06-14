@@ -1,7 +1,14 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { Camera, CameraView } from "expo-camera";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -15,15 +22,18 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import qrcode from "qrcode-generator";
+import qrcodeGenerator from "qrcode-generator";
 import {
   FriendProfile,
+  FriendProfileStats,
   FriendRequest,
   friendsApi,
 } from "../assets/api/friendsApi";
+import { FriendPresence, presenceApi } from "../assets/api/presenceApi";
 import { pushNotificationService } from "../assets/api/pushNotificationService";
 import { AppButton, AppCard } from "../assets/components";
 import { colors, typography } from "../assets/theme";
+import { AuthenticatedImage } from "./AuthenticatedImage";
 
 type FriendsView = "friends" | "add" | "requests";
 
@@ -66,6 +76,9 @@ const getRelationshipLabel = (status?: string) => {
 const canSendFriendRequest = (profile: FriendProfile | null) =>
   !!profile &&
   (!profile.relationship_status || profile.relationship_status === "none");
+
+const canShowOnlineStatus = (profile?: FriendProfile | null) =>
+  !!profile?.is_online && profile.show_online_status !== false;
 
 const FRIEND_QR_TYPE = "phunparty_friend_code";
 const FRIEND_CODE_PATTERN = /^[A-Z0-9]{4,32}$/;
@@ -134,6 +147,21 @@ export default function FriendsScreen({
   const [message, setMessage] = useState<string | null>(null);
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
+  const [presenceByPlayerId, setPresenceByPlayerId] = useState<
+    Record<string, FriendPresence>
+  >({});
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState<FriendProfile | null>(
+    null,
+  );
+  const [profileStats, setProfileStats] = useState<FriendProfileStats | null>(
+    null,
+  );
+  const [profileStatsLoading, setProfileStatsLoading] = useState(false);
+  const [profileStatsMessage, setProfileStatsMessage] = useState<string | null>(
+    null,
+  );
   const [scannerPermission, setScannerPermission] = useState<boolean | null>(
     null,
   );
@@ -146,6 +174,39 @@ export default function FriendsScreen({
   );
 
   const pendingIncomingCount = incomingRequests.length;
+
+  const mergePresenceIntoProfile = useCallback(
+    (profile: FriendProfile): FriendProfile => ({
+      ...profile,
+      ...(presenceByPlayerId[profile.player_id] || {}),
+    }),
+    [presenceByPlayerId],
+  );
+
+  const loadFriendPresence = useCallback(async () => {
+    if (!playerId) {
+      return;
+    }
+
+    try {
+      const response = await presenceApi.getFriendsPresence();
+
+      if (!response.isSuccess) {
+        return;
+      }
+
+      const nextPresence = (response.result || []).reduce<
+        Record<string, FriendPresence>
+      >((acc, item) => {
+        acc[item.player_id] = item;
+        return acc;
+      }, {});
+
+      setPresenceByPlayerId(nextPresence);
+    } catch {
+      // Presence is best-effort; the friend list should remain usable offline.
+    }
+  }, [playerId]);
 
   const loadFriendsData = useCallback(async (showLoader = false, silent = false) => {
     if (!playerId) {
@@ -209,6 +270,8 @@ export default function FriendsScreen({
         setOutgoingRequests(outgoingResponse.result || []);
       }
 
+      loadFriendPresence();
+
       const firstFailure = [
         codeResponse,
         friendsResponse,
@@ -240,7 +303,7 @@ export default function FriendsScreen({
       setLoading(false);
       setRefreshing(false);
     }
-  }, [onAuthInvalid, playerId]);
+  }, [loadFriendPresence, onAuthInvalid, playerId]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -288,6 +351,19 @@ export default function FriendsScreen({
     }, [loadFriendsData, playerId]),
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!playerId) {
+        return undefined;
+      }
+
+      loadFriendPresence();
+      const interval = setInterval(loadFriendPresence, 15000);
+
+      return () => clearInterval(interval);
+    }, [loadFriendPresence, playerId]),
+  );
+
   useEffect(() => {
     if (!playerId) {
       return;
@@ -296,13 +372,14 @@ export default function FriendsScreen({
     const appStateSubscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         loadFriendsData(false, true);
+        loadFriendPresence();
       }
     });
 
     return () => {
       appStateSubscription.remove();
     };
-  }, [loadFriendsData, playerId]);
+  }, [loadFriendPresence, loadFriendsData, playerId]);
 
   const refresh = () => {
     setRefreshing(true);
@@ -491,25 +568,112 @@ export default function FriendsScreen({
     await searchFriendCode(scannedFriendCode);
   };
 
+  const openFriendProfile = async (profile: FriendProfile) => {
+    setProfileModalVisible(true);
+    setProfileLoading(true);
+    setSelectedProfile(null);
+    setProfileStats(null);
+    setProfileStatsMessage(null);
+    setMessage(null);
+
+    try {
+      const response = await friendsApi.getProfile(profile.player_id);
+
+      if (!response.isSuccess || !response.result) {
+        setProfileModalVisible(false);
+        Alert.alert(
+          "Profile unavailable",
+          response.message ||
+            "This player has not made their profile visible to you.",
+        );
+        return;
+      }
+
+      if (response.result.can_view_profile === false) {
+        setProfileModalVisible(false);
+        Alert.alert(
+          "Profile unavailable",
+          "This player has not made their profile visible to you.",
+        );
+        return;
+      }
+
+      setSelectedProfile(mergePresenceIntoProfile(response.result));
+    } catch (error: any) {
+      setProfileModalVisible(false);
+      Alert.alert(
+        "Profile unavailable",
+        error.message || "Could not load this profile right now.",
+      );
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const loadProfileStats = async () => {
+    if (!selectedProfile) {
+      return;
+    }
+
+    setProfileStatsLoading(true);
+    setProfileStatsMessage(null);
+
+    try {
+      const response = await friendsApi.getProfileStats(
+        selectedProfile.player_id,
+      );
+
+      if (!response.isSuccess || !response.result) {
+        setProfileStats(null);
+        setProfileStatsMessage(
+          response.message || "This player's game stats are not available.",
+        );
+        return;
+      }
+
+      setProfileStats(response.result);
+    } catch (error: any) {
+      setProfileStats(null);
+      setProfileStatsMessage(
+        error.message || "Could not load game stats right now.",
+      );
+    } finally {
+      setProfileStatsLoading(false);
+    }
+  };
+
   const renderProfileRow = (
     profile: FriendProfile,
-    trailing?: React.ReactNode,
+    trailing?: ReactNode,
   ) => {
-    const name = getProfileName(profile);
+    const profileWithPresence = mergePresenceIntoProfile(profile);
+    const name = getProfileName(profileWithPresence);
+    const isOnline = canShowOnlineStatus(profileWithPresence);
 
     return (
-      <AppCard key={profile.player_id} style={styles.rowCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{getInitials(name)}</Text>
-        </View>
-        <View style={styles.rowBody}>
-          <Text style={styles.rowTitle}>{name}</Text>
-          {!!profile.friend_code && (
-            <Text style={styles.rowSubtitle}>{profile.friend_code}</Text>
-          )}
-        </View>
-        {trailing}
-      </AppCard>
+      <TouchableOpacity
+        key={profile.player_id}
+        activeOpacity={0.85}
+        onPress={() => openFriendProfile(profileWithPresence)}
+      >
+        <AppCard style={styles.rowCard}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{getInitials(name)}</Text>
+          </View>
+          <View style={styles.rowBody}>
+            <View style={styles.rowNameLine}>
+              <Text style={styles.rowTitle} numberOfLines={1}>
+                {name}
+              </Text>
+              {isOnline && <View style={styles.onlineDot} />}
+            </View>
+            {!!profile.friend_code && (
+              <Text style={styles.rowSubtitle}>{profile.friend_code}</Text>
+            )}
+          </View>
+          {trailing}
+        </AppCard>
+      </TouchableOpacity>
     );
   };
 
@@ -786,6 +950,22 @@ export default function FriendsScreen({
         onClose: () => setQrModalVisible(false),
       })}
 
+      <FriendProfileModal
+        visible={profileModalVisible}
+        loading={profileLoading}
+        profile={selectedProfile}
+        stats={profileStats}
+        statsLoading={profileStatsLoading}
+        statsMessage={profileStatsMessage}
+        onLoadStats={loadProfileStats}
+        onClose={() => {
+          setProfileModalVisible(false);
+          setSelectedProfile(null);
+          setProfileStats(null);
+          setProfileStatsMessage(null);
+        }}
+      />
+
       {renderFriendScanner({
         visible: scannerVisible,
         hasPermission: scannerPermission,
@@ -842,6 +1022,211 @@ function renderFriendQrModal({
   );
 }
 
+function FriendProfileModal({
+  visible,
+  loading,
+  profile,
+  stats,
+  statsLoading,
+  statsMessage,
+  onLoadStats,
+  onClose,
+}: {
+  visible: boolean;
+  loading: boolean;
+  profile: FriendProfile | null;
+  stats: FriendProfileStats | null;
+  statsLoading: boolean;
+  statsMessage: string | null;
+  onLoadStats: () => void;
+  onClose: () => void;
+}) {
+  const name = getProfileName(profile);
+  const isOnline = canShowOnlineStatus(profile);
+  const canViewStats = profile?.can_view_game_stats !== false;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.profileModalContainer}>
+        <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
+          <MaterialIcons name="close" size={30} color={colors.stone[100]} />
+        </TouchableOpacity>
+
+        <AppCard style={styles.profileModalCard}>
+          {loading ? (
+            <View style={styles.profileLoading}>
+              <ActivityIndicator color={colors.tea[500]} size="large" />
+              <Text style={styles.profileLoadingText}>Loading profile...</Text>
+            </View>
+          ) : profile ? (
+            <ScrollView contentContainerStyle={styles.profileModalContent}>
+              <View style={styles.profileHero}>
+                <View style={styles.profilePhotoLarge}>
+                  {profile.profile_photo_url ? (
+                    <AuthenticatedImage
+                      photoUrl={profile.profile_photo_url}
+                      style={styles.profilePhotoImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Text style={styles.profilePhotoInitials}>
+                      {getInitials(name)}
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.profileNameLine}>
+                  <Text style={styles.profileName} selectable>
+                    {name}
+                  </Text>
+                  {isOnline && <View style={styles.onlineDotLarge} />}
+                </View>
+
+                {isOnline && (
+                  <Text style={styles.profileOnlineText}>Online now</Text>
+                )}
+              </View>
+
+              <View style={styles.profileDetails}>
+                <ProfileDetail label="Name" value={profile.player_name} />
+                <ProfileDetail label="Email" value={profile.player_email} />
+                <ProfileDetail label="Mobile" value={profile.player_mobile} />
+                <ProfileDetail label="Friend Code" value={profile.friend_code} />
+              </View>
+
+              <View style={styles.statsSection}>
+                <View style={styles.statsHeader}>
+                  <Text style={styles.statsTitle}>Game Stats</Text>
+                  {canViewStats && !stats && (
+                    <TouchableOpacity
+                      style={styles.statsButton}
+                      onPress={onLoadStats}
+                      disabled={statsLoading}
+                    >
+                      {statsLoading ? (
+                        <ActivityIndicator color={colors.ink[900]} />
+                      ) : (
+                        <Text style={styles.statsButtonText}>View</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {!canViewStats ? (
+                  <Text style={styles.statsMuted}>
+                    This player has hidden their game stats.
+                  </Text>
+                ) : stats ? (
+                  <StatsOverview stats={stats} />
+                ) : statsMessage ? (
+                  <Text style={styles.statsMuted}>{statsMessage}</Text>
+                ) : (
+                  <Text style={styles.statsMuted}>
+                    View this player&apos;s win, loss, and draw overview.
+                  </Text>
+                )}
+              </View>
+            </ScrollView>
+          ) : null}
+        </AppCard>
+
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+      </View>
+    </Modal>
+  );
+}
+
+function StatsOverview({ stats }: { stats: FriendProfileStats }) {
+  return (
+    <View style={styles.statsOverview}>
+      <View style={styles.statsTotalRow}>
+        <Text style={styles.statsTotalLabel}>Games Played</Text>
+        <Text style={styles.statsTotalValue}>{stats.games_played}</Text>
+      </View>
+
+      <StatsBar
+        label="Won"
+        count={stats.wins}
+        percentage={stats.win_percentage}
+        color={colors.tea[500]}
+      />
+      <StatsBar
+        label="Lost"
+        count={stats.losses}
+        percentage={stats.loss_percentage}
+        color={colors.red[500]}
+      />
+      <StatsBar
+        label="Drawn"
+        count={stats.draws}
+        percentage={stats.draw_percentage}
+        color={colors.peach[500]}
+      />
+    </View>
+  );
+}
+
+function StatsBar({
+  label,
+  count,
+  percentage,
+  color,
+}: {
+  label: string;
+  count: number;
+  percentage: number;
+  color: string;
+}) {
+  return (
+    <View style={styles.statsBarGroup}>
+      <View style={styles.statsBarLabelRow}>
+        <Text style={styles.statsBarLabel}>{label}</Text>
+        <Text style={styles.statsBarValue}>
+          {percentage.toFixed(1)}% ({count})
+        </Text>
+      </View>
+      <View style={styles.statsTrack}>
+        <View
+          style={[
+            styles.statsFill,
+            { backgroundColor: color, width: `${Math.min(100, percentage)}%` },
+          ]}
+        />
+      </View>
+    </View>
+  );
+}
+
+function ProfileDetail({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | null;
+}) {
+  if (!value) {
+    return null;
+  }
+
+  return (
+    <View style={styles.profileDetailRow}>
+      <Text style={styles.profileDetailLabel}>{label}</Text>
+      <Text style={styles.profileDetailValue} selectable>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 function FriendQrCode({
   value,
   size,
@@ -850,7 +1235,7 @@ function FriendQrCode({
   size: number;
 }) {
   const qr = useMemo(() => {
-    const generatedQr = qrcode(0, "M");
+    const generatedQr = qrcodeGenerator(0, "M");
     generatedQr.addData(value);
     generatedQr.make();
     return generatedQr;
@@ -1174,14 +1559,29 @@ const styles = StyleSheet.create({
   },
   rowBody: {
     flex: 1,
+    minWidth: 0,
+  },
+  rowNameLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   rowTitle: {
     ...typography.body,
     fontWeight: "700",
+    flexShrink: 1,
   },
   rowSubtitle: {
     ...typography.small,
     marginTop: 2,
+  },
+  onlineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.tea[500],
+    borderWidth: 1,
+    borderColor: colors.stone[100],
   },
   iconButton: {
     width: 42,
@@ -1275,6 +1675,180 @@ const styles = StyleSheet.create({
     ...typography.h2,
     color: colors.ink[900],
     marginTop: 16,
+  },
+  profileModalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 18,
+  },
+  profileModalCard: {
+    zIndex: 2,
+    width: "100%",
+    maxWidth: 420,
+    maxHeight: "78%",
+    padding: 0,
+    overflow: "hidden",
+  },
+  profileModalContent: {
+    padding: 22,
+    gap: 20,
+  },
+  profileLoading: {
+    minHeight: 260,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  profileLoadingText: {
+    ...typography.small,
+    color: colors.stone[300],
+  },
+  profileHero: {
+    alignItems: "center",
+    gap: 10,
+  },
+  profilePhotoLarge: {
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    overflow: "hidden",
+    backgroundColor: colors.ink[700],
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: colors.tea[500],
+  },
+  profilePhotoImage: {
+    width: "100%",
+    height: "100%",
+  },
+  profilePhotoInitials: {
+    ...typography.h2,
+    color: colors.tea[500],
+  },
+  profileNameLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  profileName: {
+    ...typography.h2,
+    textAlign: "center",
+    flexShrink: 1,
+  },
+  onlineDotLarge: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.tea[500],
+    borderWidth: 1,
+    borderColor: colors.stone[100],
+  },
+  profileOnlineText: {
+    ...typography.small,
+    color: colors.tea[500],
+    fontWeight: "700",
+  },
+  profileDetails: {
+    gap: 12,
+  },
+  statsSection: {
+    gap: 12,
+    paddingTop: 4,
+  },
+  statsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  statsTitle: {
+    ...typography.h3,
+  },
+  statsButton: {
+    minWidth: 72,
+    minHeight: 36,
+    borderRadius: 8,
+    backgroundColor: colors.tea[500],
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  statsButtonText: {
+    ...typography.small,
+    color: colors.ink[900],
+    fontWeight: "800",
+  },
+  statsMuted: {
+    ...typography.small,
+    color: colors.stone[400],
+  },
+  statsOverview: {
+    gap: 14,
+    padding: 14,
+    borderRadius: 8,
+    backgroundColor: colors.ink[700],
+  },
+  statsTotalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  statsTotalLabel: {
+    ...typography.small,
+    color: colors.stone[300],
+    fontWeight: "700",
+  },
+  statsTotalValue: {
+    ...typography.h3,
+    color: colors.stone[100],
+    fontVariant: ["tabular-nums"],
+  },
+  statsBarGroup: {
+    gap: 6,
+  },
+  statsBarLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  statsBarLabel: {
+    ...typography.small,
+    color: colors.stone[100],
+    fontWeight: "700",
+  },
+  statsBarValue: {
+    ...typography.small,
+    color: colors.stone[300],
+    fontVariant: ["tabular-nums"],
+  },
+  statsTrack: {
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.ink[800],
+    overflow: "hidden",
+  },
+  statsFill: {
+    height: "100%",
+    borderRadius: 5,
+  },
+  profileDetailRow: {
+    padding: 14,
+    borderRadius: 8,
+    backgroundColor: colors.ink[700],
+  },
+  profileDetailLabel: {
+    ...typography.caption,
+    textTransform: "uppercase",
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  profileDetailValue: {
+    ...typography.body,
   },
   scannerContainer: {
     flex: 1,

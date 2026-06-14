@@ -10,9 +10,29 @@ export type RelationshipStatus =
 export interface FriendProfile {
   player_id: string;
   player_name: string;
+  player_email?: string | null;
+  player_mobile?: string | null;
   profile_photo_url?: string | null;
   friend_code?: string | null;
   relationship_status?: RelationshipStatus | string;
+  profile_visibility?: "public" | "friends" | "private" | string;
+  can_view_profile?: boolean;
+  can_view_game_stats?: boolean;
+  share_game_stats?: boolean;
+  show_online_status?: boolean;
+  is_online?: boolean;
+  last_seen_at?: string | null;
+}
+
+export interface FriendProfileStats {
+  player_id: string;
+  games_played: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  win_percentage: number;
+  loss_percentage: number;
+  draw_percentage: number;
 }
 
 export interface FriendRequest {
@@ -99,6 +119,16 @@ export const friendsApi = {
       ...response,
       result: unwrapArray<FriendProfile>(response.result, "friends"),
     };
+  },
+
+  async getProfile(playerId: string) {
+    return API.get<FriendProfile>(`/profiles/${encodeURIComponent(playerId)}`);
+  },
+
+  async getProfileStats(playerId: string) {
+    return API.get<FriendProfileStats>(
+      `/profiles/${encodeURIComponent(playerId)}/stats`,
+    );
   },
 
   async acceptRequest(requestId: string) {

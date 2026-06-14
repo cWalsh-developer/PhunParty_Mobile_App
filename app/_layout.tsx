@@ -9,6 +9,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef } from "react";
 import { AppState, AppStateStatus, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import PresenceMonitor from "@/components/PresenceMonitor";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete
 SplashScreen.preventAutoHideAsync();
@@ -88,6 +89,7 @@ export default function RootLayout() {
       <ThemeProvider>
         <ToastProvider>
           <UserProvider>
+            <PresenceMonitor />
             <View style={{ flex: 1, backgroundColor: colors.ink[900] }}>
               <Stack
                 screenOptions={{
