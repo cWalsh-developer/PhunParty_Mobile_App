@@ -119,6 +119,7 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
     gameWebSocket.onBeatClockAnswerResult = (data: any) => {
       if (data?.ignored) {
         setLastResult(null);
+        setHasSubmitted(false);
       } else {
         setLastResult(Boolean(data?.is_correct));
       }
