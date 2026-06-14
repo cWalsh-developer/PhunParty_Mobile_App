@@ -1124,6 +1124,28 @@ export class GameWebSocketService {
       event_type: type,
     };
 
+    const isBeatClockRejection =
+      this.isBeatClockGameType(data) ||
+      this.isBeatClockGameType(this.lastQuestion);
+    if (
+      type === "answer_rejected" &&
+      isBeatClockRejection &&
+      (data?.reason === "stale_question" ||
+        data?.reason === "question_not_active")
+    ) {
+      this.onBeatClockAnswerResult?.({
+        ...rejectedData,
+        ignored: true,
+        score: data?.score ?? this.lastQuestion?.score ?? 0,
+        answered_count:
+          data?.answered_count ?? this.lastQuestion?.answered_count ?? 0,
+        correct_count:
+          data?.correct_count ?? this.lastQuestion?.correct_count ?? 0,
+        ends_at: data?.ends_at ?? this.lastQuestion?.ends_at,
+      });
+      return;
+    }
+
     if (data?.reason === "fair_play_restriction") {
       this.onFairPlayStatusUpdate?.({
         player_id: this.playerInfo?.player_id,
