@@ -1,5 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -72,6 +72,10 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
   const [correctCount, setCorrectCount] = useState(0);
   const [endsAt, setEndsAt] = useState<string | null>(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
+  const currentQuestionIdRef = useRef<string | null>(null);
+  const nextQuestionRecoveryRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const options = useMemo(
     () => currentQuestion?.display_options ?? currentQuestion?.options ?? [],
@@ -106,6 +110,11 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
     gameWebSocket.onQuestionReceived = (question: GameQuestion) => {
       if (!isBeatClockQuestion(question)) return;
 
+      currentQuestionIdRef.current = question.question_id;
+      if (nextQuestionRecoveryRef.current) {
+        clearTimeout(nextQuestionRecoveryRef.current);
+        nextQuestionRecoveryRef.current = null;
+      }
       setCurrentQuestion(question);
       setSelectedAnswer("");
       setHasSubmitted(false);
@@ -122,6 +131,18 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
         setHasSubmitted(false);
       } else {
         setLastResult(Boolean(data?.is_correct));
+        const answeredQuestionId = data?.question_id ?? data?.questionId;
+        if (nextQuestionRecoveryRef.current) {
+          clearTimeout(nextQuestionRecoveryRef.current);
+        }
+        nextQuestionRecoveryRef.current = setTimeout(() => {
+          if (
+            answeredQuestionId &&
+            currentQuestionIdRef.current === answeredQuestionId
+          ) {
+            gameWebSocket.requestCurrentQuestion();
+          }
+        }, 750);
       }
       setScore(Number(data?.score ?? 0));
       setAnsweredCount(Number(data?.answered_count ?? 0));
@@ -140,6 +161,10 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
     };
 
     return () => {
+      if (nextQuestionRecoveryRef.current) {
+        clearTimeout(nextQuestionRecoveryRef.current);
+        nextQuestionRecoveryRef.current = null;
+      }
       gameWebSocket.onQuestionReceived = null;
       gameWebSocket.onBeatClockAnswerResult = null;
       gameWebSocket.onBeatClockStateUpdate = null;
