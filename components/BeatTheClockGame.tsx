@@ -117,7 +117,11 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
     };
 
     gameWebSocket.onBeatClockAnswerResult = (data: any) => {
-      setLastResult(Boolean(data?.is_correct));
+      if (data?.ignored) {
+        setLastResult(null);
+      } else {
+        setLastResult(Boolean(data?.is_correct));
+      }
       setScore(Number(data?.score ?? 0));
       setAnsweredCount(Number(data?.answered_count ?? 0));
       setCorrectCount(Number(data?.correct_count ?? 0));
