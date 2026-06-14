@@ -40,6 +40,19 @@ interface GameContainerProps {
 const COUNTDOWN_DURATION_MS = 3000;
 const MAX_COUNTDOWN_SECONDS = COUNTDOWN_DURATION_MS / 1000;
 
+const isBeatClockGameType = (gameType?: string | null) => {
+  const normalized =
+    typeof gameType === "string"
+      ? gameType.trim().toLowerCase().replace(/[_\s]+/g, "-")
+      : "";
+  return normalized === "beat-the-clock" || normalized === "beat-clock";
+};
+
+const formatGameTypeLabel = (gameType: string) =>
+  gameType
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
 export const GameContainer: React.FC<GameContainerProps> = ({
   sessionCode,
   playerInfo,
@@ -1342,6 +1355,13 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   };
 
   const renderGameContent = () => {
+    const gameType = (
+      currentGameType ||
+      inferGameType(gameState) ||
+      "trivia"
+    ).toLowerCase();
+    const isBeatClockGame = isBeatClockGameType(gameType);
+
     // Show lobby screen if game hasn't started yet
     if (!isGameStarted) {
       return (
@@ -1358,9 +1378,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             </Text>
             {currentGameType && (
               <Text style={styles.gameTypeInfo}>
-                Game Type:{" "}
-                {currentGameType.charAt(0).toUpperCase() +
-                  currentGameType.slice(1)}
+                Game Type: {formatGameTypeLabel(currentGameType)}
               </Text>
             )}
             {renderFairPlayNotice()}
@@ -1387,9 +1405,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     }
 
     if (
-      gamePhase === "waiting_for_host_intro" ||
-      gamePhase === "intro_audio" ||
-      gamePhase === "countdown_pending"
+      !isBeatClockGame &&
+      (gamePhase === "waiting_for_host_intro" ||
+        gamePhase === "intro_audio" ||
+        gamePhase === "countdown_pending")
     ) {
       const waitingText =
         gamePhase === "countdown_pending"
@@ -1414,7 +1433,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       );
     }
 
-    if (gamePhase === "countdown") {
+    if (!isBeatClockGame && gamePhase === "countdown") {
       const seconds = Math.ceil(countdownRemainingMs / 1000);
       const displaySeconds =
         countdownRemainingMs > 0
@@ -1437,7 +1456,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     // Game has started - show loading while waiting for first question
     // NOTE: We don't actually wait here - TriviaGame handles showing "waiting" state
     // Just render the game component which will show its own waiting UI if needed
-    if (isWaitingForQuestion) {
+    if (!isBeatClockGame && isWaitingForQuestion) {
       // This state is only used for explicit API polling scenarios
       // In normal flow, we go straight to rendering the game component
       return (
@@ -1464,8 +1483,6 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     }
 
     // Game has started and question received - render the actual game component
-    const gameType = currentGameType?.toLowerCase() || "trivia";
-
     switch (gameType) {
       case "trivia":
         return (

@@ -261,6 +261,21 @@ export class GameWebSocketService {
     return Math.max(0, Date.parse(startAtIso) - this.estimatedServerNowMs());
   }
 
+  private isBeatClockGameType(data?: any): boolean {
+    const rawType =
+      data?.game_type ??
+      data?.gameType ??
+      data?.genre ??
+      data?.game_state?.game_type ??
+      data?.game_state?.gameType ??
+      data?.game_state?.genre;
+    const normalized =
+      typeof rawType === "string"
+        ? rawType.trim().toLowerCase().replace(/[_\s]+/g, "-")
+        : "";
+    return normalized === "beat-the-clock" || normalized === "beat-clock";
+  }
+
   public setReadyForQuestions(ready: boolean): void {
     this.isReadyForQuestions = ready;
 
@@ -757,8 +772,15 @@ export class GameWebSocketService {
         this.questionReceived = false;
         this.lastQuestion = null;
         this.pendingQuestions = [];
-        this.setReadyForQuestions(false);
-        this.setPhase("waiting_for_host_intro", message.data);
+        if (this.isBeatClockGameType(message.data)) {
+          this.clearQuestionRecoveryTimeouts();
+          this.setReadyForQuestions(true);
+          this.setPhase("question", message.data);
+          this.onBeatClockStateUpdate?.(message.data ?? {});
+        } else {
+          this.setReadyForQuestions(false);
+          this.setPhase("waiting_for_host_intro", message.data);
+        }
         this.emitGameStarted(message.data);
         break;
 

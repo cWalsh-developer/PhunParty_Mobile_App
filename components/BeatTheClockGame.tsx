@@ -79,6 +79,15 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
     !isLocked &&
     timeRemaining > 0;
 
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <Text style={styles.headerTitle}>Beat the Clock</Text>
+      {timeRemaining > 0 ? (
+        <Text style={styles.headerTimer}>{formatTime(timeRemaining)}</Text>
+      ) : null}
+    </View>
+  );
+
   useEffect(() => {
     gameWebSocket.setReadyForQuestions(true);
 
@@ -151,6 +160,7 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
   if (timeRemaining <= 0 && currentQuestion) {
     return (
       <View style={styles.container}>
+        {renderHeader()}
         <AppCard style={styles.waitingCard}>
           <MaterialIcons name="timer-off" size={48} color={colors.tea[500]} />
           <Text style={styles.title}>Time is up</Text>
@@ -164,9 +174,10 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
   if (!currentQuestion) {
     return (
       <View style={styles.container}>
+        {renderHeader()}
         <AppCard style={styles.waitingCard}>
           <MaterialIcons name="timer" size={48} color={colors.tea[500]} />
-          <Text style={styles.title}>Beat the Clock</Text>
+          <Text style={styles.title}>Get ready</Text>
           <Text style={styles.subtitle}>Waiting for your first question...</Text>
           <Text style={styles.sessionText}>Session: {sessionCode}</Text>
         </AppCard>
@@ -176,6 +187,7 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
 
   return (
     <View style={styles.container}>
+      {renderHeader()}
       <View style={styles.statsRow}>
         <View style={styles.statPill}>
           <MaterialIcons name="timer" size={18} color={colors.tea[500]} />
@@ -287,10 +299,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink[900],
     padding: 16,
   },
+  header: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  headerTitle: {
+    ...typography.h3,
+    color: colors.white,
+    fontWeight: "800",
+  },
+  headerTimer: {
+    ...typography.body,
+    color: colors.tea[500],
+    fontWeight: "800",
+  },
   waitingCard: {
     alignItems: "center",
     gap: 12,
-    marginTop: 80,
+    marginTop: 56,
     padding: 32,
   },
   title: {
