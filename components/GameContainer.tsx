@@ -1432,7 +1432,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       );
     }
 
-    if (!isBeatClockGame && gamePhase === "countdown") {
+    if (gamePhase === "countdown") {
       const seconds = Math.ceil(countdownRemainingMs / 1000);
       const displaySeconds =
         countdownRemainingMs > 0
