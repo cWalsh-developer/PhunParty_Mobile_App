@@ -57,6 +57,11 @@ export interface GameQuestion {
   grace_period_ms?: number;
   gracePeriodMs?: number;
   start_at?: string;
+  ends_at?: string;
+  duration_seconds?: number;
+  score?: number;
+  answered_count?: number;
+  correct_count?: number;
 }
 
 export interface CountdownState {
@@ -188,6 +193,8 @@ export class GameWebSocketService {
   public onAnswerSubmitted: ((data: any) => void) | null = null;
   public onAnswerRejected: ((data: any) => void) | null = null;
   public onBuzzerUpdate: ((data: any) => void) | null = null;
+  public onBeatClockAnswerResult: ((data: any) => void) | null = null;
+  public onBeatClockStateUpdate: ((data: any) => void) | null = null;
   public onError: ((error: string) => void) | null = null;
   public onPhaseChange: ((phase: GamePhase, data?: any) => void) | null = null;
   public onCountdownStarted:
@@ -774,6 +781,34 @@ export class GameWebSocketService {
         break;
 
       case "preload_question":
+        break;
+
+      case "beat_clock_started":
+        this.questionReceived = false;
+        this.lastQuestion = null;
+        this.pendingQuestions = [];
+        this.clearQuestionRecoveryTimeouts();
+        this.setReadyForQuestions(true);
+        this.setPhase("question", message.data);
+        this.onBeatClockStateUpdate?.(message.data ?? {});
+        break;
+
+      case "beat_clock_question":
+        this.questionReceived = false;
+        this.clearQuestionRecoveryTimeouts();
+        this.setReadyForQuestions(true);
+        this.setPhase("question", message.data);
+        if (message.data) {
+          this.deliverOrBufferQuestion(message.data, "beat_clock_question");
+        }
+        break;
+
+      case "beat_clock_answer_result":
+        this.onBeatClockAnswerResult?.(message.data ?? {});
+        break;
+
+      case "beat_clock_state":
+        this.onBeatClockStateUpdate?.(message.data ?? {});
         break;
 
       case "question_started":

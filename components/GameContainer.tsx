@@ -27,6 +27,7 @@ import { AppButton } from "../assets/components/AppButton";
 import { AppCard } from "../assets/components/AppCard";
 import { colors } from "../assets/theme/colors";
 import { typography } from "../assets/theme/typography";
+import BeatTheClockGame from "./BeatTheClockGame";
 import BuzzerGame from "./BuzzerGame";
 import TriviaGame from "./TriviaGame";
 
@@ -1491,6 +1492,22 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             maxFairPlayStrikes={fairPlaySettings.maxStrikes}
             fairPlayStatus={fairPlayStatus}
             transitionWaitingQuestionId={transitionWaitingQuestionId}
+            onFairPlayFocusLost={reportFairPlayFocusLost}
+            onFairPlayFocusReturned={reportFairPlayFocusReturned}
+            onGameEnd={handleGameEnd}
+            onError={handleGameError}
+          />
+        );
+
+      case "beat_the_clock":
+      case "beat-the-clock":
+      case "beat the clock":
+        return (
+          <BeatTheClockGame
+            sessionCode={sessionCode}
+            gamePhase={gamePhase}
+            fairPlayEnabled={fairPlaySettings.enabled}
+            fairPlayStatus={fairPlayStatus}
             onFairPlayFocusLost={reportFairPlayFocusLost}
             onFairPlayFocusReturned={reportFairPlayFocusReturned}
             onGameEnd={handleGameEnd}
