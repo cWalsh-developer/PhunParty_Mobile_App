@@ -40,8 +40,20 @@ const formatTime = (seconds: number) => {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 };
 
+const getBeatClockEndsAt = (data: any): string | null =>
+  data?.ends_at ??
+  data?.endsAt ??
+  data?.beat_clock?.ends_at ??
+  data?.beatClock?.endsAt ??
+  null;
+
 const isBeatClockQuestion = (question: GameQuestion) =>
-  question?.game_type === "beat_the_clock";
+  {
+    const compact = String(question?.game_type || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+    return compact.includes("beattheclock") || compact.includes("beatclock");
+  };
 
 const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
   sessionCode,
@@ -101,7 +113,7 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
       setScore(Number(question.score ?? 0));
       setAnsweredCount(Number(question.answered_count ?? 0));
       setCorrectCount(Number(question.correct_count ?? 0));
-      setEndsAt(question.ends_at ?? null);
+      setEndsAt((current) => getBeatClockEndsAt(question) ?? current);
     };
 
     gameWebSocket.onBeatClockAnswerResult = (data: any) => {
@@ -109,14 +121,16 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
       setScore(Number(data?.score ?? 0));
       setAnsweredCount(Number(data?.answered_count ?? 0));
       setCorrectCount(Number(data?.correct_count ?? 0));
-      if (data?.ends_at) {
-        setEndsAt(data.ends_at);
+      const nextEndsAt = getBeatClockEndsAt(data);
+      if (nextEndsAt) {
+        setEndsAt(nextEndsAt);
       }
     };
 
     gameWebSocket.onBeatClockStateUpdate = (data: any) => {
-      if (data?.ends_at) {
-        setEndsAt(data.ends_at);
+      const nextEndsAt = getBeatClockEndsAt(data);
+      if (nextEndsAt) {
+        setEndsAt(nextEndsAt);
       }
     };
 
