@@ -1402,14 +1402,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     isKickedByFairPlay || isCheckingFinalFairPlayStatus || isTerminalGameState;
 
   const renderFairPlayNotice = () => {
-    const hasFairPlayStatus =
-      fairPlayStrikeCount > 0 ||
-      Boolean(fairPlayStatus?.is_frozen ?? fairPlayStatus?.isFrozen) ||
-      Boolean(fairPlayStatus?.is_kicked ?? fairPlayStatus?.isKicked) ||
-      fairPlayStatus?.max_strikes !== undefined ||
-      fairPlayStatus?.maxStrikes !== undefined;
-
-    if (!fairPlaySettings.enabled && !hasFairPlayStatus) {
+    if (!fairPlaySettings.enabled) {
       return null;
     }
 
