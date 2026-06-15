@@ -84,6 +84,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
   // Use ref to track game started state synchronously (avoids race condition)
   const gameStartedRef = useRef(false);
+  const isConnectingRef = useRef(isConnecting);
 
   // CRITICAL: Track connection attempts to prevent duplicates
   const hasAttemptedConnection = useRef(false);
@@ -246,6 +247,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
+
+  useEffect(() => {
+    isConnectingRef.current = isConnecting;
+  }, [isConnecting]);
 
   useEffect(() => {
     currentGameTypeRef.current = currentGameType;
@@ -976,7 +981,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     pulse();
   };
 
-  const connectToGame = async () => {
+  const connectToGame = async (forceReconnect = false) => {
     setIsConnecting(true);
     setConnectionError(null);
 
@@ -1050,6 +1055,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
       if (state === "connected") {
         setIsConnecting(false);
+        isConnectingRef.current = false;
         setConnectionError(null);
 
         // Request initial state when connected
@@ -1060,7 +1066,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         }, 1000);
       } else if (state === "reconnecting") {
         console.log("WebSocket reconnecting...");
-      } else if (state === "disconnected" && !isConnecting) {
+        setIsConnecting(false);
+        isConnectingRef.current = false;
+        setConnectionError(null);
+      } else if (state === "disconnected" && !isConnectingRef.current) {
         // Only show error if we were previously connected
         setConnectionError("Lost connection to game session");
       }
@@ -1072,8 +1081,12 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
       if (connected) {
         setIsConnecting(false);
+        isConnectingRef.current = false;
         setConnectionError(null);
-      } else if (!isConnecting) {
+      } else if (
+        !isConnectingRef.current &&
+        gameWebSocket.getConnectionState() !== "reconnecting"
+      ) {
         setConnectionError("Lost connection to game session");
       }
     };
@@ -1301,7 +1314,9 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
       void checkFinalFairPlayStatusBeforeShowingReconnect("game_ended");
     };
-    const success = await gameWebSocket.connect(sessionCode, playerInfo);
+    const success = forceReconnect
+      ? await gameWebSocket.forceReconnect(sessionCode, playerInfo)
+      : await gameWebSocket.connect(sessionCode, playerInfo);
 
     if (!success) {
       setConnectionError("Failed to connect to game session");
@@ -1340,7 +1355,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
   const handleGameError = (error: string) => {
     Alert.alert("Game Error", error, [
-      { text: "Retry", onPress: connectToGame },
+      { text: "Retry", onPress: () => connectToGame(true) },
       { text: "Leave Game", style: "destructive", onPress: handleLeaveGame },
     ]);
   };
@@ -1720,7 +1735,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             <View style={styles.actionButtons}>
               <AppButton
                 title="Retry Connection"
-                onPress={connectToGame}
+                onPress={() => connectToGame(true)}
                 variant="primary"
                 style={styles.actionButton}
               />

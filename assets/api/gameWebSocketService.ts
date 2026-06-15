@@ -154,6 +154,7 @@ export class GameWebSocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 50;
   private reconnectTimeout: any = null;
+  private connectionTimeout: any = null;
   private heartbeatInterval: any = null;
   private connectionState: ConnectionState = "disconnected";
   private clockOffset = 0;
@@ -165,7 +166,8 @@ export class GameWebSocketService {
   private shouldReconnect = true;
   private cachedWebSocketUrl: string | null = null;
   private lastActivityAt = Date.now();
-  private readonly HEARTBEAT_TIMEOUT = 60000;
+  private readonly HEARTBEAT_TIMEOUT = 35000;
+  private readonly CONNECTION_TIMEOUT = 12000;
 
   private pendingQuestions: GameQuestion[] = [];
   private lastQuestion: GameQuestion | null = null;
@@ -422,11 +424,20 @@ export class GameWebSocketService {
     }
   }
 
+  async forceReconnect(
+    sessionCode: string,
+    playerInfo: PlayerInfo,
+  ): Promise<boolean> {
+    this.prepareTransportForReconnect();
+    return this.connect(sessionCode, playerInfo);
+  }
+
   disconnect(): void {
     this.shouldReconnect = false;
     this.isConnecting = false;
     this.reconnectAttempts = 0;
     this.clearReconnectTimeout();
+    this.clearConnectionTimeout();
     this.clearQuestionRecoveryTimeouts();
     this.stopHeartbeat();
 
@@ -448,6 +459,7 @@ export class GameWebSocketService {
     this.shouldReconnect = false;
     this.reconnectAttempts = 0;
     this.clearReconnectTimeout();
+    this.clearConnectionTimeout();
   }
 
   leaveGame(): void {
@@ -686,9 +698,14 @@ export class GameWebSocketService {
   }
 
   private openWebSocket(wsUrl: string): void {
+    this.clearConnectionTimeout();
+
     if (this.ws) {
       try {
         this.ws.onclose = null;
+        this.ws.onerror = null;
+        this.ws.onmessage = null;
+        this.ws.onopen = null;
         this.ws.close(1000, "New connection established");
       } catch {
         // Ignore stale socket close failures.
@@ -696,6 +713,17 @@ export class GameWebSocketService {
     }
 
     this.ws = new WebSocket(wsUrl);
+    this.connectionTimeout = setTimeout(() => {
+      this.connectionTimeout = null;
+
+      if (this.isConnected || !this.shouldReconnect) {
+        return;
+      }
+
+      console.warn("WebSocket connection handshake timed out; reconnecting");
+      this.isConnecting = false;
+      this.closeForReconnect();
+    }, this.CONNECTION_TIMEOUT);
 
     this.ws.onopen = () => {
       this.isConnecting = false;
@@ -710,6 +738,7 @@ export class GameWebSocketService {
     };
 
     this.ws.onclose = (event) => {
+      this.clearConnectionTimeout();
       this.isConnecting = false;
       this.isConnected = false;
       this.wsId = null;
@@ -755,6 +784,10 @@ export class GameWebSocketService {
 
     this.ws.onerror = () => {
       this.isConnecting = false;
+      if (this.shouldReconnect && !this.reconnectTimeout) {
+        this.setConnectionState("reconnecting");
+        this.closeForReconnect();
+      }
     };
   }
 
@@ -786,6 +819,7 @@ export class GameWebSocketService {
 
     switch (message.type) {
       case "connection_established":
+        this.clearConnectionTimeout();
         this.wsId = message.data?.ws_id || null;
         this.rosterPlayerId = message.data?.roster_player_id || null;
         this.isConnected = true;
@@ -1627,6 +1661,7 @@ export class GameWebSocketService {
 
   private closeForReconnect(): void {
     this.isConnected = false;
+    this.isConnecting = false;
     this.stopHeartbeat();
 
     if (this.ws) {
@@ -1637,6 +1672,34 @@ export class GameWebSocketService {
       }
     } else {
       this.scheduleReconnect();
+    }
+  }
+
+  private prepareTransportForReconnect(): void {
+    this.shouldReconnect = true;
+    this.isConnecting = false;
+    this.isConnected = false;
+    this.clearReconnectTimeout();
+    this.clearConnectionTimeout();
+    this.stopHeartbeat();
+    this.setConnectionState("reconnecting");
+
+    if (!this.ws) {
+      return;
+    }
+
+    try {
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      this.ws.onmessage = null;
+      this.ws.onopen = null;
+      this.ws.close(1000, "Manual reconnect");
+    } catch {
+      // Ignore stale socket close failures before a fresh reconnect.
+    } finally {
+      this.ws = null;
+      this.wsId = null;
+      this.rosterPlayerId = null;
     }
   }
 
@@ -1674,11 +1737,20 @@ export class GameWebSocketService {
     }
   }
 
+  private clearConnectionTimeout(): void {
+    if (this.connectionTimeout) {
+      clearTimeout(this.connectionTimeout);
+      this.connectionTimeout = null;
+    }
+  }
+
   private resetConnectionState(): void {
     this.ws = null;
     this.wsId = null;
     this.rosterPlayerId = null;
     this.isConnected = false;
+    this.isConnecting = false;
+    this.clearConnectionTimeout();
     this.clearScheduledQuestionStart();
     this.pendingQuestions = [];
     this.lastQuestion = null;
