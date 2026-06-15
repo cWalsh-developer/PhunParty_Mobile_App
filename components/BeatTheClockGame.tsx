@@ -1,5 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -16,6 +16,10 @@ import {
 } from "../assets/api/gameWebSocketService";
 import { AppButton } from "../assets/components/AppButton";
 import { AppCard } from "../assets/components/AppCard";
+import {
+  hasImmediateFairPlayWindowViolation,
+  useFairPlayMonitor,
+} from "../assets/hooks/useFairPlayMonitor";
 import { colors } from "../assets/theme/colors";
 import { typography } from "../assets/theme/typography";
 
@@ -23,6 +27,7 @@ interface BeatTheClockGameProps {
   sessionCode: string;
   gamePhase?: GamePhase;
   fairPlayEnabled?: boolean;
+  maxFairPlayStrikes?: number;
   fairPlayStatus?: FairPlayStatus | null;
   onFairPlayFocusLost?: (
     questionId: string,
@@ -52,13 +57,22 @@ const isBeatClockQuestion = (question: GameQuestion) =>
     const compact = String(question?.game_type || "")
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "");
-    return compact.includes("beattheclock") || compact.includes("beatclock");
+    const questionId = String(question?.question_id || "").toUpperCase();
+    return (
+      compact.includes("beattheclock") ||
+      compact.includes("beatclock") ||
+      questionId.startsWith("BTC")
+    );
   };
 
 const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
   sessionCode,
+  gamePhase,
   fairPlayEnabled = false,
+  maxFairPlayStrikes = 3,
   fairPlayStatus,
+  onFairPlayFocusLost,
+  onFairPlayFocusReturned,
   onError,
 }) => {
   const [currentQuestion, setCurrentQuestion] = useState<GameQuestion | null>(
@@ -73,6 +87,13 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
   const [endsAt, setEndsAt] = useState<string | null>(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
   const currentQuestionIdRef = useRef<string | null>(null);
+  const [fairPlayLockedQuestionId, setFairPlayLockedQuestionId] = useState<
+    string | null
+  >(null);
+  const lastFairPlayViolationRef = useRef<{
+    key: string;
+    reportedAt: number;
+  } | null>(null);
   const nextQuestionRecoveryRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -83,11 +104,33 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
   );
 
   const isTextInput = currentQuestion?.ui_mode === "text_input";
+  const currentQuestionId = currentQuestion?.question_id ?? null;
+  const fairPlayStrikeCount = Number(
+    fairPlayStatus?.strike_count ?? fairPlayStatus?.strikeCount ?? 0,
+  );
+  const fairPlayMaxStrikes = Number(
+    fairPlayStatus?.max_strikes ??
+      fairPlayStatus?.maxStrikes ??
+      maxFairPlayStrikes,
+  );
+  const fairPlayFrozenQuestionId =
+    fairPlayStatus?.frozen_question_id ?? fairPlayStatus?.frozenQuestionId;
   const isKicked = Boolean(fairPlayStatus?.is_kicked ?? fairPlayStatus?.isKicked);
   const isFrozen = Boolean(
     fairPlayStatus?.is_frozen ?? fairPlayStatus?.isFrozen,
   );
-  const isLocked = fairPlayEnabled && (isKicked || isFrozen);
+  const isFrozenForRenderedQuestion =
+    fairPlayEnabled &&
+    isFrozen &&
+    !!currentQuestionId &&
+    (!fairPlayFrozenQuestionId ||
+      fairPlayFrozenQuestionId === currentQuestionId);
+  const isBackendFairPlayLocked =
+    fairPlayEnabled &&
+    (isKicked ||
+      isFrozenForRenderedQuestion ||
+      (!!currentQuestionId && fairPlayLockedQuestionId === currentQuestionId));
+  const isLocked = fairPlayEnabled && isBackendFairPlayLocked;
   const canSubmit =
     !!currentQuestion &&
     selectedAnswer.trim().length > 0 &&
@@ -104,12 +147,84 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
     </View>
   );
 
+  const renderFairPlayStatus = () => {
+    if (!fairPlayEnabled) {
+      return null;
+    }
+
+    const isWarning = isImmediateViolationPending || isInGracePeriod;
+    const strikeSummary = `${Number.isFinite(fairPlayStrikeCount) ? fairPlayStrikeCount : 0}/${Number.isFinite(fairPlayMaxStrikes) && fairPlayMaxStrikes > 0 ? fairPlayMaxStrikes : maxFairPlayStrikes}`;
+    const message = isKicked
+      ? fairPlayStatus?.message || "Fair Play removed you from this session."
+      : isLocked
+        ? fairPlayStatus?.message ||
+          `Fair Play strike ${strikeSummary}. You are frozen for this question.`
+        : isWarning
+          ? "Return to the game immediately to avoid a Fair Play strike."
+          : `Fair Play Mode active - ${strikeSummary} strikes`;
+
+    return (
+      <View
+        style={[
+          styles.lockedBanner,
+          isWarning && !isLocked ? styles.warningBanner : null,
+        ]}
+      >
+        <MaterialIcons
+          name={isLocked ? "lock" : "verified-user"}
+          size={18}
+          color={isLocked ? colors.red[500] : colors.tea[500]}
+        />
+        <Text style={styles.lockedText}>{message}</Text>
+      </View>
+    );
+  };
+
+  const handleFairPlayViolation = useCallback(
+    (questionId: string, reason: FocusViolationReason) => {
+      const now = Date.now();
+      const key = `${questionId}:${reason}`;
+      const lastViolation = lastFairPlayViolationRef.current;
+
+      if (
+        lastViolation?.key === key &&
+        now - lastViolation.reportedAt < 10000
+      ) {
+        return;
+      }
+
+      lastFairPlayViolationRef.current = { key, reportedAt: now };
+      onFairPlayFocusLost?.(questionId, reason);
+    },
+    [onFairPlayFocusLost],
+  );
+
+  const handleFairPlayReturned = useCallback(
+    (questionId: string) => {
+      onFairPlayFocusReturned?.(questionId);
+    },
+    [onFairPlayFocusReturned],
+  );
+
+  const { isImmediateViolationPending, isInGracePeriod } = useFairPlayMonitor({
+    enabled: fairPlayEnabled,
+    questionId: currentQuestionId,
+    phase: gamePhase ?? "question",
+    onFocusLost: handleFairPlayViolation,
+    onFocusReturned: handleFairPlayReturned,
+  });
+
   useEffect(() => {
-    gameWebSocket.setReadyForQuestions(true);
+    const initialQuestionRecoveryTimers = [250, 1000, 2000].map((delay) =>
+      setTimeout(() => {
+        gameWebSocket.requestCurrentQuestion();
+      }, delay),
+    );
 
     gameWebSocket.onQuestionReceived = (question: GameQuestion) => {
       if (!isBeatClockQuestion(question)) return;
 
+      initialQuestionRecoveryTimers.forEach((timer) => clearTimeout(timer));
       currentQuestionIdRef.current = question.question_id;
       if (nextQuestionRecoveryRef.current) {
         clearTimeout(nextQuestionRecoveryRef.current);
@@ -160,11 +275,14 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
       }
     };
 
+    gameWebSocket.setReadyForQuestions(true);
+
     return () => {
       if (nextQuestionRecoveryRef.current) {
         clearTimeout(nextQuestionRecoveryRef.current);
         nextQuestionRecoveryRef.current = null;
       }
+      initialQuestionRecoveryTimers.forEach((timer) => clearTimeout(timer));
       gameWebSocket.onQuestionReceived = null;
       gameWebSocket.onBeatClockAnswerResult = null;
       gameWebSocket.onBeatClockStateUpdate = null;
@@ -188,9 +306,55 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
     return () => clearInterval(interval);
   }, [endsAt]);
 
-  const submitAnswer = () => {
+  useEffect(() => {
+    if (isFrozenForRenderedQuestion && currentQuestionId) {
+      const lockTimeout = setTimeout(
+        () => setFairPlayLockedQuestionId(currentQuestionId),
+        0,
+      );
+      return () => clearTimeout(lockTimeout);
+    }
+  }, [currentQuestionId, isFrozenForRenderedQuestion]);
+
+  useEffect(() => {
+    if (
+      fairPlayLockedQuestionId &&
+      currentQuestionId &&
+      fairPlayLockedQuestionId !== currentQuestionId
+    ) {
+      setFairPlayLockedQuestionId(null);
+    }
+  }, [currentQuestionId, fairPlayLockedQuestionId]);
+
+  useEffect(() => {
+    if (!isLocked || isKicked || !currentQuestionId) {
+      return;
+    }
+
+    const recoveryTimers = [500, 1500, 3000].map((delay) =>
+      setTimeout(() => {
+        gameWebSocket.requestCurrentQuestion();
+      }, delay),
+    );
+
+    return () => {
+      recoveryTimers.forEach((timer) => clearTimeout(timer));
+    };
+  }, [currentQuestionId, isKicked, isLocked]);
+
+  const submitAnswer = async () => {
     const answer = selectedAnswer.trim();
     if (!currentQuestion || !answer || hasSubmitted || isLocked) return;
+
+    if (fairPlayEnabled) {
+      const immediateViolation = await hasImmediateFairPlayWindowViolation({
+        includeWindowFocusLoss: true,
+      });
+      if (immediateViolation) {
+        handleFairPlayViolation(currentQuestion.question_id, immediateViolation);
+        return;
+      }
+    }
 
     const sent = gameWebSocket.submitAnswer(answer, currentQuestion.question_id);
     if (!sent) {
@@ -200,20 +364,6 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
 
     setHasSubmitted(true);
   };
-
-  if (timeRemaining <= 0 && currentQuestion) {
-    return (
-      <View style={styles.container}>
-        {renderHeader()}
-        <AppCard style={styles.waitingCard}>
-          <MaterialIcons name="timer-off" size={48} color={colors.tea[500]} />
-          <Text style={styles.title}>Time is up</Text>
-          <Text style={styles.subtitle}>Finalising scores...</Text>
-          <Text style={styles.scoreText}>Your score: {score}</Text>
-        </AppCard>
-      </View>
-    );
-  }
 
   if (!currentQuestion) {
     return (
@@ -249,6 +399,8 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
           {correctCount}/{answeredCount} correct
         </Text>
       </AppCard>
+
+      {renderFairPlayStatus()}
 
       {lastResult !== null && (
         <View
@@ -456,6 +608,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
     padding: 10,
+  },
+  warningBanner: {
+    borderColor: colors.tea[500],
   },
   lockedText: {
     ...typography.caption,

@@ -93,6 +93,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   const foregroundRefreshTimeoutRef = useRef<any>(null);
   const refreshFairPlayStatusRef = useRef<(source: string) => void>(() => {});
   const gameStateRef = useRef<GameState | null>(null);
+  const currentGameTypeRef = useRef<string | null>(null);
+  const beatClockPinnedRef = useRef(false);
   const fairPlayStatusRef = useRef<FairPlayStatus | null>(null);
   const fairPlaySettingsRef = useRef<FairPlaySettings>(fairPlaySettings);
   const gamePhaseRef = useRef<GamePhase>(gamePhase);
@@ -106,16 +108,23 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
   const inferGameType = (data: any): string | null => {
     const source = data?.current_question ?? data?.question ?? data;
+    const questionId =
+      source?.question_id ??
+      source?.questionId ??
+      data?.current_question_id ??
+      data?.currentQuestionId;
     const explicitType =
       source?.game_type ||
       source?.gameType ||
-      source?.genre ||
       data?.game_type ||
-      data?.gameType ||
-      data?.genre;
+      data?.gameType;
 
     const normalizedType =
       typeof explicitType === "string" ? explicitType.toLowerCase() : null;
+
+    if (String(questionId ?? "").toUpperCase().startsWith("BTC")) {
+      return "beat_the_clock";
+    }
 
     if (source?.ui_mode === "buzzer" || normalizedType === "buzzer") {
       return "buzzer";
@@ -127,6 +136,65 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     return null;
   };
+
+  const normalizeStoredGameType = (gameType?: string | null): string | null => {
+    if (typeof gameType !== "string") {
+      return null;
+    }
+
+    const trimmed = gameType.trim().toLowerCase();
+    if (!trimmed) {
+      return null;
+    }
+
+    return isBeatClockGameType(trimmed)
+      ? "beat_the_clock"
+      : trimmed.replace(/[\s-]+/g, "_");
+  };
+
+  const stabilizeGameType = (gameType?: string | null): string | null => {
+    const normalized = normalizeStoredGameType(gameType);
+
+    if (
+      normalized === "beat_the_clock" ||
+      isBeatClockGameType(currentGameTypeRef.current)
+    ) {
+      beatClockPinnedRef.current = true;
+      return "beat_the_clock";
+    }
+
+    if (beatClockPinnedRef.current) {
+      return "beat_the_clock";
+    }
+
+    return normalized;
+  };
+
+  const applyCurrentGameType = (
+    gameType?: string | null,
+    source = "unknown",
+  ): string | null => {
+    const stableGameType = stabilizeGameType(gameType);
+
+    if (!stableGameType) {
+      return null;
+    }
+
+    if (stableGameType !== currentGameTypeRef.current) {
+      console.log(
+        `Game type changed from ${currentGameTypeRef.current} to ${stableGameType} (${source})`,
+      );
+    }
+
+    currentGameTypeRef.current = stableGameType;
+    setCurrentGameType(stableGameType);
+    return stableGameType;
+  };
+
+  const getRenderedGameType = (): string =>
+    stabilizeGameType(currentGameTypeRef.current || currentGameType) ||
+    stabilizeGameType(inferGameType(gameState)) ||
+    "trivia";
 
   const hasQuestionPayload = (question: any): boolean =>
     !!question &&
@@ -178,6 +246,13 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
+
+  useEffect(() => {
+    currentGameTypeRef.current = currentGameType;
+    if (isBeatClockGameType(currentGameType)) {
+      beatClockPinnedRef.current = true;
+    }
+  }, [currentGameType]);
 
   useEffect(() => {
     fairPlayStatusRef.current = fairPlayStatus;
@@ -926,16 +1001,15 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         applyFairPlayStatus(status);
 
         // Determine game type from the session info but don't start the game yet
-        const gameType = inferGameType(status);
-
-        if (gameType) {
-          setCurrentGameType(gameType);
-        }
+        const gameType = applyCurrentGameType(
+          inferGameType(status),
+          "initial_status",
+        );
 
         // Update game state - detect if game has already started
         const gameState: GameState = {
           session_code: sessionCode,
-          game_type: inferGameType(status) || "trivia",
+          game_type: gameType || "trivia",
           is_active: status.is_active,
           current_question: status.current_question,
         };
@@ -1033,14 +1107,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         setIsWaitingForQuestion(false);
       }
 
-      const nextGameType = inferGameType(sanitizedState);
-
-      if (nextGameType && nextGameType !== currentGameType) {
-        console.log(
-          `Game type changed from ${currentGameType} to ${nextGameType}`,
-        );
-        setCurrentGameType(nextGameType);
-      }
+      applyCurrentGameType(inferGameType(sanitizedState), "game_state_update");
     };
 
     gameWebSocket.onPhaseChange = (phase: GamePhase, data?: any) => {
@@ -1087,7 +1154,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
       const nextGameType = inferGameType(data);
       if (nextGameType) {
-        setCurrentGameType(nextGameType);
+        applyCurrentGameType(nextGameType, "phase_change");
       }
     };
 
@@ -1203,9 +1270,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       }
 
       const nextGameType = inferGameType(data);
-      if (nextGameType && nextGameType !== currentGameType) {
-        setCurrentGameType(nextGameType);
-      }
+      applyCurrentGameType(nextGameType, "game_started");
       if (gameState && data.isstarted === true) {
         setGameState({
           ...gameState,
@@ -1337,7 +1402,14 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     isKickedByFairPlay || isCheckingFinalFairPlayStatus || isTerminalGameState;
 
   const renderFairPlayNotice = () => {
-    if (!fairPlaySettings.enabled) {
+    const hasFairPlayStatus =
+      fairPlayStrikeCount > 0 ||
+      Boolean(fairPlayStatus?.is_frozen ?? fairPlayStatus?.isFrozen) ||
+      Boolean(fairPlayStatus?.is_kicked ?? fairPlayStatus?.isKicked) ||
+      fairPlayStatus?.max_strikes !== undefined ||
+      fairPlayStatus?.maxStrikes !== undefined;
+
+    if (!fairPlaySettings.enabled && !hasFairPlayStatus) {
       return null;
     }
 
@@ -1355,11 +1427,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   };
 
   const renderGameContent = () => {
-    const gameType = (
-      currentGameType ||
-      inferGameType(gameState) ||
-      "trivia"
-    ).toLowerCase();
+    const gameType = getRenderedGameType();
     const isBeatClockGame = isBeatClockGameType(gameType);
 
     // Show lobby screen if game hasn't started yet
@@ -1523,6 +1591,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             sessionCode={sessionCode}
             gamePhase={gamePhase}
             fairPlayEnabled={fairPlaySettings.enabled}
+            maxFairPlayStrikes={fairPlaySettings.maxStrikes}
             fairPlayStatus={fairPlayStatus}
             onFairPlayFocusLost={reportFairPlayFocusLost}
             onFairPlayFocusReturned={reportFairPlayFocusReturned}
@@ -1561,7 +1630,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
               {fairPlayStatus?.message ||
                 "Fair Play Mode removed you from this session."}
             </Text>
-            {fairPlaySettings.enabled && (
+            {(fairPlaySettings.enabled || fairPlayStatus) && (
               <Text style={styles.playerInfo}>
                 Strikes: {fairPlayStrikeCount}/{fairPlayMaxStrikes}
               </Text>
@@ -1575,17 +1644,6 @@ export const GameContainer: React.FC<GameContainerProps> = ({
               />
             </View>
           </AppCard>
-        </View>
-      </View>
-    );
-  }
-
-  if (isCheckingFinalFairPlayStatus) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.tea[500]} />
-          <Text style={styles.loadingText}>Checking session status...</Text>
         </View>
       </View>
     );
@@ -1615,6 +1673,17 @@ export const GameContainer: React.FC<GameContainerProps> = ({
               />
             </View>
           </AppCard>
+        </View>
+      </View>
+    );
+  }
+
+  if (isCheckingFinalFairPlayStatus) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={colors.tea[500]} />
+          <Text style={styles.loadingText}>Checking session status...</Text>
         </View>
       </View>
     );
@@ -1675,6 +1744,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     );
   }
 
+  const headerGameType = stabilizeGameType(
+    currentGameTypeRef.current || currentGameType,
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -1701,11 +1774,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>PhunParty</Text>
           <Text style={styles.headerSubtitle}>
-            {currentGameType
-              ? `${
-                  currentGameType.charAt(0).toUpperCase() +
-                  currentGameType.slice(1)
-                } Game`
+            {headerGameType
+              ? `${formatGameTypeLabel(headerGameType)} Game`
               : "Game Session"}
           </Text>
         </View>

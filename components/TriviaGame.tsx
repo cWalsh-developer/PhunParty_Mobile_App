@@ -54,6 +54,19 @@ interface GameState {
   answers: Answer[];
 }
 
+const isBeatClockQuestion = (question?: GameQuestion | null): boolean => {
+  const compactGameType = String(question?.game_type ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+  const questionId = String(question?.question_id ?? "").toUpperCase();
+
+  return (
+    compactGameType.includes("beattheclock") ||
+    compactGameType.includes("beatclock") ||
+    questionId.startsWith("BTC")
+  );
+};
+
 export const TriviaGame: React.FC<TriviaGameProps> = ({
   sessionCode,
   gamePhase = "question",
@@ -328,6 +341,15 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     };
 
     gameWebSocket.onQuestionReceived = (question: GameQuestion) => {
+      if (isBeatClockQuestion(question)) {
+        console.log("TriviaGame ignored Beat the Clock question", {
+          questionId: question.question_id,
+          gameType: question.game_type,
+        });
+        gameWebSocket.requestCurrentQuestion();
+        return;
+      }
+
       const receiveTime = Date.now();
       console.log(
         "🎯 TriviaGame - Question received at",

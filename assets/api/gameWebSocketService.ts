@@ -175,6 +175,7 @@ export class GameWebSocketService {
   private questionReceived = false;
   private questionRecoveryTimeouts: any[] = [];
   private questionStartTimeout: any = null;
+  private knownGameType: string | null = null;
 
   private _onQuestionReceived: ((question: GameQuestion) => void) | null = null;
   private _onGameStarted: ((data: any) => void) | null = null;
@@ -265,15 +266,74 @@ export class GameWebSocketService {
     const rawType =
       data?.game_type ??
       data?.gameType ??
-      data?.genre ??
       data?.game_state?.game_type ??
-      data?.game_state?.gameType ??
-      data?.game_state?.genre;
+      data?.game_state?.gameType;
+    const questionId =
+      data?.question_id ??
+      data?.questionId ??
+      data?.current_question_id ??
+      data?.currentQuestionId ??
+      data?.question?.question_id ??
+      data?.question?.questionId ??
+      data?.current_question?.question_id ??
+      data?.currentQuestion?.questionId;
     const normalized =
       typeof rawType === "string"
         ? rawType.trim().toLowerCase().replace(/[_\s]+/g, "-")
         : "";
-    return normalized === "beat-the-clock" || normalized === "beat-clock";
+    return (
+      normalized === "beat-the-clock" ||
+      normalized === "beat-clock" ||
+      String(questionId ?? "").toUpperCase().startsWith("BTC")
+    );
+  }
+
+  private rememberGameType(data?: any): void {
+    if (!data) {
+      return;
+    }
+
+    if (this.isBeatClockGameType(data)) {
+      this.knownGameType = "beat_the_clock";
+      return;
+    }
+
+    if (this.knownGameType === "beat_the_clock") {
+      return;
+    }
+
+    const rawType =
+      data?.game_type ??
+      data?.gameType ??
+      data?.game_state?.game_type ??
+      data?.game_state?.gameType;
+    if (typeof rawType === "string" && rawType.trim()) {
+      this.knownGameType = rawType.trim().toLowerCase().replace(/[_\s]+/g, "-");
+    }
+  }
+
+  private shouldIgnoreGenericQuestion(data?: any): boolean {
+    return (
+      this.knownGameType === "beat_the_clock" &&
+      data !== undefined &&
+      !this.isBeatClockGameType(data)
+    );
+  }
+
+  private withStableGameType<T extends any>(data: T): T {
+    if (
+      this.knownGameType !== "beat_the_clock" ||
+      !data ||
+      typeof data !== "object"
+    ) {
+      return data;
+    }
+
+    return {
+      ...(data as any),
+      game_type: "beat_the_clock",
+      gameType: "beat_the_clock",
+    };
   }
 
   public setReadyForQuestions(ready: boolean): void {
@@ -769,6 +829,7 @@ export class GameWebSocketService {
         break;
 
       case "game_started":
+        this.rememberGameType(message.data);
         this.questionReceived = false;
         this.lastQuestion = null;
         this.pendingQuestions = [];
@@ -788,15 +849,18 @@ export class GameWebSocketService {
         break;
 
       case "intro_started":
+        this.rememberGameType(message.data);
         this.setReadyForQuestions(false);
         this.setPhase("waiting_for_host_intro", message.data);
         break;
 
       case "intro_skipped":
+        this.rememberGameType(message.data);
         this.setPhase("countdown_pending", message.data);
         break;
 
       case "countdown_started":
+        this.rememberGameType(message.data);
         this.questionReceived = false;
         this.clearQuestionRecoveryTimeouts();
         this.setReadyForQuestions(true);
@@ -809,6 +873,7 @@ export class GameWebSocketService {
         break;
 
       case "beat_clock_started":
+        this.rememberGameType(message.data);
         this.questionReceived = false;
         this.lastQuestion = null;
         this.pendingQuestions = [];
@@ -816,15 +881,21 @@ export class GameWebSocketService {
         this.setReadyForQuestions(true);
         this.setPhase("question", message.data);
         this.onBeatClockStateUpdate?.(message.data ?? {});
+        this.scheduleQuestionRecovery("beat_clock_started", [250, 1000, 2000]);
         break;
 
       case "beat_clock_question":
+        this.rememberGameType(message.data);
         this.questionReceived = false;
         this.clearQuestionRecoveryTimeouts();
         this.setReadyForQuestions(true);
-        this.setPhase("question", message.data);
+        this.setPhase("question", this.withStableGameType(message.data));
+        this.emitFairPlayFromState(message.data);
         if (message.data) {
-          this.deliverOrBufferQuestion(message.data, "beat_clock_question");
+          const questionData = this.withStableGameType(message.data);
+          setTimeout(() => {
+            this.deliverOrBufferQuestion(questionData, "beat_clock_question");
+          }, 75);
         }
         break;
 
@@ -838,6 +909,19 @@ export class GameWebSocketService {
 
       case "question_started":
         console.log("MOBILE RECEIVED question_started", message.data);
+        if (this.shouldIgnoreGenericQuestion(message.data)) {
+          console.log(
+            "Ignoring generic question_started during Beat the Clock session",
+            message.data,
+          );
+          this.scheduleQuestionRecovery("ignored_generic_question_started", [
+            250,
+            1000,
+            2000,
+          ]);
+          break;
+        }
+        this.rememberGameType(message.data);
         this.questionReceived = false;
         this.clearQuestionRecoveryTimeouts();
         this.setReadyForQuestions(true);
@@ -861,6 +945,19 @@ export class GameWebSocketService {
 
       case "current_question":
       case "question":
+        if (this.shouldIgnoreGenericQuestion(message.data)) {
+          console.log(
+            `Ignoring generic ${message.type} during Beat the Clock session`,
+            message.data,
+          );
+          this.scheduleQuestionRecovery(`ignored_generic_${message.type}`, [
+            250,
+            1000,
+            2000,
+          ]);
+          break;
+        }
+        this.rememberGameType(message.data);
         if (this.currentPhase === "question" && message.data) {
           this.deliverOrBufferQuestion(message.data, message.type);
         }
@@ -868,8 +965,10 @@ export class GameWebSocketService {
 
       case "game_status_update":
         if (message.data) {
-          this.onGameStateUpdate?.(message.data);
-          this.emitFairPlayFromState(message.data);
+          this.rememberGameType(message.data);
+          const stableData = this.withStableGameType(message.data);
+          this.onGameStateUpdate?.(stableData);
+          this.emitFairPlayFromState(stableData);
         }
         break;
 
@@ -911,8 +1010,8 @@ export class GameWebSocketService {
       case "game_ended":
         this.lastQuestion = null;
         this.pendingQuestions = [];
-        this.onFairPlayStatusRefreshRequested?.();
         this.setPhase("ended", message.data);
+        this.onFairPlayStatusRefreshRequested?.();
         this.onGameEnded?.(message.data);
         break;
 
@@ -989,11 +1088,13 @@ export class GameWebSocketService {
     }
 
     this.updateServerOffset(state.server_time_ms ?? state.serverTime);
+    this.rememberGameType(state);
 
-    const gameState = {
+    const gameState = this.withStableGameType({
       ...(state.game_state ?? {}),
       ...state,
-    };
+    });
+    this.rememberGameType(gameState);
     this.onGameStateUpdate?.(gameState);
     this.emitFairPlayFromState(gameState);
 
@@ -1019,6 +1120,19 @@ export class GameWebSocketService {
       const question = gameState.current_question ?? gameState.question;
 
       if (this.hasQuestionPayload(question)) {
+        if (this.shouldIgnoreGenericQuestion(question)) {
+          console.log(
+            "Ignoring generic authoritative question during Beat the Clock session",
+            question,
+          );
+          this.requestCurrentQuestion();
+          this.scheduleQuestionRecovery("ignored_generic_authoritative_state", [
+            500,
+            1500,
+            3000,
+          ]);
+          return;
+        }
         this.scheduleAtServerTime(question.start_at, () => {
           this.setPhase("question", question);
           this.deliverOrBufferQuestion(question, "authoritative_state");
@@ -1264,11 +1378,17 @@ export class GameWebSocketService {
 
     this.questionReceived = true;
     this.clearQuestionRecoveryTimeouts();
+    const questionId = questionData.question_id ?? questionData.questionId;
+    const inferredGameType = String(questionId ?? "")
+      .toUpperCase()
+      .startsWith("BTC")
+      ? "beat_the_clock"
+      : questionData.game_type || questionData.gameType || "trivia";
 
     const question: GameQuestion = {
-      game_type: questionData.game_type || questionData.genre || "trivia",
       ui_mode: questionData.ui_mode || "multiple_choice",
       ...questionData,
+      game_type: inferredGameType,
     };
     const isNewQuestion =
       !!question.question_id &&
@@ -1566,6 +1686,7 @@ export class GameWebSocketService {
     this.pendingFairPlayReturns.clear();
     this.isReadyForQuestions = false;
     this.questionReceived = false;
+    this.knownGameType = null;
     this.processedEvents.clear();
     this.currentPhase = "lobby";
     this.setConnectionState("disconnected");
