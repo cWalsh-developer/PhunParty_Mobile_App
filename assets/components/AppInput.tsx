@@ -17,12 +17,14 @@ interface AppInputProps {
   secureTextEntry?: boolean;
   keyboardType?: KeyboardTypeOptions;
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
+  textContentType?: "oneTimeCode" | "emailAddress" | "password" | "none";
   editable?: boolean;
   style?: ViewStyle;
   inputStyle?: TextStyle;
   error?: string;
   horizontalScrollEnabled?: boolean; // New prop for horizontal scrolling
   maxWidth?: number; // Optional max width for the input
+  maxLength?: number;
 }
 
 export const AppInput: React.FC<AppInputProps> = ({
@@ -33,12 +35,14 @@ export const AppInput: React.FC<AppInputProps> = ({
   secureTextEntry = false,
   keyboardType = "default",
   autoCapitalize = "sentences",
+  textContentType,
   editable = true,
   style,
   inputStyle,
   error,
   horizontalScrollEnabled = false,
   maxWidth,
+  maxLength,
 }) => {
   const [isFocused, setIsFocused] = useState(false);
 
@@ -73,7 +77,9 @@ export const AppInput: React.FC<AppInputProps> = ({
         secureTextEntry={secureTextEntry}
         keyboardType={keyboardType}
         autoCapitalize={autoCapitalize}
+        textContentType={textContentType}
         editable={editable}
+        maxLength={maxLength}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         scrollEnabled={horizontalScrollEnabled} // Enable horizontal scrolling

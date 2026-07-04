@@ -16,6 +16,10 @@ export interface SignUpRequest {
   password: string;
   mobile: string;
 }
+export interface EmailVerificationRequest {
+  email: string;
+  code: string;
+}
 
 const {
   AuthenticationEndpoint,
@@ -82,6 +86,11 @@ export const signUp = async ({
     // Validate inputs
     if (!name || !email || !password || !mobile) {
       alert("Sign up failed: All fields are required");
+      return false;
+    }
+
+    if (password.length < 8) {
+      alert("Sign up failed: Password must be at least 8 characters");
       return false;
     }
 
@@ -202,6 +211,74 @@ export const verifyResetCode = async (
         (error.message || "An unexpected error occurred")
     );
     return null;
+  }
+};
+
+export const verifyEmail = async ({
+  email,
+  code,
+}: EmailVerificationRequest): Promise<boolean> => {
+  try {
+    if (!email || !code) {
+      alert("Verification failed: Email and code are required");
+      return false;
+    }
+
+    const result = await API.post(
+      "/players/verify-email",
+      {
+        player_email: email,
+        code,
+      },
+      false
+    );
+
+    if (result.isSuccess) {
+      return true;
+    }
+
+    alert(
+      "Verification failed: " + (result.message || "Invalid verification code")
+    );
+    return false;
+  } catch (error: any) {
+    alert(
+      "Verification failed: " +
+        (error.message || "An unexpected error occurred")
+    );
+    return false;
+  }
+};
+
+export const resendEmailVerification = async (
+  email: string
+): Promise<boolean> => {
+  try {
+    if (!email) {
+      alert("Unable to resend code: Email is required");
+      return false;
+    }
+
+    const result = await API.post(
+      "/players/resend-verification",
+      {
+        player_email: email,
+      },
+      false
+    );
+
+    if (result.isSuccess) {
+      return true;
+    }
+
+    alert("Unable to resend code: " + (result.message || "Please try again"));
+    return false;
+  } catch (error: any) {
+    alert(
+      "Unable to resend code: " +
+        (error.message || "An unexpected error occurred")
+    );
+    return false;
   }
 };
 

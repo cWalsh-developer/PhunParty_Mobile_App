@@ -1,10 +1,11 @@
 import { UserContext } from "@/assets/authentication-storage/authContext";
 import {
   login,
+  resendEmailVerification,
   signUp,
+  verifyEmail,
 } from "@/assets/authentication-storage/authenticationLogic";
 import { getToken } from "@/assets/authentication-storage/authStorage";
-import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useState } from "react";
 import LoginForm from "../components/LoginForm";
@@ -19,9 +20,10 @@ export default function Login() {
   const [password, setPassword] = useState<string>("");
   const [name, setName] = useState<string>("");
   const [mobile, setMobile] = useState<string>("");
+  const [verificationCode, setVerificationCode] = useState<string>("");
+  const [isVerifyingEmail, setIsVerifyingEmail] = useState<boolean>(false);
   const { setUser } = useContext(UserContext)!;
   const [termsAccepted, setTermsAccepted] = useState<boolean>(false);
-  const { AuthenticationEndpoint } = Constants.expoConfig?.extra || {};
 
   useEffect(() => {
     const redirectIfAuthenticated = async () => {
@@ -36,6 +38,8 @@ export default function Login() {
 
   const toggleForm = () => {
     setIsSignUp((prev) => !prev);
+    setIsVerifyingEmail(false);
+    setVerificationCode("");
   };
 
   //Handlers-----------------------------------------------------------------------------------------
@@ -54,7 +58,31 @@ export default function Login() {
     }
     const result = await signUp({ name, email, password, mobile });
     if (result) {
-      toggleForm();
+      setIsVerifyingEmail(true);
+      alert("Account created. Check your email for your verification code.");
+    }
+  };
+
+  const handleVerifyEmail = async () => {
+    const code = verificationCode.trim();
+    if (!/^\d{6}$/.test(code)) {
+      alert("Please enter the 6 digit verification code from your email.");
+      return;
+    }
+
+    const verified = await verifyEmail({ email, code });
+    if (!verified) return;
+
+    const loggedIn = await login({ email, password }, setUser);
+    if (loggedIn) {
+      setIsLoggedIn(true);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    const sent = await resendEmailVerification(email);
+    if (sent) {
+      alert("Verification code sent.");
     }
   };
 
@@ -72,10 +100,15 @@ export default function Login() {
       setName={setName}
       mobile={mobile}
       setMobile={setMobile}
+      verificationCode={verificationCode}
+      setVerificationCode={setVerificationCode}
       isSignUp={isSignUp}
+      isVerifyingEmail={isVerifyingEmail}
       toggleForm={toggleForm}
       handleLogin={handleLogin}
       handleSignUp={handleSignUp}
+      handleVerifyEmail={handleVerifyEmail}
+      handleResendVerification={handleResendVerification}
       handleReset={handleReset}
       setTermsAccepted={setTermsAccepted}
       termsAccepted={termsAccepted}

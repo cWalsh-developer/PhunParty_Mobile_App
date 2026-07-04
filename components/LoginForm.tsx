@@ -22,10 +22,15 @@ interface LoginFormProps {
   setName: (v: string) => void;
   mobile: string;
   setMobile: (v: string) => void;
+  verificationCode: string;
+  setVerificationCode: (v: string) => void;
   isSignUp: boolean;
+  isVerifyingEmail: boolean;
   toggleForm: () => void;
   handleLogin: () => void;
   handleSignUp: (termsAccepted: boolean) => void;
+  handleVerifyEmail: () => void;
+  handleResendVerification: () => void;
   setTermsAccepted: (termsAccepted: boolean) => void;
   termsAccepted: boolean;
   handleReset: () => void;
@@ -40,10 +45,15 @@ export default function LoginForm({
   setName,
   mobile,
   setMobile,
+  verificationCode,
+  setVerificationCode,
   isSignUp,
+  isVerifyingEmail,
   toggleForm,
   handleLogin,
   handleSignUp,
+  handleVerifyEmail,
+  handleResendVerification,
   setTermsAccepted,
   termsAccepted,
   handleReset,
@@ -72,7 +82,9 @@ export default function LoginForm({
               <Text style={{ color: colors.peach[400] }}>PhunParty</Text>
             </Text>
             <Text style={[typography.bodyMuted, { textAlign: "center" }]}>
-              {isSignUp
+              {isVerifyingEmail
+                ? "Verify your email to finish signing up"
+                : isSignUp
                 ? "Create your account to start playing"
                 : "Sign in to continue your journey"}
             </Text>
@@ -83,9 +95,74 @@ export default function LoginForm({
             <Text
               style={[typography.h2, { marginBottom: 24, textAlign: "center" }]}
             >
-              {isSignUp ? "Create Account" : "Welcome Back"}
+              {isVerifyingEmail
+                ? "Check Your Email"
+                : isSignUp
+                  ? "Create Account"
+                  : "Welcome Back"}
             </Text>
 
+            {isVerifyingEmail ? (
+              <>
+                <Text
+                  style={[
+                    typography.bodyMuted,
+                    { textAlign: "center", marginBottom: 16 },
+                  ]}
+                >
+                  Enter the 6 digit code sent to {email}.
+                </Text>
+
+                <AppInput
+                  label="Verification Code"
+                  value={verificationCode}
+                  onChangeText={(value) =>
+                    setVerificationCode(value.replace(/\D/g, ""))
+                  }
+                  placeholder="000000"
+                  keyboardType="number-pad"
+                  textContentType="oneTimeCode"
+                  autoCapitalize="none"
+                  maxLength={6}
+                  inputStyle={{ textAlign: "center", letterSpacing: 8 }}
+                  style={{ marginBottom: 24 }}
+                />
+
+                <Selector onPress={handleVerifyEmail}>
+                  <AppButton
+                    title="Verify Email"
+                    onPress={() => {}}
+                    variant="primary"
+                    style={{ marginBottom: 16 }}
+                    icon={
+                      <MaterialIcons
+                        name="mark-email-read"
+                        size={20}
+                        color={colors.ink[900]}
+                      />
+                    }
+                  />
+                </Selector>
+
+                <Selector onPress={handleResendVerification}>
+                  <TouchableOpacity style={{ marginBottom: 16 }}>
+                    <Text
+                      style={[
+                        typography.small,
+                        {
+                          textAlign: "center",
+                          color: colors.tea[400],
+                          textDecorationLine: "underline",
+                        },
+                      ]}
+                    >
+                      Resend code
+                    </Text>
+                  </TouchableOpacity>
+                </Selector>
+              </>
+            ) : (
+              <>
             {/* Sign Up Fields */}
             {isSignUp && (
               <>
@@ -244,6 +321,8 @@ export default function LoginForm({
                   </Text>
                 </TouchableOpacity>
               </Selector>
+            )}
+              </>
             )}
 
             {/* Toggle Form */}
