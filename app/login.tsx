@@ -3,7 +3,6 @@ import {
   login,
   resendEmailVerification,
   signUp,
-  verifyEmail,
 } from "@/assets/authentication-storage/authenticationLogic";
 import { getToken } from "@/assets/authentication-storage/authStorage";
 import { useRouter } from "expo-router";
@@ -20,7 +19,6 @@ export default function Login() {
   const [password, setPassword] = useState<string>("");
   const [name, setName] = useState<string>("");
   const [mobile, setMobile] = useState<string>("");
-  const [verificationCode, setVerificationCode] = useState<string>("");
   const [isVerifyingEmail, setIsVerifyingEmail] = useState<boolean>(false);
   const { setUser } = useContext(UserContext)!;
   const [termsAccepted, setTermsAccepted] = useState<boolean>(false);
@@ -39,7 +37,6 @@ export default function Login() {
   const toggleForm = () => {
     setIsSignUp((prev) => !prev);
     setIsVerifyingEmail(false);
-    setVerificationCode("");
   };
 
   //Handlers-----------------------------------------------------------------------------------------
@@ -59,30 +56,14 @@ export default function Login() {
     const result = await signUp({ name, email, password, mobile });
     if (result) {
       setIsVerifyingEmail(true);
-      alert("Account created. Check your email for your verification code.");
-    }
-  };
-
-  const handleVerifyEmail = async () => {
-    const code = verificationCode.trim();
-    if (!/^\d{6}$/.test(code)) {
-      alert("Please enter the 6 digit verification code from your email.");
-      return;
-    }
-
-    const verified = await verifyEmail({ email, code });
-    if (!verified) return;
-
-    const loggedIn = await login({ email, password }, setUser);
-    if (loggedIn) {
-      setIsLoggedIn(true);
+      alert("Account created. Check your email and tap the verification button.");
     }
   };
 
   const handleResendVerification = async () => {
     const sent = await resendEmailVerification(email);
     if (sent) {
-      alert("Verification code sent.");
+      alert("Verification email sent.");
     }
   };
 
@@ -100,14 +81,11 @@ export default function Login() {
       setName={setName}
       mobile={mobile}
       setMobile={setMobile}
-      verificationCode={verificationCode}
-      setVerificationCode={setVerificationCode}
       isSignUp={isSignUp}
       isVerifyingEmail={isVerifyingEmail}
       toggleForm={toggleForm}
       handleLogin={handleLogin}
       handleSignUp={handleSignUp}
-      handleVerifyEmail={handleVerifyEmail}
       handleResendVerification={handleResendVerification}
       handleReset={handleReset}
       setTermsAccepted={setTermsAccepted}

@@ -22,14 +22,11 @@ interface LoginFormProps {
   setName: (v: string) => void;
   mobile: string;
   setMobile: (v: string) => void;
-  verificationCode: string;
-  setVerificationCode: (v: string) => void;
   isSignUp: boolean;
   isVerifyingEmail: boolean;
   toggleForm: () => void;
   handleLogin: () => void;
   handleSignUp: (termsAccepted: boolean) => void;
-  handleVerifyEmail: () => void;
   handleResendVerification: () => void;
   setTermsAccepted: (termsAccepted: boolean) => void;
   termsAccepted: boolean;
@@ -45,14 +42,11 @@ export default function LoginForm({
   setName,
   mobile,
   setMobile,
-  verificationCode,
-  setVerificationCode,
   isSignUp,
   isVerifyingEmail,
   toggleForm,
   handleLogin,
   handleSignUp,
-  handleVerifyEmail,
   handleResendVerification,
   setTermsAccepted,
   termsAccepted,
@@ -110,27 +104,13 @@ export default function LoginForm({
                     { textAlign: "center", marginBottom: 16 },
                   ]}
                 >
-                  Enter the 6 digit code sent to {email}.
+                  We sent a verification button to {email}. Tap it to verify
+                  your email and continue.
                 </Text>
 
-                <AppInput
-                  label="Verification Code"
-                  value={verificationCode}
-                  onChangeText={(value) =>
-                    setVerificationCode(value.replace(/\D/g, ""))
-                  }
-                  placeholder="000000"
-                  keyboardType="number-pad"
-                  textContentType="oneTimeCode"
-                  autoCapitalize="none"
-                  maxLength={6}
-                  inputStyle={{ textAlign: "center", letterSpacing: 8 }}
-                  style={{ marginBottom: 24 }}
-                />
-
-                <Selector onPress={handleVerifyEmail}>
+                <Selector onPress={handleResendVerification}>
                   <AppButton
-                    title="Verify Email"
+                    title="Resend Verification Email"
                     onPress={() => {}}
                     variant="primary"
                     style={{ marginBottom: 16 }}
@@ -142,23 +122,6 @@ export default function LoginForm({
                       />
                     }
                   />
-                </Selector>
-
-                <Selector onPress={handleResendVerification}>
-                  <TouchableOpacity style={{ marginBottom: 16 }}>
-                    <Text
-                      style={[
-                        typography.small,
-                        {
-                          textAlign: "center",
-                          color: colors.tea[400],
-                          textDecorationLine: "underline",
-                        },
-                      ]}
-                    >
-                      Resend code
-                    </Text>
-                  </TouchableOpacity>
                 </Selector>
               </>
             ) : (

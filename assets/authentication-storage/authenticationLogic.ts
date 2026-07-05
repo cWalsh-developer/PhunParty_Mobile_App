@@ -20,6 +20,9 @@ export interface EmailVerificationRequest {
   email: string;
   code: string;
 }
+export interface EmailVerificationTokenRequest {
+  token: string;
+}
 
 const {
   AuthenticationEndpoint,
@@ -250,6 +253,42 @@ export const verifyEmail = async ({
   }
 };
 
+export const verifyEmailToken = async (
+  { token }: EmailVerificationTokenRequest,
+  setUser: (user: any) => void
+): Promise<boolean> => {
+  try {
+    if (!token) {
+      alert("Verification failed: Verification link is missing a token");
+      return false;
+    }
+
+    const result = await API.post(
+      "/players/verify-email-token",
+      { token },
+      false
+    );
+
+    if (result.isSuccess && result.result?.access_token) {
+      await SecureStore.setItemAsync("jwt", result.result.access_token);
+      await createUserContext(setUser);
+      return true;
+    }
+
+    alert(
+      "Verification failed: " +
+        (result.message || "Invalid or expired verification link")
+    );
+    return false;
+  } catch (error: any) {
+    alert(
+      "Verification failed: " +
+        (error.message || "An unexpected error occurred")
+    );
+    return false;
+  }
+};
+
 export const resendEmailVerification = async (
   email: string
 ): Promise<boolean> => {
@@ -271,7 +310,7 @@ export const resendEmailVerification = async (
       return true;
     }
 
-    alert("Unable to resend code: " + (result.message || "Please try again"));
+    alert("Unable to resend email: " + (result.message || "Please try again"));
     return false;
   } catch (error: any) {
     alert(
