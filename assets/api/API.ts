@@ -112,9 +112,11 @@ const callFetch = async <T = any>(
   dataObj: DataObject | null = null,
   withAuth: boolean = true,
 ): Promise<APIResponse<T>> => {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
+  const hasJsonBody = dataObj !== null && dataObj !== undefined;
+  const headers: HeadersInit = {};
+  if (hasJsonBody) {
+    headers["Content-Type"] = "application/json";
+  }
 
   // Add Authorization header if token exists
   if (withAuth) {
@@ -139,7 +141,7 @@ const callFetch = async <T = any>(
   const requestObj: RequestInit = {
     method,
     headers,
-    ...(dataObj && { body: JSON.stringify(dataObj) }),
+    ...(hasJsonBody && { body: JSON.stringify(dataObj) }),
   };
   const isBestEffortPresenceEndpoint =
     endpoint === "/presence/heartbeat" ||
