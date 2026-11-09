@@ -21,7 +21,7 @@ const config: ExpoConfig = {
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: "phunpartymobileapp",
-  userInterfaceStyle: "dark",
+  userInterfaceStyle: "light",
   plugins: [
     "expo-font",
     "expo-image",

@@ -1,138 +1,69 @@
-import { StyleSheet } from "react-native";
-import { colors } from "./colors";
+import { StyleSheet, ViewStyle } from "react-native";
+import { partyColors } from "./party";
+
+const button: ViewStyle = {
+  minHeight: 54,
+  paddingHorizontal: 18,
+  paddingVertical: 14,
+  borderRadius: 12,
+  borderWidth: 2,
+  borderBottomWidth: 5,
+  borderColor: partyColors.border,
+  alignItems: "center",
+  justifyContent: "center",
+};
 
 export const layoutStyles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.ink[900],
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 60,
-  },
+  screen: { flex: 1, backgroundColor: partyColors.cream },
+  container: { flex: 1, paddingHorizontal: 20, paddingVertical: 24 },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 100,
+    paddingHorizontal: 20,
+    paddingVertical: 32,
   },
 });
 
 export const cardStyles = StyleSheet.create({
   container: {
-    backgroundColor: colors.ink[800] + "CC", // 80% opacity
-    borderWidth: 1,
-    borderColor: colors.ink[700],
-    borderRadius: 16, // 2xl = 16px
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 32,
-    elevation: 8, // Android shadow
-    padding: 16,
+    backgroundColor: partyColors.white,
+    borderWidth: 2,
+    borderBottomWidth: 5,
+    borderColor: partyColors.border,
+    borderRadius: 18,
+    padding: 20,
   },
 });
 
+const label = { color: partyColors.ink, fontSize: 16, lineHeight: 22, fontWeight: "800" as const, textAlign: "center" as const };
+
 export const buttonStyles = StyleSheet.create({
-  primary: {
-    backgroundColor: colors.tea[500],
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44, // Minimum touch target
-  },
-  primaryText: {
-    color: colors.ink[900],
-    fontSize: 16,
-    fontWeight: "600",
-  },
-
-  secondary: {
-    backgroundColor: colors.ink[700],
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  secondaryText: {
-    color: colors.stone[100],
-    fontSize: 16,
-    fontWeight: "500",
-  },
-
-  accent: {
-    backgroundColor: colors.peach[500],
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  accentText: {
-    color: colors.ink[900],
-    fontSize: 16,
-    fontWeight: "600",
-  },
-
-  disabled: {
-    backgroundColor: colors.stone[400],
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  disabledText: {
-    color: colors.stone[950],
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  delete: {
-    backgroundColor: colors.red[600],
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  deleteText: {
-    color: colors.stone[100],
-    fontSize: 16,
-    fontWeight: "600",
-  },
+  primary: { ...button, backgroundColor: partyColors.lime },
+  primaryText: label,
+  secondary: { ...button, backgroundColor: partyColors.white },
+  secondaryText: label,
+  accent: { ...button, backgroundColor: partyColors.pink },
+  accentText: label,
+  disabled: { ...button, backgroundColor: partyColors.lavender, opacity: 0.65 },
+  disabledText: label,
+  delete: { ...button, backgroundColor: partyColors.dangerSoft },
+  deleteText: { ...label, color: partyColors.danger },
 });
 
 export const inputStyles = StyleSheet.create({
   container: {
-    backgroundColor: colors.ink[700],
-    borderRadius: 16,
+    minHeight: 54,
+    backgroundColor: partyColors.white,
+    borderWidth: 2,
+    borderRadius: 12,
+    borderColor: partyColors.border,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontSize: 16,
-    color: colors.stone[100],
-    borderWidth: 0,
-    minHeight: 44,
+    color: partyColors.ink,
   },
-  label: {
-    fontSize: 14,
-    color: colors.stone[300],
-    marginBottom: 4,
-  },
-  focused: {
-    borderWidth: 1,
-    borderColor: colors.tea[500],
-  },
-  error: {
-    borderWidth: 1,
-    borderColor: colors.red[500],
-  },
+  label: { fontSize: 14, lineHeight: 20, fontWeight: "700", color: partyColors.ink, marginBottom: 8 },
+  focused: { borderColor: partyColors.purple },
+  error: { borderColor: partyColors.danger },
 });

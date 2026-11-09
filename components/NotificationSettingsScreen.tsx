@@ -1,12 +1,12 @@
-import { colors, layoutStyles, typography } from "@/assets/theme";
+import { SocialHeader, SocialScreen, SocialToggle as SettingRow } from "./party/social-layout";
+import { partyColors } from "@/assets/theme/party";
+import { typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { openSettings } from "expo-linking";
 import { useEffect, useState } from "react";
 import {
   Alert,
   ActivityIndicator,
-  ScrollView,
-  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -31,92 +31,6 @@ interface NotificationPreferences {
   doNotDisturb: boolean;
   doNotDisturbStart: string;
   doNotDisturbEnd: string;
-}
-
-interface SettingRowProps {
-  title: string;
-  subtitle?: string;
-  value: boolean;
-  onValueChange: (value: boolean) => void;
-  icon: keyof typeof MaterialIcons.glyphMap;
-  disabled?: boolean;
-  testable?: boolean;
-  onTest?: () => void;
-}
-
-function SettingRow({
-  title,
-  subtitle,
-  value,
-  onValueChange,
-  icon,
-  disabled = false,
-  testable = false,
-  onTest,
-}: SettingRowProps) {
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        backgroundColor: colors.ink[700],
-        borderRadius: 12,
-        marginBottom: 12,
-      }}
-    >
-      <MaterialIcons
-        name={icon}
-        size={24}
-        color={colors.tea[400]}
-        style={{ marginRight: 16 }}
-      />
-      <View style={{ flex: 1 }}>
-        <Text style={[typography.body, { color: colors.stone[100] }]}>
-          {title}
-        </Text>
-        {subtitle && (
-          <Text
-            style={[
-              typography.small,
-              { color: colors.stone[400], marginTop: 2 },
-            ]}
-          >
-            {subtitle}
-          </Text>
-        )}
-      </View>
-      {testable && value && onTest && (
-        <TouchableOpacity
-          onPress={onTest}
-          style={{
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            backgroundColor: colors.tea[400],
-            borderRadius: 8,
-            marginRight: 12,
-          }}
-        >
-          <Text
-            style={[
-              typography.small,
-              { color: colors.ink[900], fontWeight: "600" },
-            ]}
-          >
-            Test
-          </Text>
-        </TouchableOpacity>
-      )}
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        disabled={disabled}
-        trackColor={{ false: colors.stone[400], true: colors.tea[400] }}
-        thumbColor={value ? colors.stone[100] : colors.stone[300]}
-      />
-    </View>
-  );
 }
 
 export default function NotificationSettingsScreen({
@@ -274,38 +188,8 @@ export default function NotificationSettingsScreen({
   };
 
   return (
-    <ScrollView
-      style={[layoutStyles.screen, layoutStyles.container]}
-      contentContainerStyle={{ paddingBottom: 100 }}
-    >
-      {/* Header with Back Button */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          marginBottom: 32,
-        }}
-      >
-        <TouchableOpacity
-          onPress={onBack}
-          style={{
-            padding: 8,
-            borderRadius: 20,
-            backgroundColor: colors.ink[800],
-            marginRight: 16,
-          }}
-        >
-          <MaterialIcons
-            name="arrow-back"
-            size={24}
-            color={colors.stone[300]}
-          />
-        </TouchableOpacity>
-
-        <Text style={[typography.h1, { color: colors.stone[100] }]}>
-          Notifications
-        </Text>
-      </View>
+    <SocialScreen>
+      <SocialHeader title="Notifications" subtitle="Stay in the loop, your way." onBack={onBack} />
 
       {/* System Permission Status */}
       <AppCard style={{ marginBottom: 24 }}>
@@ -319,10 +203,10 @@ export default function NotificationSettingsScreen({
           <MaterialIcons
             name="info-outline"
             size={20}
-            color={colors.tea[400]}
+            color={partyColors.purple}
             style={{ marginRight: 8 }}
           />
-          <Text style={[typography.h3, { color: colors.stone[100] }]}>
+          <Text style={[typography.h3, { color: partyColors.ink }]}>
             System Permissions
           </Text>
         </View>
@@ -330,7 +214,7 @@ export default function NotificationSettingsScreen({
         <Text
           style={[
             typography.small,
-            { color: colors.stone[400], marginBottom: 12 },
+            { color: partyColors.muted, marginBottom: 12 },
           ]}
         >
           Notification permissions are required to receive alerts and updates.
@@ -343,25 +227,25 @@ export default function NotificationSettingsScreen({
               alignItems: "center",
               paddingVertical: 12,
               paddingHorizontal: 16,
-              backgroundColor: colors.ink[700],
+              backgroundColor: partyColors.lavender,
               borderRadius: 12,
             }}
           >
             <MaterialIcons
               name="settings"
               size={20}
-              color={colors.tea[400]}
+              color={partyColors.purple}
               style={{ marginRight: 12 }}
             />
             <Text
-              style={[typography.body, { color: colors.stone[100], flex: 1 }]}
+              style={[typography.body, { color: partyColors.ink, flex: 1 }]}
             >
               System Notification Settings
             </Text>
             <MaterialIcons
               name="open-in-new"
               size={18}
-              color={colors.stone[400]}
+              color={partyColors.muted}
             />
           </TouchableOpacity>
         </Selector>
@@ -374,20 +258,20 @@ export default function NotificationSettingsScreen({
             alignItems: "center",
             gap: 10,
             marginBottom: 24,
-            borderColor: colors.tea[400],
+            borderColor: partyColors.purple,
             borderWidth: 1,
           }}
         >
           {loading ? (
-            <ActivityIndicator color={colors.tea[400]} />
+            <ActivityIndicator color={partyColors.purple} />
           ) : (
             <MaterialIcons
               name="info-outline"
               size={20}
-              color={colors.tea[400]}
+              color={partyColors.purple}
             />
           )}
-          <Text style={[typography.small, { color: colors.stone[100], flex: 1 }]}>
+          <Text style={[typography.small, { color: partyColors.ink, flex: 1 }]}>
             {statusMessage}
           </Text>
         </AppCard>
@@ -398,7 +282,7 @@ export default function NotificationSettingsScreen({
         <Text
           style={[
             typography.h3,
-            { color: colors.stone[100], marginBottom: 16 },
+            { color: partyColors.ink, marginBottom: 16 },
           ]}
         >
           Game Notifications
@@ -445,7 +329,7 @@ export default function NotificationSettingsScreen({
         <Text
           style={[
             typography.h3,
-            { color: colors.stone[100], marginBottom: 16 },
+            { color: partyColors.ink, marginBottom: 16 },
           ]}
         >
           System & Updates
@@ -468,7 +352,7 @@ export default function NotificationSettingsScreen({
         <Text
           style={[
             typography.h3,
-            { color: colors.stone[100], marginBottom: 16 },
+            { color: partyColors.ink, marginBottom: 16 },
           ]}
         >
           Notification Style
@@ -500,7 +384,7 @@ export default function NotificationSettingsScreen({
       {/* Do Not Disturb */}
       <AppCard style={{ marginBottom: 32 }}>
         <Text
-          style={[typography.h3, { color: colors.stone[100], marginBottom: 8 }]}
+          style={[typography.h3, { color: partyColors.ink, marginBottom: 8 }]}
         >
           Do Not Disturb
         </Text>
@@ -508,7 +392,7 @@ export default function NotificationSettingsScreen({
         <Text
           style={[
             typography.small,
-            { color: colors.stone[400], marginBottom: 16 },
+            { color: partyColors.muted, marginBottom: 16 },
           ]}
         >
           Pause notifications during specific hours
@@ -531,12 +415,12 @@ export default function NotificationSettingsScreen({
 
         {preferences.doNotDisturb && (
           <View style={{ marginTop: 12, paddingHorizontal: 16 }}>
-            <Text style={[typography.small, { color: colors.stone[400] }]}>
+            <Text style={[typography.small, { color: partyColors.muted }]}>
               Time range settings coming soon...
             </Text>
           </View>
         )}
       </AppCard>
-    </ScrollView>
+    </SocialScreen>
   );
 }

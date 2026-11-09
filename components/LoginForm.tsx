@@ -1,36 +1,34 @@
-import { AppButton, AppCard, AppInput } from "@/assets/components";
-import { colors, layoutStyles, typography } from "@/assets/theme";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { AppInput } from "@/assets/components";
+import { partyColors } from "@/assets/theme/party";
+import { AuthNotice, AuthScreen, authStyles } from "@/components/party/auth-screen";
+import { PartyButton } from "@/components/party/party-button";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Linking from "expo-linking";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import DismissKeyboardWrapper from "./DismissKeyboardWrapper";
-import Selector from "./Selector";
+import { useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 interface LoginFormProps {
   email: string;
-  setEmail: (v: string) => void;
+  setEmail: (value: string) => void;
   password: string;
-  setPassword: (v: string) => void;
+  setPassword: (value: string) => void;
   name: string;
-  setName: (v: string) => void;
+  setName: (value: string) => void;
   mobile: string;
-  setMobile: (v: string) => void;
+  setMobile: (value: string) => void;
   isSignUp: boolean;
   isVerifyingEmail: boolean;
   toggleForm: () => void;
   handleLogin: () => void;
-  handleSignUp: (termsAccepted: boolean) => void;
+  handleSignUp: (accepted: boolean) => void;
   handleResendVerification: () => void;
-  setTermsAccepted: (termsAccepted: boolean) => void;
+  setTermsAccepted: (accepted: boolean) => void;
   termsAccepted: boolean;
   handleReset: () => void;
+  loading?: boolean;
+  resending?: boolean;
+  error?: string | null;
+  notice?: string | null;
 }
 
 export default function LoginForm({
@@ -51,276 +49,183 @@ export default function LoginForm({
   setTermsAccepted,
   termsAccepted,
   handleReset,
+  loading = false,
+  resending = false,
+  error,
+  notice,
 }: LoginFormProps) {
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const busy = loading || resending;
+  const hasDetails = !!email.trim() && !!password;
+  const canSubmit = hasDetails && (!isSignUp || (!!name.trim() && !!mobile.trim() && password.length >= 8 && termsAccepted));
+
+  const openPolicy = async (policy: "terms" | "privacy") => {
+    setLinkError(null);
+    try {
+      await Linking.openURL("https://terms-and-privacy.nexusgit.info/websites/phun-party/" + policy);
+    } catch {
+      setLinkError("The link could not open. Please try again.");
+    }
+  };
+
+  const submit = () => {
+    if (busy || !canSubmit) return;
+    if (isSignUp) handleSignUp(termsAccepted);
+    else handleLogin();
+  };
+
   return (
-    <DismissKeyboardWrapper style={layoutStyles.screen}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "position"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : -185}
-        style={{ flex: 1 }}
-      >
-        <ScrollView
-          contentContainerStyle={{
-            flexGrow: 1,
-            paddingHorizontal: 16,
-            paddingVertical: 105,
-          }}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={{ alignItems: "center", marginBottom: 48 }}>
-            <Text
-              style={[typography.h1, { textAlign: "center", marginBottom: 8 }]}
-            >
-              Welcome to{"\n"}
-              <Text style={{ color: colors.peach[400] }}>PhunParty</Text>
-            </Text>
-            <Text style={[typography.bodyMuted, { textAlign: "center" }]}>
-              {isVerifyingEmail
-                ? "Verify your email to finish signing up"
-                : isSignUp
-                ? "Create your account to start playing"
-                : "Sign in to continue your journey"}
-            </Text>
+    <AuthScreen
+      title={isVerifyingEmail ? "Check your\ninbox." : isSignUp ? "Your name.\nYour game." : "Good to\nsee you."}
+      description={isVerifyingEmail
+        ? "One quick check, then you’re in."
+        : isSignUp
+          ? "Make an account and join your people."
+          : "Sign in for your next round of friendly competition."}
+      tone={isVerifyingEmail ? "lavender" : isSignUp ? "lime" : "pink"}
+      busy={busy}
+    >
+      {isVerifyingEmail ? (
+        <>
+          <View style={styles.emailBadge}>
+            <Ionicons name="mail-open-outline" size={34} color={partyColors.ink} />
+            <Text selectable style={styles.emailAddress}>{email}</Text>
           </View>
-
-          {/* Form Card */}
-          <AppCard style={{ marginBottom: 0 }}>
-            <Text
-              style={[typography.h2, { marginBottom: 24, textAlign: "center" }]}
-            >
-              {isVerifyingEmail
-                ? "Check Your Email"
-                : isSignUp
-                  ? "Create Account"
-                  : "Welcome Back"}
-            </Text>
-
-            {isVerifyingEmail ? (
-              <>
-                <Text
-                  style={[
-                    typography.bodyMuted,
-                    { textAlign: "center", marginBottom: 16 },
-                  ]}
+          <Text style={[authStyles.body, styles.verificationCopy]}>
+            Tap the verification button in the email we sent you. Check your spam folder if it hasn’t arrived.
+          </Text>
+          <AuthNotice message={error || linkError} />
+          <AuthNotice message={notice} kind="success" />
+          <PartyButton
+            title={resending ? "Sending email…" : "Resend verification email"}
+            onPress={handleResendVerification}
+            disabled={busy}
+            loading={resending}
+            icon={<Ionicons name="mail-outline" size={21} color={partyColors.ink} />}
+          />
+          <PartyButton title="Back to sign in" variant="text" disabled={busy} onPress={toggleForm} />
+        </>
+      ) : (
+        <>
+          <Text accessibilityRole="header" style={authStyles.sectionTitle}>
+            {isSignUp ? "Create your account" : "Sign in"}
+          </Text>
+          {isSignUp ? (
+            <>
+              <AppInput
+                label="Player name"
+                value={name}
+                onChangeText={setName}
+                placeholder="What should we call you?"
+                autoCapitalize="words"
+                textContentType="name"
+                autoComplete="name"
+                autoCorrect={false}
+                editable={!busy}
+                style={authStyles.field}
+              />
+              <AppInput
+                label="Mobile number"
+                value={mobile}
+                onChangeText={setMobile}
+                placeholder="Your mobile number"
+                keyboardType="phone-pad"
+                textContentType="telephoneNumber"
+                autoComplete="tel"
+                editable={!busy}
+                style={authStyles.field}
+              />
+            </>
+          ) : null}
+          <AppInput
+            label="Email address"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="you@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="emailAddress"
+            autoComplete="email"
+            editable={!busy}
+            style={authStyles.field}
+          />
+          <AppInput
+            label="Password"
+            value={password}
+            onChangeText={setPassword}
+            placeholder={isSignUp ? "Create a password" : "Enter your password"}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+            textContentType={isSignUp ? "newPassword" : "password"}
+            autoComplete={isSignUp ? "new-password" : "current-password"}
+            editable={!busy}
+            returnKeyType="go"
+            onSubmitEditing={submit}
+            style={authStyles.field}
+          />
+          {isSignUp ? (
+            <>
+              <Text style={authStyles.helper}>Use at least 8 characters.</Text>
+              <View style={styles.termsRow}>
+                <Pressable
+                  accessibilityRole="checkbox"
+                  accessibilityLabel="I agree to the Terms of Service and Privacy Policy"
+                  accessibilityState={{ checked: termsAccepted, disabled: busy }}
+                  disabled={busy}
+                  onPress={() => setTermsAccepted(!termsAccepted)}
+                  style={styles.checkboxTarget}
                 >
-                  We sent a verification button to {email}. Tap it to verify
-                  your email and continue.
-                </Text>
-
-                <Selector onPress={handleResendVerification}>
-                  <AppButton
-                    title="Resend Verification Email"
-                    onPress={() => {}}
-                    variant="primary"
-                    style={{ marginBottom: 16 }}
-                    icon={
-                      <MaterialIcons
-                        name="mark-email-read"
-                        size={20}
-                        color={colors.ink[900]}
-                      />
-                    }
-                  />
-                </Selector>
-              </>
-            ) : (
-              <>
-            {/* Sign Up Fields */}
-            {isSignUp && (
-              <>
-                <AppInput
-                  label="Name"
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="Enter your name"
-                  style={{ marginBottom: 16 }}
-                />
-
-                <AppInput
-                  label="Mobile"
-                  value={mobile}
-                  onChangeText={setMobile}
-                  placeholder="Enter your mobile number"
-                  keyboardType="phone-pad"
-                  style={{ marginBottom: 16 }}
-                />
-              </>
-            )}
-
-            {/* Common Fields */}
-            <AppInput
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Enter your email"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={{ marginBottom: 16 }}
-            />
-            <AppInput
-              label="Password"
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Enter your password"
-              autoCapitalize="none"
-              secureTextEntry
-              style={{ marginBottom: 24 }}
-            />
-
-            {/* Accept TOS and PP check box button with links to https://terms-and-privacy.nexusgit.info/desktop-apps/terms */}
-            {isSignUp && (
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  marginBottom: 24,
-                }}
-              >
-                <TouchableOpacity
-                  style={{
-                    width: 24,
-                    height: 24,
-                    borderWidth: 2,
-                    borderColor: colors.tea[400],
-                    borderRadius: 6,
-                    marginRight: 12,
-                    backgroundColor: colors.ink[900],
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                  onPress={() => {
-                    // Toggle termsAccepted state
-                    setTermsAccepted(termsAccepted === true ? false : true);
-                  }}
-                >
-                  {termsAccepted && (
-                    <MaterialIcons
-                      name="check"
-                      size={20}
-                      color={colors.tea[400]}
-                    />
-                  )}
-                </TouchableOpacity>
-                <Text style={[typography.small, { flex: 1 }]}>
+                  <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+                    {termsAccepted ? <Ionicons name="checkmark" size={21} color={partyColors.ink} /> : null}
+                  </View>
+                </Pressable>
+                <Text style={styles.termsText}>
                   I agree to the{" "}
-                  <Text
-                    onPress={() => {
-                      // Open links in browser
-                      Linking.openURL(
-                        "https://terms-and-privacy.nexusgit.info/websites/phun-party/terms"
-                      );
-                    }}
-                    style={{
-                      color: colors.tea[400],
-                      textDecorationLine: "underline",
-                    }}
-                  >
-                    Terms of Service
-                  </Text>{" "}
-                  and{" "}
-                  <Text
-                    onPress={() => {
-                      // Open links in browser
-                      Linking.openURL(
-                        "https://terms-and-privacy.nexusgit.info/websites/phun-party/privacy"
-                      );
-                    }}
-                    style={{
-                      color: colors.tea[400],
-                      textDecorationLine: "underline",
-                    }}
-                  >
-                    Privacy Policy
-                  </Text>
+                  <Text accessibilityRole="link" style={styles.policyLink} onPress={() => void openPolicy("terms")}>Terms of Service</Text>
+                  {" "}and{" "}
+                  <Text accessibilityRole="link" style={styles.policyLink} onPress={() => void openPolicy("privacy")}>Privacy Policy</Text>.
                 </Text>
               </View>
-            )}
-
-            {/* Action Buttons */}
-            <Selector
-              onPress={
-                isSignUp ? () => handleSignUp(termsAccepted) : handleLogin
-              }
-            >
-              <AppButton
-                title={isSignUp ? "Create Account" : "Sign In"}
-                onPress={() => {}} // This will be overridden by Selector
-                variant="primary"
-                style={{ marginBottom: 16 }}
-                icon={
-                  isSignUp ? (
-                    <MaterialIcons
-                      name="person-add"
-                      size={20}
-                      color={colors.ink[900]}
-                    />
-                  ) : (
-                    <MaterialIcons
-                      name="login"
-                      size={20}
-                      color={colors.ink[900]}
-                    />
-                  )
-                }
-              />
-            </Selector>
-
-            {/* Reset Password (Login only) */}
-            {!isSignUp && (
-              <Selector onPress={handleReset}>
-                <TouchableOpacity style={{ marginBottom: 16 }}>
-                  <Text
-                    style={[
-                      typography.small,
-                      {
-                        textAlign: "center",
-                        color: colors.tea[400],
-                        textDecorationLine: "underline",
-                      },
-                    ]}
-                  >
-                    Forgot your password?
-                  </Text>
-                </TouchableOpacity>
-              </Selector>
-            )}
-              </>
-            )}
-
-            {/* Toggle Form */}
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "center",
-                alignItems: "center",
-                marginTop: 8,
-              }}
-            >
-              <Text style={[typography.small, { marginRight: 8 }]}>
-                {isSignUp
-                  ? "Already have an account?"
-                  : "Don't have an account?"}
-              </Text>
-              <Selector onPress={toggleForm}>
-                <TouchableOpacity>
-                  <Text
-                    style={[
-                      typography.small,
-                      {
-                        color: colors.tea[400],
-                        fontWeight: "600",
-                      },
-                    ]}
-                  >
-                    {isSignUp ? "Sign In" : "Sign Up"}
-                  </Text>
-                </TouchableOpacity>
-              </Selector>
-            </View>
-          </AppCard>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </DismissKeyboardWrapper>
+            </>
+          ) : null}
+          <AuthNotice message={error || linkError} />
+          <AuthNotice message={notice} kind="success" />
+          <PartyButton
+            title={loading ? (isSignUp ? "Creating your account…" : "Signing in…") : isSignUp ? "Create account" : "Sign in"}
+            onPress={submit}
+            disabled={busy || !canSubmit}
+            loading={loading}
+            icon={<Ionicons name="arrow-forward" size={21} color={partyColors.ink} />}
+            style={authStyles.primary}
+          />
+          {!isSignUp ? (
+            <PartyButton title="Forgot your password?" onPress={handleReset} variant="text" disabled={busy} />
+          ) : null}
+          <View style={authStyles.switchArea}>
+            <Text style={authStyles.switchPrompt}>{isSignUp ? "Already part of the party?" : "New around here?"}</Text>
+            <PartyButton
+              title={isSignUp ? "Sign in instead" : "Create an account"}
+              onPress={toggleForm}
+              variant="secondary"
+              disabled={busy}
+            />
+          </View>
+        </>
+      )}
+    </AuthScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  termsRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginBottom: 20 },
+  checkboxTarget: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  checkbox: { width: 27, height: 27, borderWidth: 2, borderColor: partyColors.ink, borderRadius: 7, backgroundColor: partyColors.white, justifyContent: "center", alignItems: "center" },
+  checkboxChecked: { backgroundColor: partyColors.lime },
+  termsText: { flex: 1, color: partyColors.muted, fontSize: 14, lineHeight: 22, paddingTop: 10 },
+  policyLink: { color: partyColors.purple, textDecorationLine: "underline", fontWeight: "700" },
+  emailBadge: { borderWidth: 2, borderColor: partyColors.border, borderRadius: 16, padding: 20, backgroundColor: partyColors.white, alignItems: "flex-start", gap: 15, marginBottom: 20 },
+  emailAddress: { color: partyColors.ink, fontWeight: "800", fontSize: 18, lineHeight: 26 },
+  verificationCopy: { marginBottom: 24 },
+});

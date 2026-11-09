@@ -1,12 +1,15 @@
-import { colors, typography } from "@/assets/theme";
+import { partyColors, partyFonts } from "@/assets/theme/party";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   FlatList,
   Modal,
   Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
   Text,
   TouchableOpacity,
   View,
@@ -14,7 +17,7 @@ import {
 import { AvatarOption, PhotoService } from "../assets/api/photoService";
 import { UserContext } from "../assets/authentication-storage/authContext";
 import { useToast } from "../assets/components/ToastContext";
-import AuthenticatedImage from "./AuthenticatedImage";
+import { AuthenticatedImage } from "./AuthenticatedImage";
 
 interface PhotoUploadActionSheetProps {
   isVisible: boolean;
@@ -25,8 +28,6 @@ interface PhotoUploadActionSheetProps {
   title?: string;
 }
 
-const { width } = Dimensions.get("window");
-
 export default function PhotoUploadActionSheet({
   isVisible,
   onClose,
@@ -35,6 +36,9 @@ export default function PhotoUploadActionSheet({
   hasCurrentPhoto = false,
   title = "Choose Profile Photo",
 }: PhotoUploadActionSheetProps) {
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const avatarSize = (Math.min(width, 560) - 64) / 3;
   const [showAvatars, setShowAvatars] = useState(false);
   const [availableAvatars, setAvailableAvatars] = useState<AvatarOption[]>([]);
   const [isLoadingAvatars, setIsLoadingAvatars] = useState(false);
@@ -45,21 +49,25 @@ export default function PhotoUploadActionSheet({
 
   const user = userContext?.user;
 
-  useEffect(() => {
-    if (isVisible && showAvatars && availableAvatars.length === 0) {
-      loadAvatars();
-    }
-  }, [isVisible, showAvatars, user?.player_id]);
-
   const loadAvatars = async () => {
     setIsLoadingAvatars(true);
     try {
       const avatars = await PhotoService.getAvailableAvatars();
       setAvailableAvatars(avatars);
-    } catch (error) {
+    } catch {
       showToast("Failed to load avatars", "error");
     }
     setIsLoadingAvatars(false);
+  };
+
+  const openAvatars = () => {
+    setShowAvatars(true);
+    if (availableAvatars.length === 0) void loadAvatars();
+  };
+
+  const closeSheet = () => {
+    setShowAvatars(false);
+    onClose();
   };
 
   const takePhoto = async () => {
@@ -87,7 +95,7 @@ export default function PhotoUploadActionSheet({
           showToast("Failed to upload photo", "error");
         }
       }
-    } catch (error) {
+    } catch {
       showToast("Camera error occurred", "error");
     }
     setIsUploading(false);
@@ -114,7 +122,7 @@ export default function PhotoUploadActionSheet({
           showToast("Failed to upload photo", "error");
         }
       }
-    } catch (error) {
+    } catch {
       showToast("Gallery error occurred", "error");
     }
     setIsUploading(false);
@@ -144,292 +152,64 @@ export default function PhotoUploadActionSheet({
       } else {
         showToast("Failed to set avatar", "error");
       }
-    } catch (error) {
+    } catch {
       showToast("Failed to set avatar", "error");
     }
     setIsUploading(false);
   };
 
-  const ActionButton = ({
-    icon,
-    title,
-    onPress,
-    color = colors.tea[500],
-    disabled = false,
-  }: {
-    icon: keyof typeof MaterialIcons.glyphMap;
-    title: string;
-    onPress: () => void;
-    color?: string;
-    disabled?: boolean;
-  }) => (
-    <TouchableOpacity
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        borderRadius: 12,
-        backgroundColor: disabled ? colors.ink[700] : colors.ink[800],
-        marginBottom: 12,
-        opacity: disabled ? 0.6 : 1,
-      }}
-      onPress={onPress}
-      disabled={disabled}
-    >
-      <View
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: 20,
-          backgroundColor: color,
-          justifyContent: "center",
-          alignItems: "center",
-          marginRight: 16,
-        }}
-      >
-        {disabled && isUploading ? (
-          <ActivityIndicator size="small" color={colors.ink[900]} />
-        ) : (
-          <MaterialIcons name={icon} size={20} color={colors.ink[900]} />
-        )}
-      </View>
-      <Text style={[typography.body, { color: colors.stone[100], flex: 1 }]}>
-        {title}
-      </Text>
-      <MaterialIcons name="chevron-right" size={20} color={colors.stone[400]} />
-    </TouchableOpacity>
-  );
-
-  const AvatarOption = ({ avatar }: { avatar: AvatarOption }) => (
-    <TouchableOpacity
-      style={{
-        width: (width - 80) / 3,
-        aspectRatio: 1,
-        marginBottom: 12,
-        borderRadius: 12,
-        overflow: "hidden",
-        backgroundColor: colors.ink[800],
-        opacity: isUploading ? 0.6 : 1,
-      }}
-      onPress={() => selectAvatar(avatar)}
-      disabled={isUploading}
-    >
-      <AuthenticatedImage
-        photoUrl={avatar.url}
-        style={{ width: "100%", height: "100%" }}
-        resizeMode="cover"
-      />
-      <View
-        style={{
-          position: "absolute",
-          bottom: 4,
-          left: 4,
-          right: 4,
-          backgroundColor: "rgba(0,0,0,0.7)",
-          borderRadius: 4,
-          paddingHorizontal: 4,
-          paddingVertical: 2,
-        }}
-      >
-        <Text
-          style={[
-            typography.caption,
-            { color: colors.stone[100], textAlign: "center", fontSize: 10 },
-          ]}
-          numberOfLines={1}
-        >
-          {avatar.name}
-        </Text>
-      </View>
+  const renderAction = (label: string, icon: keyof typeof MaterialIcons.glyphMap, action: () => void, danger = false) => (
+    <TouchableOpacity accessibilityRole="button" onPress={action} disabled={isUploading} style={[styles.action, isUploading && styles.disabled]}>
+      <View style={[styles.actionIcon, danger && styles.dangerIcon]}><MaterialIcons name={icon} size={23} color={danger ? partyColors.danger : partyColors.ink} /></View>
+      <Text style={[styles.actionLabel, danger && styles.dangerLabel]}>{label}</Text>
+      <MaterialIcons name="chevron-right" size={23} color={partyColors.ink} />
     </TouchableOpacity>
   );
 
   return (
-    <Modal
-      visible={isVisible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)" }}>
-        <Pressable style={{ flex: 1 }} onPress={onClose} />
-
-        <View
-          style={{
-            backgroundColor: colors.ink[900],
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
-            paddingTop: 20,
-            paddingBottom: 40,
-            paddingHorizontal: 20,
-            maxHeight: "80%",
-          }}
-        >
-          {/* Header */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: 24,
-            }}
-          >
-            <Text style={[typography.h2, { color: colors.stone[100] }]}>
-              {showAvatars ? "Choose Avatar" : title}
-            </Text>
-            <TouchableOpacity onPress={onClose} disabled={isUploading}>
-              <MaterialIcons
-                name="close"
-                size={24}
-                color={isUploading ? colors.stone[950] : colors.stone[400]}
-              />
+    <Modal visible={isVisible} transparent animationType="slide" onRequestClose={closeSheet}>
+      <View style={styles.overlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} accessibilityRole="button" accessibilityLabel="Close photo options" />
+        <View style={[styles.sheet, { maxHeight: height - insets.top - 24, paddingBottom: insets.bottom + 20 }]}>
+          <View style={styles.header}>
+            <Text accessibilityRole="header" style={styles.title}>{showAvatars ? "Pick your avatar" : title}</Text>
+            <TouchableOpacity onPress={closeSheet} disabled={isUploading} accessibilityRole="button" accessibilityLabel="Close photo options" style={styles.closeButton}>
+              <MaterialIcons name="close" size={23} color={partyColors.ink} />
             </TouchableOpacity>
           </View>
-
           {!showAvatars ? (
-            /* Main Options */
-            <View>
-              <ActionButton
-                icon="camera-alt"
-                title="Take Photo"
-                onPress={takePhoto}
-                color={colors.tea[500]}
-                disabled={isUploading}
-              />
-
-              <ActionButton
-                icon="photo-library"
-                title="Choose from Gallery"
-                onPress={selectFromGallery}
-                color={colors.peach[500]}
-                disabled={isUploading}
-              />
-
-              <ActionButton
-                icon="face"
-                title="Choose Avatar"
-                onPress={() => setShowAvatars(true)}
-                color={colors.tea[400]}
-                disabled={isUploading}
-              />
-
-              {hasCurrentPhoto && (
-                <ActionButton
-                  icon="delete"
-                  title="Delete Photo"
-                  onPress={deletePhoto}
-                  color={colors.red[500]}
-                  disabled={isUploading}
-                />
-              )}
-
-              {isUploading && (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    paddingTop: 16,
-                  }}
-                >
-                  <ActivityIndicator size="small" color={colors.tea[500]} />
-                  <Text
-                    style={[
-                      typography.small,
-                      { color: colors.stone[400], marginLeft: 8 },
-                    ]}
-                  >
-                    Uploading...
-                  </Text>
-                </View>
-              )}
-            </View>
+            <ScrollView style={styles.optionsScroll} contentContainerStyle={styles.options}>
+              {renderAction("Take a photo", "camera-alt", takePhoto)}
+              {renderAction("Choose from gallery", "photo-library", selectFromGallery)}
+              {renderAction("Choose an avatar", "face", openAvatars)}
+              {hasCurrentPhoto && renderAction("Delete photo", "delete-outline", deletePhoto, true)}
+              {isUploading && <View style={styles.loading}><ActivityIndicator color={partyColors.purple} /><Text style={styles.loadingText}>Uploading photo...</Text></View>}
+            </ScrollView>
           ) : (
-            /* Avatar Selection */
-            <View>
-              <TouchableOpacity
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  marginBottom: 20,
-                }}
-                onPress={() => setShowAvatars(false)}
-                disabled={isUploading}
-              >
-                <MaterialIcons
-                  name="arrow-back"
-                  size={20}
-                  color={isUploading ? colors.stone[950] : colors.stone[400]}
-                  style={{ marginRight: 8 }}
-                />
-                <Text
-                  style={[
-                    typography.small,
-                    {
-                      color: isUploading
-                        ? colors.stone[950]
-                        : colors.stone[400],
-                    },
-                  ]}
-                >
-                  Back to options
-                </Text>
+            <View style={styles.avatarContent}>
+              <TouchableOpacity onPress={() => setShowAvatars(false)} disabled={isUploading} accessibilityRole="button" style={styles.backButton}>
+                <MaterialIcons name="arrow-back" size={21} color={partyColors.ink} /><Text style={styles.backLabel}>Back to photo options</Text>
               </TouchableOpacity>
-
               {isLoadingAvatars ? (
-                <View
-                  style={{
-                    paddingVertical: 40,
-                    alignItems: "center",
-                  }}
-                >
-                  <ActivityIndicator size="large" color={colors.tea[500]} />
-                  <Text
-                    style={[
-                      typography.body,
-                      { color: colors.stone[400], marginTop: 16 },
-                    ]}
-                  >
-                    Loading avatars...
-                  </Text>
-                </View>
+                <View style={styles.loading}><ActivityIndicator color={partyColors.purple} /><Text style={styles.loadingText}>Loading avatars...</Text></View>
               ) : (
                 <FlatList
+                  style={styles.avatarList}
                   data={availableAvatars}
-                  renderItem={({ item }) => <AvatarOption avatar={item} />}
                   keyExtractor={(item) => item.name}
                   numColumns={3}
-                  columnWrapperStyle={{ justifyContent: "space-between" }}
-                  showsVerticalScrollIndicator={false}
+                  columnWrapperStyle={styles.avatarRow}
+                  contentContainerStyle={styles.avatarGrid}
+                  ListEmptyComponent={<Text style={styles.emptyText}>No avatars are available right now. Try your camera or photo library.</Text>}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity onPress={() => selectAvatar(item)} disabled={isUploading} accessibilityRole="button" accessibilityLabel={`Use ${item.name} avatar`} style={[styles.avatar, { width: avatarSize }, isUploading && styles.disabled]}>
+                      <AuthenticatedImage photoUrl={item.url} style={{ width: "100%", aspectRatio: 1 }} resizeMode="cover" />
+                      <Text style={styles.avatarName}>{item.name}</Text>
+                    </TouchableOpacity>
+                  )}
                 />
               )}
-
-              {isUploading && (
-                <View
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: "rgba(0,0,0,0.7)",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    borderRadius: 12,
-                  }}
-                >
-                  <ActivityIndicator size="large" color={colors.tea[500]} />
-                  <Text
-                    style={[
-                      typography.body,
-                      { color: colors.stone[100], marginTop: 16 },
-                    ]}
-                  >
-                    Setting avatar...
-                  </Text>
-                </View>
-              )}
+              {isUploading && <View style={styles.loading}><ActivityIndicator color={partyColors.purple} /><Text style={styles.loadingText}>Setting your avatar...</Text></View>}
             </View>
           )}
         </View>
@@ -437,3 +217,30 @@ export default function PhotoUploadActionSheet({
     </Modal>
   );
 }
+
+const styles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(38, 33, 48, 0.65)", justifyContent: "flex-end" },
+  sheet: { backgroundColor: partyColors.cream, width: "100%", maxWidth: 560, alignSelf: "center", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 2, borderColor: partyColors.border, paddingHorizontal: 20, paddingTop: 20 },
+  header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 20 },
+  title: { flex: 1, minWidth: 0, fontFamily: partyFonts.display, fontSize: 24, lineHeight: 31, color: partyColors.ink },
+  closeButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center", backgroundColor: partyColors.white, borderWidth: 2, borderColor: partyColors.border, borderRadius: 16 },
+  optionsScroll: { flexGrow: 0 },
+  options: { gap: 12 },
+  action: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1.5, borderColor: partyColors.border, borderRadius: 14, backgroundColor: partyColors.white, padding: 14 },
+  actionIcon: { width: 40, height: 40, borderRadius: 13, backgroundColor: partyColors.lime, alignItems: "center", justifyContent: "center" },
+  dangerIcon: { backgroundColor: partyColors.dangerSoft },
+  actionLabel: { flex: 1, color: partyColors.ink, fontSize: 16, lineHeight: 23, fontWeight: "700" },
+  dangerLabel: { color: partyColors.danger },
+  disabled: { opacity: 0.6 },
+  loading: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12, padding: 20 },
+  loadingText: { color: partyColors.muted, fontSize: 14, lineHeight: 21, flexShrink: 1 },
+  avatarContent: { flexShrink: 1 },
+  backButton: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 48, marginBottom: 12 },
+  backLabel: { flex: 1, color: partyColors.ink, fontSize: 14, lineHeight: 21, fontWeight: "700" },
+  avatarList: { flexGrow: 0, flexShrink: 1 },
+  avatarGrid: { gap: 12 },
+  avatarRow: { justifyContent: "space-between", gap: 10 },
+  avatar: { borderWidth: 1.5, borderColor: partyColors.border, borderRadius: 14, backgroundColor: partyColors.white, overflow: "hidden" },
+  avatarName: { color: partyColors.ink, fontSize: 11, lineHeight: 16, textAlign: "center", paddingHorizontal: 4, paddingVertical: 6 },
+  emptyText: { color: partyColors.muted, fontSize: 15, lineHeight: 23, paddingVertical: 20 },
+});

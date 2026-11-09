@@ -1,7 +1,7 @@
 import { gameWebSocket } from "@/assets/api/gameWebSocketService";
 import { UserProvider } from "@/assets/authentication-storage/authContext";
 import { ToastProvider } from "@/assets/components/ToastContext";
-import { ThemeProvider, colors } from "@/assets/theme";
+import { ThemeProvider, partyColors } from "@/assets/theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
@@ -10,12 +10,14 @@ import { useEffect, useRef } from "react";
 import { AppState, AppStateStatus, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import PresenceMonitor from "@/components/PresenceMonitor";
+import { StatusBar } from "expo-status-bar";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
+    ArchivoBlack: require("../assets/fonts/ArchivoBlack-Regular.ttf"),
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
     ...FontAwesome.font,
   });
@@ -90,11 +92,12 @@ export default function RootLayout() {
         <ToastProvider>
           <UserProvider>
             <PresenceMonitor />
-            <View style={{ flex: 1, backgroundColor: colors.ink[900] }}>
+            <StatusBar style="dark" />
+            <View style={{ flex: 1, backgroundColor: partyColors.cream }}>
               <Stack
                 screenOptions={{
                   headerShown: false,
-                  contentStyle: { backgroundColor: colors.ink[900] },
+                  contentStyle: { backgroundColor: partyColors.cream },
                 }}
               >
                 <Stack.Screen name="index" options={{ headerShown: false }} />

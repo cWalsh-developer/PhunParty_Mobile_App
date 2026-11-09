@@ -1,12 +1,11 @@
 import dataAccess from "@/databaseAccess/dataAccess";
-import { Camera } from "expo-camera";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from "react-native";
 import { PlayerInfo } from "../assets/api/gameWebSocketService";
-import { colors } from "../assets/theme/colors";
+import { partyColors } from "../assets/theme/party";
 import { GameContainer } from "../components/GameContainer";
 import QRScanner from "../components/QRScanner";
 
@@ -17,8 +16,7 @@ export default function GameSession() {
   const [hasJoinedGame, setHasJoinedGame] = useState(false);
   const [sessionCode, setSessionCode] = useState<string | null>(null);
   const [playerInfo, setPlayerInfo] = useState<PlayerInfo | null>(null);
-  const [showScanner, setShowScanner] = useState(true);
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [showScanner, setShowScanner] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [hasLeftSession, setHasLeftSession] = useState(false);
@@ -31,7 +29,6 @@ export default function GameSession() {
 
   useEffect(() => {
     if (!initialized) {
-      setupCamera();
       loadPlayerInfo();
       setInitialized(true);
     }
@@ -61,11 +58,6 @@ export default function GameSession() {
     hasJoinedGame,
     hasLeftSession,
   ]);
-
-  const setupCamera = async () => {
-    const { status } = await Camera.requestCameraPermissionsAsync();
-    setHasPermission(status === "granted");
-  };
 
   const loadPlayerInfo = async () => {
     try {
@@ -165,22 +157,22 @@ export default function GameSession() {
 
   if (!playerInfo) {
     return (
-      <View style={styles.container}>
-        <StatusBar style="light" />
+      <View style={[styles.container, styles.loading]}>
+        <StatusBar style="dark" />
+        <ActivityIndicator size="large" color={partyColors.purple} />
+        <Text style={styles.loadingText}>Getting you ready…</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
       <QRScanner
         userName={playerInfo.player_name}
         showCamera={showScanner}
         setShowCamera={setShowScanner}
         scanned={scanned}
         setScanned={setScanned}
-        hasPermission={hasPermission}
         handleBarCodeScanned={({ data }) => {
           setScanned(false);
           setShowScanner(false);
@@ -202,6 +194,8 @@ export default function GameSession() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.ink[900],
+    backgroundColor: partyColors.cream,
   },
+  loading: { alignItems: "center", justifyContent: "center", gap: 16 },
+  loadingText: { color: partyColors.muted, fontSize: 16 },
 });

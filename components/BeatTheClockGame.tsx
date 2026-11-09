@@ -1,10 +1,14 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import {
@@ -14,14 +18,12 @@ import {
   GameQuestion,
   gameWebSocket,
 } from "../assets/api/gameWebSocketService";
-import { AppButton } from "../assets/components/AppButton";
-import { AppCard } from "../assets/components/AppCard";
+import { partyColors, partyFonts } from "@/assets/theme/party";
+import { PartyButton } from "@/components/party/party-button";
 import {
   hasImmediateFairPlayWindowViolation,
   useFairPlayMonitor,
 } from "../assets/hooks/useFairPlayMonitor";
-import { colors } from "../assets/theme/colors";
-import { typography } from "../assets/theme/typography";
 
 interface BeatTheClockGameProps {
   sessionCode: string;
@@ -75,6 +77,7 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
   onFairPlayFocusReturned,
   onError,
 }) => {
+  const { width, fontScale } = useWindowDimensions();
   const [currentQuestion, setCurrentQuestion] = useState<GameQuestion | null>(
     null,
   );
@@ -140,10 +143,8 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
 
   const renderHeader = () => (
     <View style={styles.header}>
-      <Text style={styles.headerTitle}>Beat the Clock</Text>
-      {timeRemaining > 0 ? (
-        <Text style={styles.headerTimer}>{formatTime(timeRemaining)}</Text>
-      ) : null}
+      <Text accessibilityRole="header" style={styles.headerTitle}>Beat the clock</Text>
+      <Text style={styles.sessionText}>Room {sessionCode}</Text>
     </View>
   );
 
@@ -165,15 +166,17 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
 
     return (
       <View
+        accessibilityLiveRegion="polite"
         style={[
           styles.lockedBanner,
+          isLocked && styles.fairPlayLocked,
           isWarning && !isLocked ? styles.warningBanner : null,
         ]}
       >
         <MaterialIcons
           name={isLocked ? "lock" : "verified-user"}
           size={18}
-          color={isLocked ? colors.red[500] : colors.tea[500]}
+          color={isLocked ? partyColors.danger : partyColors.ink}
         />
         <Text style={styles.lockedText}>{message}</Text>
       </View>
@@ -365,97 +368,152 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
     setHasSubmitted(true);
   };
 
+  const renderScreen = (content: React.ReactNode) => (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
+        {content}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+
   if (!currentQuestion) {
-    return (
-      <View style={styles.container}>
+    return renderScreen(
+      <>
         {renderHeader()}
-        <AppCard style={styles.waitingCard}>
-          <MaterialIcons name="timer" size={48} color={colors.tea[500]} />
-          <Text style={styles.title}>Get ready</Text>
-          <Text style={styles.subtitle}>Waiting for your first question...</Text>
-          <Text style={styles.sessionText}>Session: {sessionCode}</Text>
-        </AppCard>
-      </View>
+        <View style={styles.waitingCard} accessibilityLiveRegion="polite">
+          <View style={styles.waitingIcon}>
+            <MaterialIcons name="timer" size={38} color={partyColors.ink} />
+          </View>
+          <Text accessibilityRole="header" style={styles.title}>Ready for a race?</Text>
+          <Text style={styles.subtitle}>
+            Your first question is on its way. Keep this screen open.
+          </Text>
+        </View>
+      </>,
     );
   }
 
-  return (
-    <View style={styles.container}>
+  const useSingleColumn =
+    width < 360 || fontScale >= 1.25 || options.some((option) => option.length > 54);
+  const timeIsUp = Boolean(endsAt) && timeRemaining <= 0 && hasSubmitted;
+  const selectedAnswerIndex = options.indexOf(selectedAnswer);
+
+  return renderScreen(
+    <View style={styles.gameContent}>
       {renderHeader()}
       <View style={styles.statsRow}>
         <View style={styles.statPill}>
-          <MaterialIcons name="timer" size={18} color={colors.tea[500]} />
-          <Text style={styles.statText}>{formatTime(timeRemaining)}</Text>
+          <MaterialIcons name="stars" size={24} color={partyColors.ink} />
+          <View style={styles.statContent}>
+            <Text style={styles.statLabel}>Score</Text>
+            <Text style={styles.statText}>{score}</Text>
+          </View>
         </View>
-        <View style={styles.statPill}>
-          <MaterialIcons name="stars" size={18} color={colors.peach[500]} />
-          <Text style={styles.statText}>{score} correct</Text>
+        <View style={[styles.statPill, styles.accuracyPill]}>
+          <MaterialIcons name="check-circle-outline" size={24} color={partyColors.ink} />
+          <View style={styles.statContent}>
+            <Text style={styles.statLabel}>Correct / answered</Text>
+            <Text style={styles.statText}>{correctCount} / {answeredCount}</Text>
+          </View>
         </View>
       </View>
 
-      <AppCard style={styles.questionCard}>
-        <Text style={styles.questionText}>{currentQuestion.question}</Text>
-        <Text style={styles.progressText}>
-          {correctCount}/{answeredCount} correct
+      <View style={styles.questionCard}>
+        <View style={styles.questionHeader}>
+          <View style={styles.questionMode}>
+            <MaterialIcons name="bolt" size={19} color={partyColors.lime} />
+            <Text style={styles.questionModeText}>Keep it moving</Text>
+          </View>
+          <View
+            style={[styles.timerPill, timeIsUp && styles.timerExpired]}
+            accessible
+            accessibilityLabel={endsAt ? `${timeRemaining} seconds remaining` : "Syncing the timer"}
+          >
+            <MaterialIcons name="timer" size={19} color={partyColors.ink} />
+            <Text style={styles.timerText}>
+              {endsAt ? formatTime(timeRemaining) : "Syncing"}
+            </Text>
+          </View>
+        </View>
+        <Text accessibilityRole="header" style={styles.questionText}>
+          {currentQuestion.question}
         </Text>
-      </AppCard>
+      </View>
 
       {renderFairPlayStatus()}
 
       {lastResult !== null && (
         <View
-          style={[
-            styles.resultBanner,
-            lastResult ? styles.correctBanner : styles.incorrectBanner,
-          ]}
+          accessibilityLiveRegion="polite"
+          style={[styles.resultBanner, lastResult ? styles.correctBanner : styles.incorrectBanner]}
         >
           <MaterialIcons
             name={lastResult ? "check-circle" : "cancel"}
-            size={20}
-            color={lastResult ? colors.tea[500] : colors.red[500]}
+            size={22}
+            color={lastResult ? partyColors.ink : partyColors.danger}
           />
-          <Text
-            style={[
-              styles.resultText,
-              lastResult ? styles.correctText : styles.incorrectText,
-            ]}
-          >
-            {lastResult ? "Correct" : "Not quite"}
-          </Text>
+          <Text style={styles.resultText}>{lastResult ? "Correct!" : "Not quite."}</Text>
         </View>
       )}
 
-      {isLocked && (
-        <View style={styles.lockedBanner}>
-          <MaterialIcons name="lock" size={18} color={colors.red[500]} />
-          <Text style={styles.lockedText}>
-            Fair Play restriction active for this question.
-          </Text>
-        </View>
-      )}
+      <Text style={styles.answerHint}>
+        {isLocked
+          ? "Your answers are locked for this question."
+          : timeIsUp
+            ? "Time's up. Look at the big screen for the results."
+            : hasSubmitted
+              ? "Answer submitted. Your next question is on its way."
+              : isTextInput
+                ? "Type your answer, then lock it in."
+                : "Pick your answer, then lock it in."}
+      </Text>
 
       {isTextInput ? (
-        <TextInput
-          style={styles.textInput}
-          value={selectedAnswer}
-          onChangeText={setSelectedAnswer}
-          placeholder="Type your answer"
-          placeholderTextColor={colors.stone[400]}
-          editable={!hasSubmitted && !isLocked}
-          autoCapitalize="none"
-          autoCorrect
-          returnKeyType="done"
-          onSubmitEditing={submitAnswer}
-        />
+        <View style={styles.textAnswerContainer}>
+          <Text style={styles.inputLabel}>Your answer</Text>
+          <TextInput
+            accessibilityLabel="Your answer"
+            accessibilityHint="Type your answer, then choose Lock it in."
+            style={[styles.textInput, (hasSubmitted || isLocked) && styles.disabledOption]}
+            value={selectedAnswer}
+            onChangeText={setSelectedAnswer}
+            placeholder="Type your answer"
+            placeholderTextColor={partyColors.muted}
+            editable={!hasSubmitted && !isLocked}
+            autoCapitalize="none"
+            autoCorrect
+            returnKeyType="done"
+            onSubmitEditing={submitAnswer}
+          />
+        </View>
       ) : (
-        <View style={styles.optionsContainer}>
+        <View
+          style={styles.optionsContainer}
+          accessibilityRole="radiogroup"
+          accessibilityLabel="Answer choices"
+        >
           {options.map((option, index) => {
             const isSelected = selectedAnswer === option;
             return (
               <TouchableOpacity
                 key={`${currentQuestion.question_id}-${index}-${option}`}
+                accessibilityRole="radio"
+                aria-checked={isSelected}
+                aria-disabled={hasSubmitted || isLocked}
+                accessibilityLabel={`${String.fromCharCode(65 + index)}. ${option}`}
+                accessibilityHint="Select this answer, then choose Lock it in."
+                accessibilityState={{ checked: isSelected, disabled: hasSubmitted || isLocked }}
                 style={[
                   styles.optionButton,
+                  useSingleColumn && styles.optionFullWidth,
                   isSelected && styles.selectedOption,
                   (hasSubmitted || isLocked) && styles.disabledOption,
                 ]}
@@ -463,14 +521,15 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
                 disabled={hasSubmitted || isLocked}
                 activeOpacity={0.85}
               >
-                <Text
-                  style={[
-                    styles.optionText,
-                    isSelected && styles.selectedOptionText,
-                  ]}
-                >
-                  {String.fromCharCode(65 + index)}. {option}
-                </Text>
+                <View style={styles.optionTopRow}>
+                  <Text style={styles.optionLetter}>{String.fromCharCode(65 + index)}</Text>
+                  <MaterialIcons
+                    name={isSelected ? "check-circle-outline" : "radio-button-unchecked"}
+                    size={19}
+                    color={partyColors.ink}
+                  />
+                </View>
+                <Text style={styles.optionText}>{option}</Text>
               </TouchableOpacity>
             );
           })}
@@ -478,188 +537,106 @@ const BeatTheClockGame: React.FC<BeatTheClockGameProps> = ({
       )}
 
       <View style={styles.submitContainer}>
-        <AppButton
-          title={hasSubmitted ? "Submitted" : "Submit Answer"}
+        <View style={styles.selectionStatus} accessibilityLiveRegion="polite">
+          <MaterialIcons
+            name={timeIsUp ? "timer-off" : hasSubmitted ? "lock" : "check-circle-outline"}
+            size={21}
+            color={partyColors.ink}
+          />
+          <Text style={styles.selectionText}>
+            {timeIsUp
+              ? "Round finished."
+              : hasSubmitted
+                ? "Answer submitted."
+                : selectedAnswer.trim()
+                  ? selectedAnswerIndex >= 0 && !isTextInput
+                    ? `You picked ${String.fromCharCode(65 + selectedAnswerIndex)}. Lock it in to submit.`
+                    : "Answer ready. Lock it in to submit."
+                  : "Your next point starts here."}
+          </Text>
+        </View>
+        <PartyButton
+          title={timeIsUp ? "Time's up" : hasSubmitted ? "Answer submitted" : "Lock it in!"}
           onPress={submitAnswer}
-          variant="primary"
           disabled={!canSubmit}
+          icon={<MaterialIcons name={hasSubmitted ? "check" : "lock-outline"} size={21} color={partyColors.ink} />}
         />
       </View>
-    </View>
+    </View>,
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.ink[900],
-    padding: 16,
+  container: { flex: 1, backgroundColor: partyColors.cream },
+  scrollContent: {
+    flexGrow: 1, width: "100%", maxWidth: 760, alignSelf: "center",
+    padding: 16, paddingBottom: 32,
   },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 14,
-  },
-  headerTitle: {
-    ...typography.h3,
-    color: colors.white,
-    fontWeight: "800",
-  },
-  headerTimer: {
-    ...typography.body,
-    color: colors.tea[500],
-    fontWeight: "800",
-  },
+  gameContent: { gap: 16 },
+  header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  headerTitle: { fontFamily: partyFonts.display, color: partyColors.ink, fontSize: 21, lineHeight: 28 },
+  sessionText: { fontSize: 13, fontWeight: "700", color: partyColors.muted },
   waitingCard: {
-    alignItems: "center",
-    gap: 12,
-    marginTop: 56,
-    padding: 32,
+    alignItems: "center", gap: 16, marginVertical: 24, padding: 24,
+    backgroundColor: partyColors.lavender, borderColor: partyColors.border,
+    borderWidth: 2, borderBottomWidth: 5, borderRadius: 24,
   },
-  title: {
-    ...typography.h2,
-    color: colors.white,
-    textAlign: "center",
+  waitingIcon: {
+    width: 76, height: 76, borderRadius: 38, borderWidth: 2,
+    borderColor: partyColors.border, backgroundColor: partyColors.lime,
+    alignItems: "center", justifyContent: "center",
   },
-  subtitle: {
-    ...typography.body,
-    color: colors.stone[300],
-    textAlign: "center",
-  },
-  sessionText: {
-    ...typography.caption,
-    color: colors.stone[400],
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 14,
-  },
+  title: { fontFamily: partyFonts.display, fontSize: 25, lineHeight: 33, color: partyColors.ink, textAlign: "center" },
+  subtitle: { fontSize: 16, lineHeight: 24, color: partyColors.ink, textAlign: "center" },
+  statsRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   statPill: {
-    alignItems: "center",
-    backgroundColor: colors.ink[800],
-    borderColor: colors.ink[700],
-    borderRadius: 8,
-    borderWidth: 1,
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "center",
-    paddingVertical: 10,
+    flex: 1, minWidth: 130, flexDirection: "row", alignItems: "center", gap: 10,
+    padding: 14, backgroundColor: partyColors.lime, borderColor: partyColors.border,
+    borderWidth: 2, borderBottomWidth: 4, borderRadius: 14,
   },
-  statText: {
-    ...typography.body,
-    color: colors.white,
-    fontWeight: "700",
-  },
-  questionCard: {
-    marginBottom: 14,
-    padding: 22,
-  },
-  questionText: {
-    ...typography.h3,
-    color: colors.white,
-    lineHeight: 30,
-    textAlign: "center",
-  },
-  progressText: {
-    ...typography.caption,
-    color: colors.stone[400],
-    marginTop: 12,
-    textAlign: "center",
-  },
-  resultBanner: {
-    alignItems: "center",
-    borderRadius: 8,
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "center",
-    marginBottom: 12,
-    padding: 10,
-  },
-  correctBanner: {
-    backgroundColor: colors.ink[800],
-    borderColor: colors.tea[500],
-    borderWidth: 1,
-  },
-  incorrectBanner: {
-    backgroundColor: colors.ink[800],
-    borderColor: colors.red[500],
-    borderWidth: 1,
-  },
-  resultText: {
-    ...typography.body,
-    fontWeight: "700",
-  },
-  correctText: {
-    color: colors.tea[500],
-  },
-  incorrectText: {
-    color: colors.red[500],
-  },
-  lockedBanner: {
-    alignItems: "center",
-    backgroundColor: colors.ink[800],
-    borderColor: colors.red[500],
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 12,
-    padding: 10,
-  },
-  warningBanner: {
-    borderColor: colors.tea[500],
-  },
-  lockedText: {
-    ...typography.caption,
-    color: colors.stone[100],
-    flex: 1,
-  },
+  accuracyPill: { backgroundColor: partyColors.lavender },
+  statContent: { flex: 1, gap: 4 },
+  statLabel: { fontSize: 12, lineHeight: 17, fontWeight: "700", color: partyColors.ink },
+  statText: { fontSize: 21, lineHeight: 27, fontWeight: "800", fontVariant: ["tabular-nums"], color: partyColors.ink },
+  questionCard: { backgroundColor: partyColors.purple, borderRadius: 22, padding: 20, gap: 22 },
+  questionHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  questionMode: { flexDirection: "row", alignItems: "center", gap: 6 },
+  questionModeText: { fontSize: 13, fontWeight: "800", color: partyColors.lime },
+  timerPill: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 24, backgroundColor: partyColors.lime, paddingHorizontal: 11, paddingVertical: 7 },
+  timerExpired: { backgroundColor: partyColors.pink },
+  timerText: { color: partyColors.ink, fontSize: 17, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  questionText: { fontFamily: partyFonts.display, fontSize: 27, lineHeight: 35, color: partyColors.white },
+  resultBanner: { flexDirection: "row", alignItems: "center", gap: 10, padding: 14, borderRadius: 12, borderColor: partyColors.border, borderWidth: 1 },
+  correctBanner: { backgroundColor: partyColors.success },
+  incorrectBanner: { backgroundColor: partyColors.dangerSoft },
+  resultText: { flex: 1, fontSize: 16, lineHeight: 23, fontWeight: "800", color: partyColors.ink },
+  lockedBanner: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: partyColors.border, backgroundColor: partyColors.lavender },
+  fairPlayLocked: { backgroundColor: partyColors.dangerSoft, borderColor: partyColors.danger },
+  warningBanner: { backgroundColor: partyColors.lime },
+  lockedText: { flex: 1, fontSize: 14, lineHeight: 21, fontWeight: "600", color: partyColors.ink },
+  answerHint: { fontSize: 14, lineHeight: 21, color: partyColors.muted },
+  textAnswerContainer: { gap: 8 },
+  inputLabel: { fontSize: 14, fontWeight: "700", color: partyColors.ink },
   textInput: {
-    ...typography.body,
-    backgroundColor: colors.ink[800],
-    borderColor: colors.ink[700],
-    borderRadius: 8,
-    borderWidth: 1,
-    color: colors.white,
-    minHeight: 54,
-    paddingHorizontal: 16,
+    backgroundColor: partyColors.white, borderColor: partyColors.border,
+    borderWidth: 2, borderBottomWidth: 4, borderRadius: 12, color: partyColors.ink,
+    fontSize: 18, minHeight: 60, padding: 16,
   },
-  optionsContainer: {
-    gap: 10,
-  },
+  optionsContainer: { flexDirection: "row", flexWrap: "wrap", alignItems: "stretch", gap: 12 },
   optionButton: {
-    backgroundColor: colors.ink[800],
-    borderColor: colors.ink[700],
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 16,
+    flexBasis: "46%", flexGrow: 1, minWidth: 0, minHeight: 104, gap: 12,
+    backgroundColor: partyColors.white, borderColor: partyColors.border,
+    borderWidth: 2, borderBottomWidth: 5, borderRadius: 12, padding: 12,
   },
-  selectedOption: {
-    backgroundColor: colors.tea[500],
-    borderColor: colors.tea[400],
-  },
-  disabledOption: {
-    opacity: 0.65,
-  },
-  optionText: {
-    ...typography.body,
-    color: colors.white,
-    fontWeight: "600",
-  },
-  selectedOptionText: {
-    color: colors.white,
-  },
-  submitContainer: {
-    marginTop: 18,
-  },
-  scoreText: {
-    ...typography.body,
-    color: colors.white,
-    fontWeight: "700",
-  },
+  optionFullWidth: { flexBasis: "100%" },
+  selectedOption: { backgroundColor: partyColors.lime },
+  disabledOption: { opacity: 0.65 },
+  optionTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  optionLetter: { fontSize: 13, fontWeight: "800", color: partyColors.ink },
+  optionText: { fontSize: 17, lineHeight: 24, fontWeight: "800", color: partyColors.ink },
+  submitContainer: { gap: 12 },
+  selectionStatus: { flexDirection: "row", alignItems: "center", gap: 8 },
+  selectionText: { flex: 1, fontSize: 14, lineHeight: 21, fontWeight: "600", color: partyColors.ink },
 });
 
 export default BeatTheClockGame;

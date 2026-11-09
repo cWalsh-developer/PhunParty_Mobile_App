@@ -2,13 +2,18 @@ import { MaterialIcons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
-  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
+import { partyColors, partyFonts } from "@/assets/theme/party";
+import { PartyButton } from "@/components/party/party-button";
 import * as APIGame from "../assets/api/API";
 import {
   FairPlayStatus,
@@ -17,14 +22,10 @@ import {
   GameQuestion,
   gameWebSocket,
 } from "../assets/api/gameWebSocketService";
-import { AppButton } from "../assets/components/AppButton";
-import { AppCard } from "../assets/components/AppCard";
 import {
   hasImmediateFairPlayWindowViolation,
   useFairPlayMonitor,
 } from "../assets/hooks/useFairPlayMonitor";
-import { colors } from "../assets/theme/colors";
-import { typography } from "../assets/theme/typography";
 
 interface TriviaGameProps {
   sessionCode: string;
@@ -80,6 +81,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
   onError,
   onAnswerSubmitted,
 }) => {
+  const { width, fontScale } = useWindowDimensions();
   // Use single atomic state for question + answers to prevent race conditions
   const [gameState, setGameState] = useState<GameState>({
     currentQuestion: null,
@@ -933,39 +935,13 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     setShowResults(true);
   };
 
-  const getAnswerButtonStyle = (answer: Answer) => {
-    let buttonStyle = { ...styles.answerButton };
-
-    if (showResults) {
-      if (answer.isCorrect) {
-        buttonStyle = { ...buttonStyle, ...styles.correctAnswer };
-      } else if (answer.isSelected && !answer.isCorrect) {
-        buttonStyle = { ...buttonStyle, ...styles.incorrectAnswer };
-      } else {
-        buttonStyle = { ...buttonStyle, ...styles.neutralAnswer };
-      }
-    } else if (answer.isSelected) {
-      buttonStyle = { ...buttonStyle, ...styles.selectedAnswer };
-    }
-
-    return buttonStyle;
-  };
-
-  const getAnswerTextStyle = (answer: Answer) => {
-    let textStyle = { ...styles.answerText };
-
-    if (showResults) {
-      if (answer.isCorrect) {
-        textStyle = { ...textStyle, ...styles.correctAnswerText };
-      } else if (answer.isSelected && !answer.isCorrect) {
-        textStyle = { ...textStyle, ...styles.incorrectAnswerText };
-      }
-    } else if (answer.isSelected) {
-      textStyle = { ...textStyle, ...styles.selectedAnswerText };
-    }
-
-    return textStyle;
-  };
+  const getAnswerButtonStyle = (answer: Answer) => [
+    styles.answerButton,
+    showResults && answer.isCorrect && styles.correctAnswer,
+    showResults && answer.isSelected && !answer.isCorrect && styles.incorrectAnswer,
+    showResults && !answer.isCorrect && !answer.isSelected && styles.neutralAnswer,
+    !showResults && answer.isSelected && styles.selectedAnswer,
+  ];
 
   const renderFairPlayStatus = () => {
     if (!fairPlayEnabled) {
@@ -980,6 +956,7 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
 
     return (
       <View
+        accessibilityLiveRegion="polite"
         style={[
           styles.fairPlayBanner,
           isWarning && styles.fairPlayBannerGrace,
@@ -991,21 +968,9 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
             isConfirmedLocked ? "block" : isWarning ? "timer" : "verified-user"
           }
           size={20}
-          color={
-            isConfirmedLocked
-              ? colors.red[500]
-              : isWarning
-                ? colors.peach[500]
-                : colors.tea[400]
-          }
+          color={isConfirmedLocked ? partyColors.danger : partyColors.ink}
         />
-        <Text
-          style={[
-            styles.fairPlayText,
-            isWarning && styles.fairPlayTextGrace,
-            isConfirmedLocked && styles.fairPlayTextWarning,
-          ]}
-        >
+        <Text style={styles.fairPlayText}>
           {isConfirmedLocked
             ? fairPlayStatus?.message ||
               `Fair Play strike ${fairPlayStrikeCount}/${fairPlayMaxStrikes}. You are frozen for this question.`
@@ -1019,19 +984,34 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     );
   };
 
+  const renderScreen = (content: React.ReactNode) => (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
+        {content}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+
   if (!currentQuestion) {
-    return (
-      <View style={styles.container}>
-        <AppCard style={styles.waitingCard}>
-          <MaterialIcons
-            name="hourglass-empty"
-            size={48}
-            color={colors.tea[500]}
-          />
-          <Text style={styles.waitingText}>Waiting for next question...</Text>
-          <Text style={styles.sessionCode}>Session: {sessionCode}</Text>
-        </AppCard>
-      </View>
+    return renderScreen(
+      <View style={styles.waitingCard} accessibilityLiveRegion="polite">
+        <View style={styles.waitingIcon}>
+          <MaterialIcons name="hourglass-empty" size={36} color={partyColors.ink} />
+        </View>
+        <Text style={styles.waitingText}>Next question, coming up.</Text>
+        <Text style={styles.waitingDetail}>
+          Keep this screen open. Your host will get things started.
+        </Text>
+        <Text style={styles.sessionCode}>Room {sessionCode}</Text>
+      </View>,
     );
   }
 
@@ -1046,305 +1026,476 @@ export const TriviaGame: React.FC<TriviaGameProps> = ({
     isWaitingForQuestionTransition ||
     (isWaitingForSubmittedQuestion && !isFairPlayLocked)
   ) {
-    return (
-      <View style={styles.container}>
-        <AppCard style={styles.waitingCard}>
+    return renderScreen(
+      <View style={styles.waitingCard} accessibilityLiveRegion="polite">
+        <View style={styles.waitingIcon}>
           <MaterialIcons
-            name="hourglass-empty"
-            size={48}
-            color={colors.tea[500]}
+            name={isWaitingForQuestionTransition ? "hourglass-empty" : "lock"}
+            size={36}
+            color={partyColors.ink}
           />
-          <Text style={styles.waitingText}>Waiting for next question...</Text>
-          <Text style={styles.sessionCode}>Session: {sessionCode}</Text>
-        </AppCard>
-      </View>
+        </View>
+        <Text style={styles.waitingText}>
+          {isWaitingForQuestionTransition
+            ? "Next question, coming up."
+            : "Answer submitted!"}
+        </Text>
+        {isWaitingForSubmittedQuestion && selectedAnswer?.trim() && (
+          <View style={styles.submittedAnswer}>
+            <Text style={styles.submittedLabel}>Your answer</Text>
+            <Text style={styles.submittedText}>{selectedAnswer.trim()}</Text>
+          </View>
+        )}
+        <Text style={styles.waitingDetail}>
+          {isWaitingForQuestionTransition
+            ? "Stay here. Your host is moving the game along."
+            : "Look up at the big screen. Your host will reveal what happens next."}
+        </Text>
+        <Text style={styles.sessionCode}>Room {sessionCode}</Text>
+      </View>,
     );
   }
 
   const isTextInputQuestion = currentQuestion.ui_mode === "text_input";
   const typedAnswer = selectedAnswer ?? "";
+  const hasAnswer = Boolean(selectedAnswer?.trim());
+  const selectedAnswerIndex = answers.findIndex((answer) => answer.isSelected);
+  const useSingleColumn =
+    width < 360 ||
+    fontScale >= 1.25 ||
+    answers.some((answer) => answer.option.length > 54);
 
-  return (
-    <View style={styles.container}>
-      <Animated.View style={[styles.gameContent, { opacity: fadeAnimation }]}>
-        <AppCard style={styles.questionCard}>
-          <Text style={styles.questionText}>{currentQuestion.question}</Text>
+  return renderScreen(
+    <Animated.View style={[styles.gameContent, { opacity: fadeAnimation }]}>
+      <View style={styles.questionCard}>
+        <View style={styles.questionHeader}>
+          <View style={styles.questionMode}>
+            <MaterialIcons name="auto-awesome" size={17} color={partyColors.lime} />
+            <Text style={styles.questionModeText}>Trivia</Text>
+          </View>
           {timeLeft > 0 && (
-            <View style={styles.timerContainer}>
-              <MaterialIcons name="timer" size={20} color={colors.stone[400]} />
+            <View
+              style={styles.timerContainer}
+              accessible
+              accessibilityLabel={`${timeLeft} seconds remaining`}
+            >
+              <MaterialIcons name="timer" size={18} color={partyColors.ink} />
               <Text style={styles.timerText}>{timeLeft}s</Text>
             </View>
           )}
-        </AppCard>
-        {renderFairPlayStatus()}
+        </View>
+        <Text accessibilityRole="header" style={styles.questionText}>
+          {currentQuestion.question}
+        </Text>
+      </View>
+      {renderFairPlayStatus()}
 
-        {isTextInputQuestion ? (
-          <View style={styles.textAnswerContainer}>
-            <TextInput
-              style={styles.textAnswerInput}
-              value={typedAnswer}
-              onChangeText={setSelectedAnswer}
-              placeholder="Type your answer"
-              placeholderTextColor={colors.stone[400]}
-              editable={!hasSubmitted && !isFairPlayLocked}
-              autoCapitalize="none"
-              autoCorrect
-              returnKeyType="done"
-              onSubmitEditing={submitAnswer}
-            />
-          </View>
-        ) : (
-          <View style={styles.answersContainer}>
-            {answers.map((answer, index) => (
+      <Text style={styles.answerHint}>
+        {isFairPlayLocked
+          ? "Your answers are locked for this question."
+          : showResults
+            ? "The answer is in."
+            : isTextInputQuestion
+              ? "Trust your gut. Type your answer, then lock it in."
+              : "Trust your gut. Tap one, then lock it in."}
+      </Text>
+
+      {isTextInputQuestion ? (
+        <View style={styles.textAnswerContainer}>
+          <Text style={styles.inputLabel}>Your answer</Text>
+          <TextInput
+            accessibilityLabel="Your answer"
+            accessibilityHint="Type your answer, then choose Lock it in."
+            style={[
+              styles.textAnswerInput,
+              isFairPlayLocked && styles.answerButtonDisabled,
+            ]}
+            value={typedAnswer}
+            onChangeText={setSelectedAnswer}
+            placeholder="Type your answer"
+            placeholderTextColor={partyColors.muted}
+            editable={!hasSubmitted && !isFairPlayLocked}
+            autoCapitalize="none"
+            autoCorrect
+            returnKeyType="done"
+            onSubmitEditing={submitAnswer}
+          />
+        </View>
+      ) : (
+        <View
+          style={styles.answersContainer}
+          accessibilityRole="radiogroup"
+          accessibilityLabel="Answer choices"
+        >
+          {answers.map((answer, index) => {
+            const answerLetter = String.fromCharCode(65 + index);
+            const isCorrectResult = showResults && answer.isCorrect;
+            const isIncorrectResult =
+              showResults && answer.isSelected && !answer.isCorrect;
+            const answerDisabled = hasSubmitted || showResults || isFairPlayLocked;
+
+            return (
               <Animated.View
                 key={index}
-                style={{ transform: [{ scale: pulseAnimation }] }}
+                style={[
+                  styles.answerCell,
+                  useSingleColumn && styles.answerCellFullWidth,
+                  { transform: [{ scale: pulseAnimation }] },
+                ]}
               >
                 <TouchableOpacity
+                  accessibilityRole="radio"
+                  accessibilityLabel={`${answerLetter}. ${answer.option}${
+                    isCorrectResult
+                      ? ". Correct answer"
+                      : isIncorrectResult
+                        ? ". Incorrect answer"
+                        : ""
+                  }`}
+                  accessibilityHint={
+                    answerDisabled
+                      ? undefined
+                      : "Select this answer, then choose Lock it in."
+                  }
+                  accessibilityState={{
+                    checked: answer.isSelected,
+                    disabled: answerDisabled,
+                  }}
+                  aria-checked={answer.isSelected}
+                  aria-disabled={answerDisabled}
                   style={[
                     getAnswerButtonStyle(answer),
                     isFairPlayLocked && styles.answerButtonDisabled,
                   ]}
                   onPress={() => selectAnswer(answer.option)}
-                  disabled={hasSubmitted || showResults || isFairPlayLocked}
+                  disabled={answerDisabled}
                   activeOpacity={0.8}
                 >
-                  <Text style={getAnswerTextStyle(answer)}>
-                    {String.fromCharCode(65 + index)}. {answer.option}
-                  </Text>
-                  {showResults && answer.isCorrect && (
+                  <View style={styles.answerTopRow}>
+                    <Text style={styles.answerLetter}>{answerLetter}</Text>
                     <MaterialIcons
-                      name="check-circle"
-                      size={24}
-                      color={colors.tea[500]}
+                      name={
+                        isIncorrectResult
+                          ? "cancel"
+                          : isCorrectResult || answer.isSelected
+                            ? "check-circle-outline"
+                            : "radio-button-unchecked"
+                      }
+                      size={19}
+                      color={isIncorrectResult ? partyColors.danger : partyColors.ink}
                     />
+                  </View>
+                  <Text style={styles.answerText}>{answer.option}</Text>
+                  {isCorrectResult && (
+                    <Text style={styles.answerResult}>Correct answer</Text>
                   )}
-                  {showResults && answer.isSelected && !answer.isCorrect && (
-                    <MaterialIcons
-                      name="cancel"
-                      size={24}
-                      color={colors.red[500]}
-                    />
+                  {isIncorrectResult && (
+                    <Text style={styles.answerResult}>Your answer</Text>
                   )}
                 </TouchableOpacity>
               </Animated.View>
-            ))}
-          </View>
-        )}
+            );
+          })}
+        </View>
+      )}
 
-        {selectedAnswer?.trim() &&
-          !hasSubmitted &&
-          !showResults &&
-          !isFairPlayLocked && (
-            <View style={styles.submitContainer}>
-              <AppButton
-                title="Submit Answer"
-                onPress={submitAnswer}
-                variant="primary"
-                style={styles.submitButton}
-              />
-            </View>
-          )}
-
-        {hasSubmitted && !showResults && (
-          <View style={styles.statusContainer}>
-            <MaterialIcons name="send" size={24} color={colors.tea[500]} />
-            <Text style={styles.statusText}>
-              Answer submitted! Waiting for results...
+      {!hasSubmitted && !showResults && !isFairPlayLocked && (
+        <View style={styles.submitContainer}>
+          <View style={styles.selectionStatus} accessibilityLiveRegion="polite">
+            <MaterialIcons
+              name={hasAnswer ? "check-circle-outline" : "touch-app"}
+              size={20}
+              color={partyColors.ink}
+            />
+            <Text style={styles.selectionText}>
+              {hasAnswer
+                ? isTextInputQuestion
+                  ? "Answer ready. Lock it in to submit."
+                  : selectedAnswerIndex >= 0
+                    ? `You picked ${String.fromCharCode(65 + selectedAnswerIndex)}. Lock it in to submit.`
+                    : "Answer selected. Lock it in to submit."
+                : isTextInputQuestion
+                  ? "Type an answer to get started."
+                  : "Pick your answer."}
             </Text>
           </View>
-        )}
-      </Animated.View>
-    </View>
+          <PartyButton
+            title="Lock it in!"
+            onPress={submitAnswer}
+            disabled={!hasAnswer}
+            icon={<MaterialIcons name="lock-outline" size={21} color={partyColors.ink} />}
+          />
+        </View>
+      )}
+
+      {hasSubmitted && !showResults && (
+        <View style={styles.statusContainer} accessibilityLiveRegion="polite">
+          <MaterialIcons name="lock" size={22} color={partyColors.ink} />
+          <Text style={styles.selectionText}>
+            Answer submitted. Waiting for your host.
+          </Text>
+        </View>
+      )}
+    </Animated.View>,
   );
 };
-
-const { width } = Dimensions.get("window");
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.ink[900],
+    backgroundColor: partyColors.cream,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
     padding: 16,
+    paddingBottom: 32,
   },
   waitingCard: {
+    backgroundColor: partyColors.lavender,
+    borderColor: partyColors.border,
+    borderWidth: 2,
+    borderBottomWidth: 5,
+    borderRadius: 24,
     alignItems: "center",
-    padding: 32,
-    marginTop: 100,
+    padding: 24,
+    marginVertical: 24,
+    gap: 16,
+  },
+  waitingIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: partyColors.lime,
+    borderColor: partyColors.border,
+    borderWidth: 2,
   },
   waitingText: {
-    ...typography.h3,
-    color: colors.stone[100],
-    marginTop: 16,
+    fontFamily: partyFonts.display,
+    fontSize: 25,
+    lineHeight: 32,
+    color: partyColors.ink,
+    textAlign: "center",
+  },
+  waitingDetail: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: partyColors.ink,
     textAlign: "center",
   },
   sessionCode: {
-    ...typography.body,
-    color: colors.stone[400],
-    marginTop: 8,
+    fontSize: 14,
+    fontWeight: "700",
+    color: partyColors.muted,
+  },
+  submittedAnswer: {
+    alignSelf: "stretch",
+    backgroundColor: partyColors.white,
+    borderColor: partyColors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    gap: 8,
+  },
+  submittedLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: partyColors.muted,
+  },
+  submittedText: {
+    fontSize: 18,
+    lineHeight: 25,
+    fontWeight: "700",
+    color: partyColors.ink,
   },
   gameContent: {
-    flex: 1,
+    gap: 16,
   },
   questionCard: {
-    padding: 24,
-    marginBottom: 24,
+    backgroundColor: partyColors.purple,
+    borderRadius: 22,
+    padding: 20,
+    gap: 22,
+    minHeight: 194,
+  },
+  questionHeader: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  questionMode: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  questionModeText: {
+    color: partyColors.lime,
+    fontSize: 13,
+    fontWeight: "800",
   },
   questionText: {
-    ...typography.h2,
-    color: colors.stone[100],
-    textAlign: "center",
-    lineHeight: 28,
+    fontFamily: partyFonts.display,
+    fontSize: 27,
+    lineHeight: 35,
+    color: partyColors.white,
+    textAlign: "left",
   },
   timerContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 16,
+    backgroundColor: partyColors.lime,
+    borderRadius: 24,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 4,
   },
   timerText: {
-    ...typography.body,
-    color: colors.stone[400],
-    marginLeft: 8,
-    fontWeight: "bold",
+    fontSize: 15,
+    color: partyColors.ink,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+  },
+  answerHint: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: partyColors.muted,
   },
   answersContainer: {
-    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "stretch",
+    gap: 12,
+  },
+  answerCell: {
+    flexBasis: "46%",
+    flexGrow: 1,
+    minWidth: 0,
+  },
+  answerCellFullWidth: {
+    flexBasis: "100%",
   },
   textAnswerContainer: {
-    flex: 1,
-    gap: 16,
+    gap: 8,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: partyColors.ink,
   },
   textAnswerInput: {
-    ...typography.body,
-    backgroundColor: colors.ink[800],
-    borderColor: colors.ink[700],
+    backgroundColor: partyColors.white,
+    borderColor: partyColors.border,
     borderWidth: 2,
+    borderBottomWidth: 4,
     borderRadius: 12,
-    color: colors.stone[100],
+    color: partyColors.ink,
     fontSize: 18,
-    minHeight: 64,
+    minHeight: 60,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  textResultCard: {
-    backgroundColor: colors.ink[800],
-    borderColor: colors.ink[700],
-    borderWidth: 1,
-    borderRadius: 12,
-    flexDirection: "row",
-    gap: 12,
-    padding: 16,
-  },
-  textResultContent: {
-    flex: 1,
-  },
-  textResultTitle: {
-    ...typography.h3,
-    marginBottom: 4,
-  },
-  textResultDetail: {
-    ...typography.body,
-    color: colors.stone[300],
-    marginTop: 4,
-  },
   answerButton: {
-    backgroundColor: colors.ink[800],
-    padding: 16,
-    marginBottom: 12,
+    flexGrow: 1,
+    backgroundColor: partyColors.white,
+    padding: 12,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: colors.ink[700],
+    borderBottomWidth: 5,
+    borderColor: partyColors.border,
+    gap: 12,
+    minHeight: 104,
+  },
+  answerButtonDisabled: {
+    opacity: 0.6,
+  },
+  selectedAnswer: {
+    backgroundColor: partyColors.lime,
+  },
+  correctAnswer: {
+    backgroundColor: partyColors.lime,
+  },
+  incorrectAnswer: {
+    backgroundColor: partyColors.dangerSoft,
+  },
+  neutralAnswer: {
+    backgroundColor: partyColors.cream,
+  },
+  answerTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    minHeight: 60,
+    gap: 8,
   },
-  answerButtonDisabled: {
-    opacity: 0.55,
-  },
-  selectedAnswer: {
-    backgroundColor: colors.tea[500] + "20",
-    borderColor: colors.tea[500],
-  },
-  correctAnswer: {
-    backgroundColor: colors.tea[500] + "20",
-    borderColor: colors.tea[500],
-  },
-  incorrectAnswer: {
-    backgroundColor: colors.red[500] + "20",
-    borderColor: colors.red[500],
-  },
-  neutralAnswer: {
-    opacity: 0.6,
+  answerLetter: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: partyColors.ink,
   },
   answerText: {
-    ...typography.body,
-    color: colors.stone[100],
-    flex: 1,
-    fontSize: 16,
+    color: partyColors.ink,
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: "800",
   },
-  selectedAnswerText: {
-    color: colors.tea[500],
-    fontWeight: "bold",
-  },
-  correctAnswerText: {
-    color: colors.tea[500],
-    fontWeight: "bold",
-  },
-  incorrectAnswerText: {
-    color: colors.red[500],
-    fontWeight: "bold",
+  answerResult: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "600",
+    color: partyColors.ink,
   },
   fairPlayBanner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: colors.ink[800],
-    borderColor: colors.tea[500],
+    backgroundColor: partyColors.lavender,
+    borderColor: partyColors.border,
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 12,
-    marginBottom: 16,
   },
   fairPlayBannerWarning: {
-    borderColor: colors.red[500],
-    backgroundColor: colors.red[500] + "14",
+    borderColor: partyColors.danger,
+    backgroundColor: partyColors.dangerSoft,
   },
   fairPlayBannerGrace: {
-    borderColor: colors.peach[500],
-    backgroundColor: colors.peach[500] + "14",
+    backgroundColor: partyColors.lime,
   },
   fairPlayText: {
-    ...typography.body,
-    color: colors.stone[300],
+    color: partyColors.ink,
     flex: 1,
+    fontSize: 14,
+    lineHeight: 21,
     fontWeight: "600",
   },
-  fairPlayTextGrace: {
-    color: colors.stone[100],
-  },
-  fairPlayTextWarning: {
-    color: colors.stone[100],
-  },
   submitContainer: {
-    paddingTop: 16,
-    paddingBottom: 32,
+    gap: 12,
   },
-  submitButton: {
-    paddingVertical: 16,
-  },
-  statusContainer: {
+  selectionStatus: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 20,
+    gap: 8,
   },
-  statusText: {
-    ...typography.body,
-    color: colors.stone[400],
-    marginLeft: 12,
-    textAlign: "center",
+  selectionText: {
+    color: partyColors.ink,
+    fontSize: 14,
+    lineHeight: 21,
+    fontWeight: "600",
+    flex: 1,
+  },
+  statusContainer: {
+    backgroundColor: partyColors.lavender,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 16,
   },
 });
 

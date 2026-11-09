@@ -1,4 +1,4 @@
-import { colors } from "@/assets/theme";
+import { partyColors } from "@/assets/theme/party";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { createMaterialTopTabNavigator } from "expo-router/js-top-tabs";
@@ -14,26 +14,20 @@ export default function TabsLayout() {
   return (
     <MaterialTopTabs
       screenOptions={{
-        tabBarActiveTintColor: colors.tea[400],
-        tabBarInactiveTintColor: colors.stone[400],
+        tabBarActiveTintColor: partyColors.purple,
+        tabBarInactiveTintColor: partyColors.muted,
         tabBarStyle: {
-          backgroundColor: colors.stone[950],
-          borderBottomColor: colors.ink[800],
-          borderBottomWidth: 1,
+          backgroundColor: partyColors.cream,
+          borderTopColor: partyColors.border,
+          borderTopWidth: 2,
           paddingBottom: insets.bottom,
-          height: 60 + insets.bottom,
+          minHeight: 68 + insets.bottom,
+          elevation: 0,
         },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: "600",
-          textTransform: "none",
-        },
-        tabBarIndicatorStyle: {
-          backgroundColor: colors.tea[400],
-          height: 3,
-        },
+        tabBarLabelStyle: { fontSize: 12, fontWeight: "800", textTransform: "none" },
+        tabBarIndicatorStyle: { backgroundColor: partyColors.purple, height: 4 },
+        tabBarPressColor: partyColors.lavender,
         swipeEnabled: true,
-        tabBarPressColor: colors.ink[800],
       }}
       tabBarPosition="bottom"
     >
@@ -41,18 +35,8 @@ export default function TabsLayout() {
         name="scanQR"
         options={{
           title: "Join Game",
-          tabBarIcon: ({
-            color,
-            focused,
-          }: {
-            color: string;
-            focused: boolean;
-          }) => (
-            <FontAwesome
-              name="qrcode"
-              size={24}
-              color={focused ? color : colors.stone[400]}
-            />
+          tabBarIcon: ({ color }: { color: string }) => (
+            <FontAwesome name="qrcode" size={24} color={color} />
           ),
         }}
       />
@@ -60,18 +44,8 @@ export default function TabsLayout() {
         name="friends"
         options={{
           title: "Friends",
-          tabBarIcon: ({
-            color,
-            focused,
-          }: {
-            color: string;
-            focused: boolean;
-          }) => (
-            <Ionicons
-              name="people"
-              size={24}
-              color={focused ? color : colors.stone[400]}
-            />
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
+            <Ionicons name={focused ? "people" : "people-outline"} size={24} color={color} />
           ),
         }}
       />
@@ -79,18 +53,8 @@ export default function TabsLayout() {
         name="profileTab"
         options={{
           title: "Profile",
-          tabBarIcon: ({
-            color,
-            focused,
-          }: {
-            color: string;
-            focused: boolean;
-          }) => (
-            <Ionicons
-              name="person"
-              size={24}
-              color={focused ? color : colors.stone[400]}
-            />
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
+            <Ionicons name={focused ? "person" : "person-outline"} size={24} color={color} />
           ),
         }}
       />

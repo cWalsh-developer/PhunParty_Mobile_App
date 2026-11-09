@@ -1,14 +1,15 @@
+import { partyColors, partyFonts } from "@/assets/theme/party";
 import { PhotoService } from "@/assets/api/photoService";
 import { UserContext } from "@/assets/authentication-storage/authContext";
-import { AppCard } from "@/assets/components";
-import { colors, layoutStyles, typography } from "@/assets/theme";
+import { AppButton, AppCard } from "@/assets/components";
+import { layoutStyles, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useContext, useState } from "react";
-import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { AuthenticatedImage } from "./AuthenticatedImage";
 import PhotoUploadActionSheet from "./PhotoUploadActionSheet";
 import PhotoViewerModal from "./PhotoViewerModal";
-import Selector from "./Selector";
+import { SocialHeader, SocialScreen } from "./party/social-layout";
 
 interface ProfileScreenProps {
   onEditProfile: () => void;
@@ -33,7 +34,7 @@ export default function ProfileScreen({
           { justifyContent: "center", alignItems: "center" },
         ]}
       >
-        <Text style={[typography.body, { color: colors.stone[300] }]}>
+        <Text style={[typography.body, { color: partyColors.muted }]}>
           User context not available
         </Text>
       </View>
@@ -52,7 +53,7 @@ export default function ProfileScreen({
           { justifyContent: "center", alignItems: "center" },
         ]}
       >
-        <Text style={[typography.body, { color: colors.stone[300] }]}>
+        <Text style={[typography.body, { color: partyColors.muted }]}>
           Loading...
         </Text>
       </View>
@@ -116,314 +117,49 @@ export default function ProfileScreen({
   };
 
   return (
-    <ScrollView
-      style={[layoutStyles.screen, layoutStyles.container]}
-      contentContainerStyle={{ paddingBottom: 100 }} // Add bottom padding for nav bar
-    >
-      {/* Header */}
-      <View style={{ alignItems: "center", marginBottom: 24 }}>
-        {/* Header with Settings Button */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            width: "100%",
-            marginBottom: 16,
-          }}
-        >
-          <View style={{ flex: 1 }} />
-          <Text
-            style={[
-              typography.h1,
-              { textAlign: "center", color: colors.stone[100] },
-            ]}
-          >
-            Your Profile
-          </Text>
-          <View style={{ flex: 1, alignItems: "flex-end" }}>
-            <Selector onPress={onNavigateToSettings} label="Settings">
-              <TouchableOpacity
-                style={{
-                  padding: 8,
-                  borderRadius: 20,
-                  backgroundColor: colors.ink[800],
-                }}
-              >
-                <MaterialIcons
-                  name="settings"
-                  size={20}
-                  color={colors.stone[300]}
-                />
-              </TouchableOpacity>
-            </Selector>
-          </View>
-        </View>
-
-        <View
-          style={{
-            position: "relative",
-            alignItems: "center",
-            marginBottom: 12,
-          }}
-        >
-          {/* Profile Image Container */}
-          <TouchableOpacity
-            onPress={() => {
-              if (user.profile_photo_url) {
-                setIsPhotoViewerVisible(true);
-              }
-            }}
-            activeOpacity={user.profile_photo_url ? 0.8 : 1}
-            style={{
-              position: "relative",
-              width: 100,
-              height: 100,
-              borderRadius: 50,
-              overflow: "hidden",
-              backgroundColor: colors.ink[700],
-              borderWidth: 3,
-              borderColor: colors.ink[700],
-            }}
-          >
-            {user.profile_photo_url ? (
-              <AuthenticatedImage
-                photoUrl={user.profile_photo_url}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                }}
-                resizeMode="cover"
-                onError={(error) =>
-                  console.error(
-                    "Profile image failed to load:",
-                    error.nativeEvent.error,
-                    "URI:",
-                    user.profile_photo_url
-                  )
-                }
-              />
-            ) : (
-              <View
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  backgroundColor: colors.ink[700],
-                }}
-              >
-                <MaterialIcons
-                  name="account-circle"
-                  size={80}
-                  color={colors.tea[400]}
-                />
-              </View>
-            )}
-          </TouchableOpacity>
-
-          {/* Edit Photo Button - Bottom Right Corner */}
-          <Selector onPress={() => setIsPhotoSheetVisible(true)}>
-            <TouchableOpacity
-              style={{
-                position: "absolute",
-                bottom: -2,
-                right: -2,
-                backgroundColor: colors.tea[500],
-                borderRadius: 18,
-                width: 36,
-                height: 36,
-                justifyContent: "center",
-                alignItems: "center",
-                borderWidth: 3,
-                borderColor: colors.ink[900],
-                shadowColor: "#000000",
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.25,
-                shadowRadius: 4,
-                elevation: 4,
-              }}
-            >
-              <MaterialIcons
-                name={user.profile_photo_url ? "edit" : "add"}
-                size={18}
-                color={colors.ink[900]}
-              />
-            </TouchableOpacity>
-          </Selector>
-        </View>
-
-        {/* Optional: Add a subtitle with user name */}
-        {user.player_name && (
-          <Text
-            style={[
-              typography.body,
-              {
-                textAlign: "center",
-                color: colors.stone[300],
-                marginTop: 8,
-              },
-            ]}
-          >
-            Welcome back, {user.player_name}!
-          </Text>
-        )}
-      </View>
-
-      {/* Profile Info Card */}
-      <AppCard style={{ marginBottom: 24 }}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 20,
-          }}
-        >
-          <Text style={[typography.h3, { color: colors.stone[100] }]}>
-            Account Details
-          </Text>
-          <Selector onPress={onEditProfile}>
-            <TouchableOpacity
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                borderRadius: 8,
-                backgroundColor: colors.ink[800],
-              }}
-            >
-              <MaterialIcons name="edit" size={16} color={colors.tea[400]} />
-              <Text
-                style={[
-                  typography.small,
-                  { color: colors.tea[400], marginLeft: 4 },
-                ]}
-              >
-                Edit
-              </Text>
-            </TouchableOpacity>
-          </Selector>
-        </View>
-
-        <View
-          style={{
-            marginBottom: 20,
-            paddingVertical: 16,
-            paddingHorizontal: 16,
-            backgroundColor: colors.ink[800],
-            borderRadius: 12,
-          }}
-        >
-          <Text
-            style={[
-              typography.small,
-              {
-                color: colors.stone[400],
-                marginBottom: 6,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-                fontWeight: "600",
-              },
-            ]}
-          >
-            Name
-          </Text>
-          <Text
-            style={[
-              typography.body,
-              { color: colors.stone[100], fontSize: 16 },
-            ]}
-          >
-            {user.player_name || "Not provided"}
-          </Text>
-        </View>
-
-        <View
-          style={{
-            marginBottom: 20,
-            paddingVertical: 16,
-            paddingHorizontal: 16,
-            backgroundColor: colors.ink[800],
-            borderRadius: 12,
-          }}
-        >
-          <Text
-            style={[
-              typography.small,
-              {
-                color: colors.stone[400],
-                marginBottom: 6,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-                fontWeight: "600",
-              },
-            ]}
-          >
-            Email
-          </Text>
-          <Text
-            style={[
-              typography.body,
-              { color: colors.stone[100], fontSize: 16 },
-            ]}
-          >
-            {user.player_email || "Not provided"}
-          </Text>
-        </View>
-
-        <View
-          style={{
-            paddingVertical: 16,
-            paddingHorizontal: 16,
-            backgroundColor: colors.ink[800],
-            borderRadius: 12,
-          }}
-        >
-          <Text
-            style={[
-              typography.small,
-              {
-                color: colors.stone[400],
-                marginBottom: 6,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-                fontWeight: "600",
-              },
-            ]}
-          >
-            Mobile
-          </Text>
-          <Text
-            style={[
-              typography.body,
-              { color: colors.stone[100], fontSize: 16 },
-            ]}
-          >
-            {user.player_mobile || "Not provided"}
-          </Text>
-        </View>
-      </AppCard>
-
-      {/* Photo Upload Action Sheet */}
-      <PhotoUploadActionSheet
-        isVisible={isPhotoSheetVisible}
-        onClose={() => setIsPhotoSheetVisible(false)}
-        onImageSelected={handleImageSelected}
-        onDeletePhoto={handleDeletePhoto}
-        hasCurrentPhoto={!!user.profile_photo_url}
-        title="Choose Profile Photo"
+    <SocialScreen>
+      <SocialHeader title="Your profile" subtitle="The face behind the friendly competition."
+        action={<TouchableOpacity onPress={onNavigateToSettings} accessibilityRole="button" accessibilityLabel="Open settings" style={styles.settingsButton}><MaterialIcons name="settings" size={23} color={partyColors.ink} /></TouchableOpacity>}
       />
-
-      {/* Photo Viewer Modal */}
-      {user.profile_photo_url && (
-        <PhotoViewerModal
-          visible={isPhotoViewerVisible}
-          photoUri={user.profile_photo_url}
-          onClose={() => setIsPhotoViewerVisible(false)}
-        />
-      )}
-    </ScrollView>
+      <View style={styles.hero}>
+        <TouchableOpacity onPress={() => user.profile_photo_url ? setIsPhotoViewerVisible(true) : setIsPhotoSheetVisible(true)}
+          accessibilityRole="button" accessibilityLabel={user.profile_photo_url ? "View profile photo" : "Add profile photo"} style={styles.photo}>
+          {user.profile_photo_url ? <AuthenticatedImage photoUrl={user.profile_photo_url} style={styles.photoImage} resizeMode="cover" /> : <MaterialIcons name="person-outline" size={70} color={partyColors.ink} />}
+        </TouchableOpacity>
+        <Text style={styles.playerName}>{user.player_name || "Your profile"}</Text>
+        <TouchableOpacity onPress={() => setIsPhotoSheetVisible(true)} accessibilityRole="button" disabled={isDeletingPhoto} style={styles.photoButton}>
+          <MaterialIcons name="add-a-photo" size={20} color={partyColors.ink} />
+          <Text style={styles.photoButtonText}>{isDeletingPhoto ? "Removing photo..." : "Change photo"}</Text>
+        </TouchableOpacity>
+      </View>
+      <AppCard style={styles.detailsCard}>
+        <Text accessibilityRole="header" style={styles.detailsTitle}>Account details</Text>
+        <ProfileDetail label="Name" value={user.player_name} />
+        <ProfileDetail label="Email" value={user.player_email} />
+        <ProfileDetail label="Mobile" value={user.player_mobile} />
+        <AppButton title="Edit profile" onPress={onEditProfile} icon={<MaterialIcons name="edit" size={20} color={partyColors.ink} />} />
+      </AppCard>
+      <PhotoUploadActionSheet isVisible={isPhotoSheetVisible} onClose={() => setIsPhotoSheetVisible(false)} onImageSelected={handleImageSelected} onDeletePhoto={handleDeletePhoto} hasCurrentPhoto={!!user.profile_photo_url} title="Choose profile photo" />
+      {user.profile_photo_url && <PhotoViewerModal visible={isPhotoViewerVisible} photoUri={user.profile_photo_url} onClose={() => setIsPhotoViewerVisible(false)} />}
+    </SocialScreen>
   );
 }
+
+function ProfileDetail({ label, value }: { label: string; value: string | null }) {
+  return <View style={styles.detail}><Text style={styles.detailLabel}>{label}</Text><Text selectable style={styles.detailValue}>{value || "Not provided"}</Text></View>;
+}
+
+const styles = StyleSheet.create({
+  settingsButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center", backgroundColor: partyColors.white, borderWidth: 2, borderColor: partyColors.border, borderRadius: 16 },
+  hero: { alignItems: "center", backgroundColor: partyColors.pink, padding: 24, borderWidth: 2, borderBottomWidth: 5, borderColor: partyColors.border, borderRadius: 22, gap: 16, marginBottom: 24 },
+  photo: { width: 120, height: 120, borderRadius: 40, borderWidth: 3, borderColor: partyColors.border, backgroundColor: partyColors.cream, overflow: "hidden", alignItems: "center", justifyContent: "center", transform: [{ rotate: "-3deg" }] },
+  photoImage: { width: "100%", height: "100%" },
+  playerName: { fontFamily: partyFonts.display, color: partyColors.ink, fontSize: 26, lineHeight: 34, textAlign: "center" },
+  photoButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 2, borderColor: partyColors.border, backgroundColor: partyColors.white },
+  photoButtonText: { color: partyColors.ink, fontSize: 14, lineHeight: 20, fontWeight: "700" },
+  detailsCard: { padding: 20, gap: 16 },
+  detailsTitle: { fontFamily: partyFonts.display, color: partyColors.ink, fontSize: 20, lineHeight: 28 },
+  detail: { paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: partyColors.lavender, gap: 6 },
+  detailLabel: { color: partyColors.muted, fontSize: 13, lineHeight: 19, fontWeight: "700" },
+  detailValue: { color: partyColors.ink, fontSize: 16, lineHeight: 24 },
+});

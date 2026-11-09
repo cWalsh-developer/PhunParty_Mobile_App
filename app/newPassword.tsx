@@ -1,61 +1,61 @@
 import { UserContext } from "@/assets/authentication-storage/authContext";
 import { updatePassword } from "@/assets/authentication-storage/authenticationLogic";
+import NewPasswordForm from "@/components/NewPasswordForm";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useContext, useEffect, useState } from "react";
-import { StyleSheet } from "react-native";
-import NewPasswordForm from "../components/NewPasswordForm";
-//State--------------------------------------------------------------------------------------------
+import { useContext, useRef, useState } from "react";
+import { Keyboard } from "react-native";
+
 export default function NewPassword() {
-  //Initialisation----------------------------------------------------------------------------------
-  const [password, setPassword] = useState<string>("");
-  const [confirmPassword, setConfirmPassword] = useState<string>("");
-  const [isSuccess, setIsSuccess] = useState<boolean>(false);
-  const { phone } = useLocalSearchParams();
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const params = useLocalSearchParams<{ phone?: string | string[] }>();
+  const phone = Array.isArray(params.phone) ? params.phone[0] : params.phone;
   const router = useRouter();
   const { setUser } = useContext(UserContext)!;
-  //Handlers-----------------------------------------------------------------------------------------
-  const handlePasswordChange = (text: string) => setPassword(text);
-  const handleConfirmPasswordChange = (text: string) =>
-    setConfirmPassword(text);
+  const pending = useRef(false);
+
   const handleSetNewPassword = async () => {
+    if (pending.current) return;
+    if (!phone) {
+      setError("Your reset session is missing. Request a new reset code to continue.");
+      return;
+    }
     if (password !== confirmPassword) {
-      alert("Passwords do not match");
+      setError("Your passwords don’t match. Enter the same password in both fields.");
       return;
-    } else if (password.length < 6) {
-      alert("Password must be at least 6 characters long");
+    }
+    if (password.length < 6) {
+      setError("Use a password with at least 6 characters.");
       return;
-    } else {
-      const result = await updatePassword(password, phone as string, setUser);
-      if (result) {
-        setIsSuccess(true);
-      }
+    }
+    pending.current = true;
+    setLoading(true);
+    setError(null);
+    Keyboard.dismiss();
+    try {
+      const updated = await updatePassword(password, phone, setUser);
+      if (updated) router.replace("/(tabs)/scanQR");
+      else setError("Your password could not be saved. Try again, or request a new reset code.");
+    } catch {
+      setError("Check your connection, then try saving your password again.");
+    } finally {
+      pending.current = false;
+      setLoading(false);
     }
   };
-  useEffect(() => {
-    if (isSuccess) {
-      router.replace("/(tabs)/scanQR");
-    }
-  }, [isSuccess]);
 
   return (
     <NewPasswordForm
       password={password}
       confirmPassword={confirmPassword}
-      onPasswordChange={handlePasswordChange}
-      onConfirmPasswordChange={handleConfirmPasswordChange}
+      onPasswordChange={(value) => { setPassword(value); setError(null); }}
+      onConfirmPasswordChange={(value) => { setConfirmPassword(value); setError(null); }}
       onSubmit={handleSetNewPassword}
+      loading={loading}
+      error={phone ? error : "Your reset session is missing. Request a new reset code to continue."}
+      disabled={!phone}
     />
   );
 }
-
-//Styles--------------------------------------------------------------------------------------------
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: { flex: 1, justifyContent: "center", padding: 16 },
-  title: { textAlign: "center", marginBottom: 16 },
-  input: { marginBottom: 16 },
-  button: { marginTop: 8, backgroundColor: "#201e23ff" },
-  toggleButton: { marginTop: 16, alignSelf: "center" },
-});

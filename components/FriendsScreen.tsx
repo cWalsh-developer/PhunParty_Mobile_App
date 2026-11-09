@@ -1,5 +1,9 @@
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SocialHeader } from "./party/social-layout";
+import { partyColors, partyFonts } from "@/assets/theme/party";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { Camera, CameraView } from "expo-camera";
+import { StatusBar } from "expo-status-bar";
 import { useFocusEffect } from "expo-router";
 import {
   ReactNode,
@@ -14,6 +18,9 @@ import {
   Alert,
   AppState,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
+  useWindowDimensions,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -32,7 +39,7 @@ import {
 import { FriendPresence, presenceApi } from "../assets/api/presenceApi";
 import { pushNotificationService } from "../assets/api/pushNotificationService";
 import { AppButton, AppCard } from "../assets/components";
-import { colors, typography } from "../assets/theme";
+import { typography } from "../assets/theme";
 import { AuthenticatedImage } from "./AuthenticatedImage";
 
 type FriendsView = "friends" | "add" | "requests";
@@ -134,6 +141,8 @@ export default function FriendsScreen({
   playerId,
   onAuthInvalid,
 }: FriendsScreenProps) {
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const [currentView, setCurrentView] = useState<FriendsView>("friends");
   const [friendCode, setFriendCode] = useState<string | null>(null);
   const [searchCode, setSearchCode] = useState("");
@@ -653,6 +662,8 @@ export default function FriendsScreen({
     return (
       <TouchableOpacity
         key={profile.player_id}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${name}'s profile`}
         activeOpacity={0.85}
         onPress={() => openFriendProfile(profileWithPresence)}
       >
@@ -662,7 +673,7 @@ export default function FriendsScreen({
           </View>
           <View style={styles.rowBody}>
             <View style={styles.rowNameLine}>
-              <Text style={styles.rowTitle} numberOfLines={1}>
+              <Text style={styles.rowTitle}>
                 {name}
               </Text>
               {isOnline && <View style={styles.onlineDot} />}
@@ -696,16 +707,18 @@ export default function FriendsScreen({
             friend,
             <TouchableOpacity
               style={styles.iconButton}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${getProfileName(friend)} from friends`}
               onPress={() => removeFriend(friend)}
               disabled={actionId === friend.player_id}
             >
               {actionId === friend.player_id ? (
-                <ActivityIndicator color={colors.red[500]} />
+                <ActivityIndicator color={partyColors.danger} />
               ) : (
                 <MaterialIcons
                   name="person-remove"
                   size={22}
-                  color={colors.red[500]}
+                  color={partyColors.danger}
                 />
               )}
             </TouchableOpacity>,
@@ -722,7 +735,7 @@ export default function FriendsScreen({
         <View style={styles.codeCardContent}>
           <View style={styles.codeTextBlock}>
             <Text style={styles.label}>Your friend code</Text>
-            <Text style={styles.friendCode} numberOfLines={1}>
+            <Text selectable style={styles.friendCode}>
               {friendCode || "Not available yet"}
             </Text>
           </View>
@@ -744,22 +757,27 @@ export default function FriendsScreen({
       <View style={styles.searchRow}>
         <TextInput
           style={styles.input}
+          accessibilityLabel="Friend code"
+          returnKeyType="search"
+          onSubmitEditing={searchFriend}
           value={searchCode}
           onChangeText={(value) => setSearchCode(value.toUpperCase())}
           placeholder="Enter friend code"
-          placeholderTextColor={colors.stone[400]}
+          placeholderTextColor={partyColors.muted}
           autoCapitalize="characters"
           autoCorrect={false}
         />
         <TouchableOpacity
           style={styles.searchButton}
+          accessibilityRole="button"
+          accessibilityLabel="Search friend code"
           onPress={searchFriend}
           disabled={actionId === "search"}
         >
           {actionId === "search" ? (
-            <ActivityIndicator color={colors.ink[900]} />
+            <ActivityIndicator color={partyColors.ink} />
           ) : (
-            <MaterialIcons name="search" size={24} color={colors.ink[900]} />
+            <MaterialIcons name="search" size={24} color={partyColors.ink} />
           )}
         </TouchableOpacity>
       </View>
@@ -768,7 +786,7 @@ export default function FriendsScreen({
         title="Scan Friend QR"
         onPress={openFriendScanner}
         variant="secondary"
-        icon={<MaterialIcons name="qr-code-scanner" size={20} color={colors.tea[500]} />}
+        icon={<MaterialIcons name="qr-code-scanner" size={20} color={partyColors.purple} />}
       />
 
       {searchResult && (
@@ -819,20 +837,24 @@ export default function FriendsScreen({
               <View style={styles.requestActions}>
                 <TouchableOpacity
                   style={[styles.requestButton, styles.rejectButton]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ignore friend request from ${getProfileName(actor)}`}
                   onPress={() => rejectRequest(request.id)}
                   disabled={actionId === request.id}
                 >
-                  <MaterialIcons name="close" size={20} color={colors.red[500]} />
+                  <MaterialIcons name="close" size={20} color={partyColors.danger} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.requestButton, styles.acceptButton]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Accept friend request from ${getProfileName(actor)}`}
                   onPress={() => acceptRequest(request.id)}
                   disabled={actionId === request.id}
                 >
                   <MaterialIcons
                     name="check"
                     size={20}
-                    color={colors.ink[900]}
+                    color={partyColors.ink}
                   />
                 </TouchableOpacity>
               </View>
@@ -886,64 +908,27 @@ export default function FriendsScreen({
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Friends</Text>
-          <Text style={styles.subtitle}>
-            {playerId ? "Add friends and manage requests" : "Sign in required"}
-          </Text>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 20 }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={partyColors.purple} />}
+      >
+        <SocialHeader title="Your people" subtitle={playerId ? "Find friends. Bring the friendly rivalry." : "Sign in to connect with your friends."} />
+        <View style={styles.tabs}>
+          <SegmentButton label="Friends" icon="people" active={currentView === "friends"} onPress={() => setCurrentView("friends")} />
+          <SegmentButton label="Add" icon="person-add" active={currentView === "add"} onPress={() => setCurrentView("add")} />
+          <SegmentButton label={`Requests${pendingIncomingCount ? ` ${pendingIncomingCount}` : ""}`} icon="inbox" active={currentView === "requests"} onPress={() => setCurrentView("requests")} />
         </View>
-      </View>
-
-      <View style={styles.tabs}>
-        <SegmentButton
-          label="Friends"
-          icon="people"
-          active={currentView === "friends"}
-          onPress={() => setCurrentView("friends")}
-        />
-        <SegmentButton
-          label="Add"
-          icon="person-add"
-          active={currentView === "add"}
-          onPress={() => setCurrentView("add")}
-        />
-        <SegmentButton
-          label={`Requests${pendingIncomingCount ? ` ${pendingIncomingCount}` : ""}`}
-          icon="inbox"
-          active={currentView === "requests"}
-          onPress={() => setCurrentView("requests")}
-        />
-      </View>
-
-      {!!message && (
-        <AppCard style={styles.messageCard}>
-          <MaterialIcons name="info" size={20} color={colors.peach[500]} />
-          <Text style={styles.messageText}>{message}</Text>
-        </AppCard>
-      )}
-
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color={colors.tea[500]} size="large" />
-        </View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={refresh}
-              tintColor={colors.tea[500]}
-            />
-          }
-        >
-          {renderActiveView()}
-        </ScrollView>
-      )}
+        {!!message && <AppCard style={styles.messageCard}><MaterialIcons name="info-outline" size={20} color={partyColors.purple} /><Text accessibilityLiveRegion="polite" style={styles.messageText}>{message}</Text></AppCard>}
+        {loading ? <View style={styles.loadingContainer}><ActivityIndicator color={partyColors.purple} size="large" /></View> : renderActiveView()}
+      </ScrollView>
 
       {renderFriendQrModal({
+        safeTop: insets.top,
+        safeBottom: insets.bottom,
+        qrSize: Math.min(250, width - 88),
         friendCode,
         friendQrValue,
         visible: qrModalVisible,
@@ -967,6 +952,8 @@ export default function FriendsScreen({
       />
 
       {renderFriendScanner({
+        safeTop: insets.top,
+        safeBottom: insets.bottom,
         visible: scannerVisible,
         hasPermission: scannerPermission,
         scanned: scannerScanned,
@@ -976,16 +963,22 @@ export default function FriendsScreen({
         },
         onScanned: handleFriendQrScanned,
       })}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 function renderFriendQrModal({
+  safeTop,
+  safeBottom,
+  qrSize,
   friendCode,
   friendQrValue,
   visible,
   onClose,
 }: {
+  safeTop: number;
+  safeBottom: number;
+  qrSize: number;
   friendCode: string | null;
   friendQrValue: string;
   visible: boolean;
@@ -1003,14 +996,14 @@ function renderFriendQrModal({
       onRequestClose={onClose}
     >
       <View style={styles.modalContainer}>
-        <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
-          <MaterialIcons name="close" size={30} color={colors.stone[100]} />
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close" style={[styles.modalCloseButton, { top: safeTop + 16 }]} onPress={onClose}>
+          <MaterialIcons name="close" size={30} color={partyColors.ink} />
         </TouchableOpacity>
 
-        <View style={styles.enlargedQrCard}>
-          <FriendQrCode value={friendQrValue} size={250} />
-          <Text style={styles.enlargedQrCode}>{friendCode}</Text>
-        </View>
+        <ScrollView style={styles.qrModalScroll} contentContainerStyle={[styles.qrModalContent, { paddingTop: safeTop + 80, paddingBottom: safeBottom + 24 }]}><View style={styles.enlargedQrCard}>
+          <FriendQrCode value={friendQrValue} size={qrSize} />
+          <Text selectable style={styles.enlargedQrCode}>{friendCode}</Text>
+        </View></ScrollView>
 
         <TouchableOpacity
           style={styles.modalOverlay}
@@ -1041,6 +1034,7 @@ function FriendProfileModal({
   onLoadStats: () => void;
   onClose: () => void;
 }) {
+  const { top: safeTop, bottom: safeBottom } = useSafeAreaInsets();
   const name = getProfileName(profile);
   const isOnline = canShowOnlineStatus(profile);
   const canViewStats = profile?.can_view_game_stats !== false;
@@ -1052,15 +1046,15 @@ function FriendProfileModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.profileModalContainer}>
-        <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
-          <MaterialIcons name="close" size={30} color={colors.stone[100]} />
+      <View style={[styles.profileModalContainer, { paddingTop: safeTop + 80, paddingBottom: safeBottom + 20 }]}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close friend profile" style={[styles.modalCloseButton, { top: safeTop + 16 }]} onPress={onClose}>
+          <MaterialIcons name="close" size={30} color={partyColors.ink} />
         </TouchableOpacity>
 
         <AppCard style={styles.profileModalCard}>
           {loading ? (
             <View style={styles.profileLoading}>
-              <ActivityIndicator color={colors.tea[500]} size="large" />
+              <ActivityIndicator color={partyColors.purple} size="large" />
               <Text style={styles.profileLoadingText}>Loading profile...</Text>
             </View>
           ) : profile ? (
@@ -1109,7 +1103,7 @@ function FriendProfileModal({
                       disabled={statsLoading}
                     >
                       {statsLoading ? (
-                        <ActivityIndicator color={colors.ink[900]} />
+                        <ActivityIndicator color={partyColors.ink} />
                       ) : (
                         <Text style={styles.statsButtonText}>View</Text>
                       )}
@@ -1157,19 +1151,19 @@ function StatsOverview({ stats }: { stats: FriendProfileStats }) {
         label="Won"
         count={stats.wins}
         percentage={stats.win_percentage}
-        color={colors.tea[500]}
+        color={partyColors.purple}
       />
       <StatsBar
         label="Lost"
         count={stats.losses}
         percentage={stats.loss_percentage}
-        color={colors.red[500]}
+        color={partyColors.danger}
       />
       <StatsBar
         label="Drawn"
         count={stats.draws}
         percentage={stats.draw_percentage}
-        color={colors.peach[500]}
+        color={partyColors.purple}
       />
     </View>
   );
@@ -1265,8 +1259,8 @@ function FriendQrCode({
                   width: moduleSize,
                   height: moduleSize,
                   backgroundColor: qr.isDark(row, column)
-                    ? colors.ink[900]
-                    : colors.stone[100],
+                    ? partyColors.ink
+                    : partyColors.white,
                 },
               ]}
             />
@@ -1278,6 +1272,8 @@ function FriendQrCode({
 }
 
 function renderFriendScanner({
+  safeTop,
+  safeBottom,
   visible,
   hasPermission,
   scanned,
@@ -1289,16 +1285,19 @@ function renderFriendScanner({
   scanned: boolean;
   onClose: () => void;
   onScanned: ({ data }: { data: string }) => void;
+  safeTop: number;
+  safeBottom: number;
 }) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      {visible && <StatusBar style={hasPermission === false ? "dark" : "light"} />}
       <View style={styles.scannerContainer}>
         {hasPermission === false ? (
           <View style={styles.scannerPermissionCard}>
             <MaterialIcons
               name="camera-alt"
               size={44}
-              color={colors.stone[400]}
+              color={partyColors.muted}
             />
             <Text style={styles.emptyTitle}>Camera access required</Text>
             <Text style={styles.emptyBody}>
@@ -1315,14 +1314,14 @@ function renderFriendScanner({
           />
         )}
 
-        <TouchableOpacity style={styles.scannerCloseButton} onPress={onClose}>
-          <MaterialIcons name="close" size={28} color={colors.stone[100]} />
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close friend scanner" style={[styles.scannerCloseButton, { top: safeTop + 16 }]} onPress={onClose}>
+          <MaterialIcons name="close" size={28} color={partyColors.ink} />
         </TouchableOpacity>
 
         {hasPermission !== false && (
           <>
             <View style={styles.scannerFrame} />
-            <View style={styles.scannerHint}>
+            <View style={[styles.scannerHint, { bottom: safeBottom + 24 }]}>
               <Text style={styles.scannerHintText}>Scan a friend QR code</Text>
             </View>
           </>
@@ -1345,6 +1344,8 @@ function SegmentButton({
 }) {
   return (
     <TouchableOpacity
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
       style={[styles.segmentButton, active && styles.segmentButtonActive]}
       onPress={onPress}
       activeOpacity={0.8}
@@ -1352,11 +1353,10 @@ function SegmentButton({
       <MaterialIcons
         name={icon}
         size={18}
-        color={active ? colors.ink[900] : colors.stone[300]}
+        color={active ? partyColors.ink : partyColors.muted}
       />
       <Text
         style={[styles.segmentText, active && styles.segmentTextActive]}
-        numberOfLines={1}
       >
         {label}
       </Text>
@@ -1375,7 +1375,7 @@ function EmptyState({
 }) {
   return (
     <AppCard style={styles.emptyCard}>
-      <MaterialIcons name={icon} size={36} color={colors.stone[400]} />
+      <MaterialIcons name={icon} size={36} color={partyColors.muted} />
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyBody}>{body}</Text>
     </AppCard>
@@ -1383,11 +1383,11 @@ function EmptyState({
 }
 
 const styles = StyleSheet.create({
+  qrModalScroll: { flex: 1, zIndex: 2 },
+  qrModalContent: { flexGrow: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
   container: {
     flex: 1,
-    backgroundColor: colors.ink[900],
-    paddingHorizontal: 16,
-    paddingTop: 20,
+    backgroundColor: partyColors.cream,
   },
   header: {
     flexDirection: "row",
@@ -1405,53 +1405,60 @@ const styles = StyleSheet.create({
   tabs: {
     flexDirection: "row",
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 20,
   },
   segmentButton: {
     flex: 1,
-    minHeight: 44,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.ink[700],
-    backgroundColor: colors.ink[800],
+    minHeight: 62,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderBottomWidth: 4,
+    borderColor: partyColors.border,
+    backgroundColor: partyColors.white,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 6,
+    paddingVertical: 10,
   },
   segmentButtonActive: {
-    backgroundColor: colors.tea[500],
-    borderColor: colors.tea[500],
+    backgroundColor: partyColors.lime,
+    borderColor: partyColors.border,
   },
   segmentText: {
-    ...typography.caption,
-    color: colors.stone[300],
-    marginTop: 2,
+    fontSize: 13,
+    lineHeight: 19,
+    color: partyColors.ink,
+    marginTop: 4,
     textAlign: "center",
+    fontWeight: "600",
   },
   segmentTextActive: {
-    color: colors.ink[900],
+    color: partyColors.ink,
     fontWeight: "700",
   },
   messageCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginBottom: 12,
-    padding: 12,
-    borderColor: colors.peach[500],
-    borderWidth: 1,
+    marginBottom: 16,
+    padding: 14,
+    backgroundColor: partyColors.lavender,
   },
   messageText: {
     ...typography.small,
     flex: 1,
-    color: colors.stone[100],
+    color: partyColors.ink,
   },
   loadingContainer: {
-    flex: 1,
+    minHeight: 220,
     alignItems: "center",
     justifyContent: "center",
   },
   scrollContent: {
+    width: "100%",
+    maxWidth: 600,
+    alignSelf: "center",
+    paddingHorizontal: 20,
     paddingBottom: 32,
   },
   section: {
@@ -1464,15 +1471,24 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sectionTitle: {
-    ...typography.h2,
+    fontFamily: partyFonts.display,
+    fontSize: 22,
+    lineHeight: 29,
+    color: partyColors.ink,
   },
   sectionCount: {
-    ...typography.small,
-    color: colors.tea[500],
-    fontWeight: "700",
+    fontSize: 14,
+    lineHeight: 20,
+    color: partyColors.ink,
+    backgroundColor: partyColors.lime,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    fontWeight: "800",
   },
   codeCard: {
     padding: 16,
+    backgroundColor: partyColors.lavender,
   },
   codeCardContent: {
     flexDirection: "row",
@@ -1484,33 +1500,36 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   label: {
-    ...typography.caption,
-    textTransform: "uppercase",
+    fontSize: 13,
+    lineHeight: 19,
+    color: partyColors.muted,
     fontWeight: "700",
   },
   friendCode: {
-    ...typography.h2,
+    fontFamily: partyFonts.display,
+    fontSize: 20,
+    lineHeight: 28,
     marginTop: 6,
-    color: colors.tea[500],
+    color: partyColors.ink,
   },
   qrPreviewButton: {
     width: 88,
     height: 88,
-    borderRadius: 8,
-    backgroundColor: colors.stone[100],
+    borderRadius: 12,
+    backgroundColor: partyColors.white,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
-    borderColor: colors.tea[500],
+    borderColor: partyColors.border,
   },
   qrMatrix: {
-    backgroundColor: colors.stone[100],
+    backgroundColor: partyColors.white,
   },
   qrMatrixRow: {
     flexDirection: "row",
   },
   qrMatrixCell: {
-    backgroundColor: colors.stone[100],
+    backgroundColor: partyColors.white,
   },
   searchRow: {
     flexDirection: "row",
@@ -1519,19 +1538,23 @@ const styles = StyleSheet.create({
   input: {
     ...typography.body,
     flex: 1,
-    minHeight: 52,
-    backgroundColor: colors.ink[800],
-    borderColor: colors.ink[700],
-    borderWidth: 1,
-    borderRadius: 8,
-    color: colors.stone[100],
+    minWidth: 0,
+    minHeight: 56,
+    backgroundColor: partyColors.white,
+    borderColor: partyColors.border,
+    borderWidth: 2,
+    borderRadius: 12,
+    color: partyColors.ink,
     paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   searchButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 8,
-    backgroundColor: colors.tea[500],
+    width: 56,
+    minHeight: 56,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: partyColors.border,
+    backgroundColor: partyColors.lime,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1547,14 +1570,18 @@ const styles = StyleSheet.create({
   avatar: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.ink[700],
+    flexShrink: 0,
+    borderRadius: 15,
+    borderWidth: 1.5,
+    borderColor: partyColors.border,
+    backgroundColor: partyColors.pink,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarText: {
-    ...typography.small,
-    color: colors.tea[500],
+    fontSize: 14,
+    lineHeight: 20,
+    color: partyColors.ink,
     fontWeight: "800",
   },
   rowBody: {
@@ -1578,24 +1605,27 @@ const styles = StyleSheet.create({
   onlineDot: {
     width: 10,
     height: 10,
+    flexShrink: 0,
     borderRadius: 5,
-    backgroundColor: colors.tea[500],
+    backgroundColor: "#3C7A2A",
     borderWidth: 1,
-    borderColor: colors.stone[100],
+    borderColor: partyColors.white,
   },
   iconButton: {
-    width: 42,
-    height: 42,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: partyColors.dangerSoft,
     alignItems: "center",
     justifyContent: "center",
   },
   compactButton: {
-    minHeight: 40,
+    minHeight: 48,
     paddingHorizontal: 14,
   },
   relationshipText: {
     ...typography.small,
-    color: colors.tea[500],
+    color: partyColors.purple,
     fontWeight: "700",
     textAlign: "right",
     maxWidth: 100,
@@ -1613,25 +1643,32 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   requestButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: partyColors.border,
     alignItems: "center",
     justifyContent: "center",
   },
   rejectButton: {
-    backgroundColor: colors.red[500] + "20",
+    backgroundColor: partyColors.dangerSoft,
   },
   acceptButton: {
-    backgroundColor: colors.tea[500],
+    backgroundColor: partyColors.lime,
   },
   emptyCard: {
     alignItems: "center",
     padding: 24,
+    backgroundColor: partyColors.lavender,
   },
   emptyTitle: {
-    ...typography.h3,
-    marginTop: 10,
+    fontFamily: partyFonts.display,
+    color: partyColors.ink,
+    fontSize: 19,
+    lineHeight: 27,
+    textAlign: "center",
+    marginTop: 14,
   },
   emptyBody: {
     ...typography.small,
@@ -1640,9 +1677,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.9)",
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: "rgba(38, 33, 48, 0.65)",
   },
   modalOverlay: {
     position: "absolute",
@@ -1654,31 +1689,35 @@ const styles = StyleSheet.create({
   },
   modalCloseButton: {
     position: "absolute",
-    top: 50,
     right: 20,
     zIndex: 3,
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: partyColors.border,
+    backgroundColor: partyColors.cream,
     alignItems: "center",
     justifyContent: "center",
   },
   enlargedQrCard: {
     zIndex: 2,
-    backgroundColor: colors.stone[100],
-    borderRadius: 8,
+    backgroundColor: partyColors.white,
+    borderWidth: 2,
+    borderColor: partyColors.border,
+    borderRadius: 20,
     padding: 22,
     alignItems: "center",
   },
   enlargedQrCode: {
     ...typography.h2,
-    color: colors.ink[900],
+    color: partyColors.ink,
     marginTop: 16,
+    textAlign: "center",
   },
   profileModalContainer: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    backgroundColor: "rgba(38, 33, 48, 0.65)",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 18,
@@ -1686,8 +1725,8 @@ const styles = StyleSheet.create({
   profileModalCard: {
     zIndex: 2,
     width: "100%",
-    maxWidth: 420,
-    maxHeight: "78%",
+    maxWidth: 440,
+    maxHeight: "100%",
     padding: 0,
     overflow: "hidden",
   },
@@ -1703,7 +1742,7 @@ const styles = StyleSheet.create({
   },
   profileLoadingText: {
     ...typography.small,
-    color: colors.stone[300],
+    color: partyColors.muted,
   },
   profileHero: {
     alignItems: "center",
@@ -1712,13 +1751,13 @@ const styles = StyleSheet.create({
   profilePhotoLarge: {
     width: 112,
     height: 112,
-    borderRadius: 56,
+    borderRadius: 36,
     overflow: "hidden",
-    backgroundColor: colors.ink[700],
+    backgroundColor: partyColors.pink,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 3,
-    borderColor: colors.tea[500],
+    borderColor: partyColors.border,
   },
   profilePhotoImage: {
     width: "100%",
@@ -1726,7 +1765,7 @@ const styles = StyleSheet.create({
   },
   profilePhotoInitials: {
     ...typography.h2,
-    color: colors.tea[500],
+    color: partyColors.ink,
   },
   profileNameLine: {
     flexDirection: "row",
@@ -1742,14 +1781,15 @@ const styles = StyleSheet.create({
   onlineDotLarge: {
     width: 12,
     height: 12,
+    flexShrink: 0,
     borderRadius: 6,
-    backgroundColor: colors.tea[500],
+    backgroundColor: "#3C7A2A",
     borderWidth: 1,
-    borderColor: colors.stone[100],
+    borderColor: partyColors.white,
   },
   profileOnlineText: {
     ...typography.small,
-    color: colors.tea[500],
+    color: partyColors.purple,
     fontWeight: "700",
   },
   profileDetails: {
@@ -1770,27 +1810,29 @@ const styles = StyleSheet.create({
   },
   statsButton: {
     minWidth: 72,
-    minHeight: 36,
-    borderRadius: 8,
-    backgroundColor: colors.tea[500],
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: partyColors.border,
+    backgroundColor: partyColors.lime,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 14,
   },
   statsButtonText: {
     ...typography.small,
-    color: colors.ink[900],
+    color: partyColors.ink,
     fontWeight: "800",
   },
   statsMuted: {
     ...typography.small,
-    color: colors.stone[400],
+    color: partyColors.muted,
   },
   statsOverview: {
     gap: 14,
     padding: 14,
     borderRadius: 8,
-    backgroundColor: colors.ink[700],
+    backgroundColor: partyColors.lavender,
   },
   statsTotalRow: {
     flexDirection: "row",
@@ -1799,12 +1841,12 @@ const styles = StyleSheet.create({
   },
   statsTotalLabel: {
     ...typography.small,
-    color: colors.stone[300],
+    color: partyColors.muted,
     fontWeight: "700",
   },
   statsTotalValue: {
     ...typography.h3,
-    color: colors.stone[100],
+    color: partyColors.ink,
     fontVariant: ["tabular-nums"],
   },
   statsBarGroup: {
@@ -1818,18 +1860,18 @@ const styles = StyleSheet.create({
   },
   statsBarLabel: {
     ...typography.small,
-    color: colors.stone[100],
+    color: partyColors.ink,
     fontWeight: "700",
   },
   statsBarValue: {
     ...typography.small,
-    color: colors.stone[300],
+    color: partyColors.muted,
     fontVariant: ["tabular-nums"],
   },
   statsTrack: {
     height: 10,
     borderRadius: 5,
-    backgroundColor: colors.ink[800],
+    backgroundColor: partyColors.white,
     overflow: "hidden",
   },
   statsFill: {
@@ -1839,11 +1881,12 @@ const styles = StyleSheet.create({
   profileDetailRow: {
     padding: 14,
     borderRadius: 8,
-    backgroundColor: colors.ink[700],
+    backgroundColor: partyColors.lavender,
   },
   profileDetailLabel: {
-    ...typography.caption,
-    textTransform: "uppercase",
+    fontSize: 13,
+    lineHeight: 19,
+    color: partyColors.muted,
     fontWeight: "700",
     marginBottom: 6,
   },
@@ -1852,22 +1895,21 @@ const styles = StyleSheet.create({
   },
   scannerContainer: {
     flex: 1,
-    backgroundColor: colors.ink[900],
+    backgroundColor: partyColors.cream,
   },
   scannerCamera: {
     flex: 1,
   },
   scannerCloseButton: {
     position: "absolute",
-    top: 54,
     right: 20,
     zIndex: 3,
     width: 50,
     height: 50,
-    borderRadius: 25,
-    backgroundColor: colors.ink[800],
+    borderRadius: 16,
+    backgroundColor: partyColors.cream,
     borderWidth: 2,
-    borderColor: colors.tea[400],
+    borderColor: partyColors.border,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1878,7 +1920,7 @@ const styles = StyleSheet.create({
     width: "70%",
     height: "32%",
     borderWidth: 3,
-    borderColor: colors.tea[400],
+    borderColor: partyColors.lime,
     borderRadius: 12,
     zIndex: 2,
   },
@@ -1892,13 +1934,13 @@ const styles = StyleSheet.create({
   },
   scannerHintText: {
     ...typography.body,
-    color: colors.stone[100],
+    color: partyColors.ink,
     fontWeight: "700",
     textAlign: "center",
-    backgroundColor: `${colors.ink[800]}CC`,
-    borderColor: colors.tea[400],
-    borderWidth: 1,
-    borderRadius: 8,
+    backgroundColor: partyColors.cream,
+    borderColor: partyColors.border,
+    borderWidth: 2,
+    borderRadius: 12,
     paddingHorizontal: 18,
     paddingVertical: 12,
   },

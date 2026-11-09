@@ -1,26 +1,25 @@
 import React, { useState } from "react";
 import {
-  KeyboardTypeOptions,
+  StyleProp,
   Text,
   TextInput,
+  TextInputProps,
   TextStyle,
   View,
   ViewStyle,
 } from "react-native";
 import { inputStyles } from "../theme";
+import { partyColors } from "../theme/party";
 
-interface AppInputProps {
+interface AppInputProps extends Omit<TextInputProps, "style"> {
   label?: string;
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
   secureTextEntry?: boolean;
-  keyboardType?: KeyboardTypeOptions;
-  autoCapitalize?: "none" | "sentences" | "words" | "characters";
-  textContentType?: "oneTimeCode" | "emailAddress" | "password" | "none";
   editable?: boolean;
-  style?: ViewStyle;
-  inputStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  inputStyle?: StyleProp<TextStyle>;
   error?: string;
   horizontalScrollEnabled?: boolean; // New prop for horizontal scrolling
   maxWidth?: number; // Optional max width for the input
@@ -43,6 +42,11 @@ export const AppInput: React.FC<AppInputProps> = ({
   horizontalScrollEnabled = false,
   maxWidth,
   maxLength,
+  accessibilityLabel,
+  autoCorrect = false,
+  onFocus,
+  onBlur,
+  ...textInputProps
 }) => {
   const [isFocused, setIsFocused] = useState(false);
 
@@ -69,24 +73,29 @@ export const AppInput: React.FC<AppInputProps> = ({
     <View style={style}>
       {label && <Text style={inputStyles.label}>{label}</Text>}
       <TextInput
+        {...textInputProps}
         style={[getInputStyle(), inputStyle]}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#a8a29e"
+        accessibilityLabel={accessibilityLabel || label || placeholder}
+        accessibilityState={{ disabled: !editable }}
+        placeholderTextColor={partyColors.muted}
+        selectionColor={partyColors.purple}
+        autoCorrect={autoCorrect}
         secureTextEntry={secureTextEntry}
         keyboardType={keyboardType}
         autoCapitalize={autoCapitalize}
         textContentType={textContentType}
         editable={editable}
         maxLength={maxLength}
-        onFocus={() => setIsFocused(true)}
-        onBlur={() => setIsFocused(false)}
+        onFocus={(event) => { setIsFocused(true); onFocus?.(event); }}
+        onBlur={(event) => { setIsFocused(false); onBlur?.(event); }}
         scrollEnabled={horizontalScrollEnabled} // Enable horizontal scrolling
         multiline={false} // Ensure single line for horizontal scrolling
       />
       {error && (
-        <Text style={[inputStyles.label, { color: "#ef4444", marginTop: 4 }]}>
+        <Text accessibilityRole="alert" style={[inputStyles.label, { color: partyColors.danger, marginTop: 6 }]}>
           {error}
         </Text>
       )}

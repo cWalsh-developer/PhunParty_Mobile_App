@@ -1,3 +1,5 @@
+import { SocialHeader, SocialScreen, SocialToggle as SettingRow } from "./party/social-layout";
+import { partyColors } from "@/assets/theme/party";
 import { generateDataPrivacyPDF } from "@/assets/api/generatePDF";
 import {
   DEFAULT_PRIVACY_SETTINGS,
@@ -5,15 +7,13 @@ import {
   PrivacySettings,
 } from "@/assets/api/privacyApi";
 import { UserContext } from "@/assets/authentication-storage/authContext";
-import { colors, layoutStyles, typography } from "@/assets/theme";
+import { typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useContext, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Linking,
-  ScrollView,
-  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -52,65 +52,6 @@ const PROFILE_VISIBILITY_OPTIONS = [
   },
 ] as const;
 
-function SettingRow({
-  title,
-  subtitle,
-  value,
-  onValueChange,
-  icon,
-  disabled = false,
-}: {
-  title: string;
-  subtitle?: string;
-  value: boolean;
-  onValueChange: (value: boolean) => void;
-  icon: keyof typeof MaterialIcons.glyphMap;
-  disabled?: boolean;
-}) {
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        backgroundColor: colors.ink[700],
-        borderRadius: 12,
-        marginBottom: 12,
-      }}
-    >
-      <MaterialIcons
-        name={icon}
-        size={24}
-        color={colors.tea[400]}
-        style={{ marginRight: 16 }}
-      />
-      <View style={{ flex: 1 }}>
-        <Text style={[typography.body, { color: colors.stone[100] }]}>
-          {title}
-        </Text>
-        {subtitle && (
-          <Text
-            style={[
-              typography.small,
-              { color: colors.stone[400], marginTop: 2 },
-            ]}
-          >
-            {subtitle}
-          </Text>
-        )}
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        disabled={disabled}
-        trackColor={{ false: colors.stone[400], true: colors.tea[400] }}
-        thumbColor={value ? colors.stone[100] : colors.stone[300]}
-      />
-    </View>
-  );
-}
-
 function ProfileVisibilityRow({
   value,
   disabled,
@@ -125,7 +66,7 @@ function ProfileVisibilityRow({
       style={{
         paddingVertical: 16,
         paddingHorizontal: 16,
-        backgroundColor: colors.ink[700],
+        backgroundColor: partyColors.lavender,
         borderRadius: 12,
         marginBottom: 12,
       }}
@@ -136,17 +77,17 @@ function ProfileVisibilityRow({
         <MaterialIcons
           name="visibility"
           size={24}
-          color={colors.tea[400]}
+          color={partyColors.purple}
           style={{ marginRight: 16 }}
         />
         <View style={{ flex: 1 }}>
-          <Text style={[typography.body, { color: colors.stone[100] }]}>
+          <Text style={[typography.body, { color: partyColors.ink }]}>
             Profile Visibility
           </Text>
           <Text
             style={[
               typography.small,
-              { color: colors.stone[400], marginTop: 2 },
+              { color: partyColors.muted, marginTop: 2 },
             ]}
           >
             Control who can see your profile
@@ -154,23 +95,27 @@ function ProfileVisibilityRow({
         </View>
       </View>
 
-      <View style={{ gap: 8, marginLeft: 40 }}>
+      <View accessibilityRole="radiogroup" accessibilityLabel="Profile visibility" style={{ gap: 8 }}>
         {PROFILE_VISIBILITY_OPTIONS.map((option) => (
           <TouchableOpacity
             key={option.key}
+            accessibilityRole="radio"
+            accessibilityLabel={option.label}
+            accessibilityState={{ checked: value === option.key, disabled }}
+            aria-checked={value === option.key}
             disabled={disabled}
             onPress={() => onChange(option.key)}
             style={{
               flexDirection: "row",
               alignItems: "center",
-              paddingVertical: 8,
+              paddingVertical: 12,
               paddingHorizontal: 12,
               backgroundColor:
-                value === option.key ? colors.tea[400] + "20" : colors.ink[800],
+                value === option.key ? partyColors.lime : partyColors.white,
               borderRadius: 8,
               borderWidth: 1,
               borderColor:
-                value === option.key ? colors.tea[400] : colors.ink[700],
+                partyColors.border,
             }}
           >
             <MaterialIcons
@@ -181,7 +126,7 @@ function ProfileVisibilityRow({
               }
               size={20}
               color={
-                value === option.key ? colors.tea[400] : colors.stone[400]
+                value === option.key ? partyColors.purple : partyColors.muted
               }
               style={{ marginRight: 12 }}
             />
@@ -192,8 +137,8 @@ function ProfileVisibilityRow({
                   {
                     color:
                       value === option.key
-                        ? colors.stone[100]
-                        : colors.stone[300],
+                        ? partyColors.ink
+                        : partyColors.muted,
                     fontSize: 14,
                   },
                 ]}
@@ -206,8 +151,8 @@ function ProfileVisibilityRow({
                   {
                     color:
                       value === option.key
-                        ? colors.stone[300]
-                        : colors.stone[400],
+                        ? partyColors.muted
+                        : partyColors.muted,
                     fontSize: 12,
                   },
                 ]}
@@ -415,38 +360,8 @@ export default function PrivacySettingsScreen({
   };
 
   return (
-    <ScrollView
-      style={[layoutStyles.screen, layoutStyles.container]}
-      contentContainerStyle={{ paddingBottom: 100 }}
-    >
-      {/* Header with Back Button */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          marginBottom: 32,
-        }}
-      >
-        <TouchableOpacity
-          onPress={onBack}
-          style={{
-            padding: 8,
-            borderRadius: 20,
-            backgroundColor: colors.ink[800],
-            marginRight: 16,
-          }}
-        >
-          <MaterialIcons
-            name="arrow-back"
-            size={24}
-            color={colors.stone[300]}
-          />
-        </TouchableOpacity>
-
-        <Text style={[typography.h1, { color: colors.stone[100] }]}>
-          Privacy & Security
-        </Text>
-      </View>
+    <SocialScreen>
+      <SocialHeader title="Privacy" subtitle="You choose what you share." onBack={onBack} />
 
       {/* Profile Privacy */}
       {statusMessage && (
@@ -456,21 +371,21 @@ export default function PrivacySettingsScreen({
             alignItems: "center",
             gap: 10,
             marginBottom: 24,
-            borderColor: colors.tea[400],
+            borderColor: partyColors.purple,
             borderWidth: 1,
           }}
         >
           {loading || savingKey ? (
-            <ActivityIndicator color={colors.tea[400]} />
+            <ActivityIndicator color={partyColors.purple} />
           ) : (
             <MaterialIcons
               name="info-outline"
               size={20}
-              color={colors.tea[400]}
+              color={partyColors.purple}
             />
           )}
           <Text
-            style={[typography.small, { color: colors.stone[100], flex: 1 }]}
+            style={[typography.small, { color: partyColors.ink, flex: 1 }]}
           >
             {statusMessage}
           </Text>
@@ -486,9 +401,9 @@ export default function PrivacySettingsScreen({
             marginBottom: 24,
           }}
         >
-          <ActivityIndicator color={colors.tea[400]} />
+          <ActivityIndicator color={partyColors.purple} />
           <Text
-            style={[typography.small, { color: colors.stone[100], flex: 1 }]}
+            style={[typography.small, { color: partyColors.ink, flex: 1 }]}
           >
             Loading privacy settings...
           </Text>
@@ -499,7 +414,7 @@ export default function PrivacySettingsScreen({
         <Text
           style={[
             typography.h3,
-            { color: colors.stone[100], marginBottom: 16 },
+            { color: partyColors.ink, marginBottom: 16 },
           ]}
         >
           Profile Privacy
@@ -541,7 +456,7 @@ export default function PrivacySettingsScreen({
         <Text
           style={[
             typography.h3,
-            { color: colors.stone[100], marginBottom: 16 },
+            { color: partyColors.ink, marginBottom: 16 },
           ]}
         >
           Game Privacy
@@ -562,7 +477,7 @@ export default function PrivacySettingsScreen({
         <Text
           style={[
             typography.h3,
-            { color: colors.stone[100], marginBottom: 16 },
+            { color: partyColors.ink, marginBottom: 16 },
           ]}
         >
           Data & Analytics
@@ -594,7 +509,7 @@ export default function PrivacySettingsScreen({
         <Text
           style={[
             typography.h3,
-            { color: colors.stone[100], marginBottom: 16 },
+            { color: partyColors.ink, marginBottom: 16 },
           ]}
         >
           Your Data Rights
@@ -608,25 +523,25 @@ export default function PrivacySettingsScreen({
                 alignItems: "center",
                 paddingVertical: 12,
                 paddingHorizontal: 16,
-                backgroundColor: colors.ink[700],
+                backgroundColor: partyColors.lavender,
                 borderRadius: 12,
               }}
             >
               <MaterialIcons
                 name="policy"
                 size={20}
-                color={colors.tea[400]}
+                color={partyColors.purple}
                 style={{ marginRight: 12 }}
               />
               <Text
-                style={[typography.body, { color: colors.stone[100], flex: 1 }]}
+                style={[typography.body, { color: partyColors.ink, flex: 1 }]}
               >
                 Privacy Policy
               </Text>
               <MaterialIcons
                 name="open-in-new"
                 size={18}
-                color={colors.stone[400]}
+                color={partyColors.muted}
               />
             </TouchableOpacity>
           </Selector>
@@ -638,30 +553,30 @@ export default function PrivacySettingsScreen({
                 alignItems: "center",
                 paddingVertical: 12,
                 paddingHorizontal: 16,
-                backgroundColor: colors.ink[700],
+                backgroundColor: partyColors.lavender,
                 borderRadius: 12,
               }}
             >
               <MaterialIcons
                 name="download"
                 size={20}
-                color={colors.tea[400]}
+                color={partyColors.purple}
                 style={{ marginRight: 12 }}
               />
               <Text
-                style={[typography.body, { color: colors.stone[100], flex: 1 }]}
+                style={[typography.body, { color: partyColors.ink, flex: 1 }]}
               >
                 Export My Data
               </Text>
               <MaterialIcons
                 name="chevron-right"
                 size={20}
-                color={colors.stone[400]}
+                color={partyColors.muted}
               />
             </TouchableOpacity>
           </Selector>
         </View>
       </AppCard>
-    </ScrollView>
+    </SocialScreen>
   );
 }

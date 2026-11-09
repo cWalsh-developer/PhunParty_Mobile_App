@@ -2,13 +2,14 @@ import { MaterialIcons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
-  Dimensions,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   Vibration,
   View,
 } from "react-native";
@@ -20,13 +21,12 @@ import {
   GameQuestion,
   gameWebSocket,
 } from "../assets/api/gameWebSocketService";
-import { AppCard } from "../assets/components/AppCard";
+import { partyColors, partyFonts } from "@/assets/theme/party";
+import { PartyButton } from "@/components/party/party-button";
 import {
   hasImmediateFairPlayWindowViolation,
   useFairPlayMonitor,
 } from "../assets/hooks/useFairPlayMonitor";
-import { colors } from "../assets/theme/colors";
-import { typography } from "../assets/theme/typography";
 
 interface BuzzerGameProps {
   sessionCode: string;
@@ -69,6 +69,8 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   onGameEnd,
   onError,
 }) => {
+  const { width, fontScale } = useWindowDimensions();
+  const buzzerSize = Math.min(Math.max(width - 80, 160), 260);
   const [currentQuestion, setCurrentQuestion] = useState<GameQuestion | null>(
     null,
   );
@@ -1305,7 +1307,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
       return {};
 
     return {
-      shadowColor: colors.tea[500],
+      shadowColor: partyColors.purple,
       shadowOffset: { width: 0, height: 0 },
       shadowOpacity: glowIntensity ? 0.85 : 0.25,
       shadowRadius: glowIntensity ? 20 : 6,
@@ -1326,6 +1328,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
 
     return (
       <View
+        accessibilityLiveRegion="polite"
         style={[
           styles.fairPlayBanner,
           isWarning && styles.fairPlayBannerGrace,
@@ -1337,13 +1340,7 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
             isConfirmedLocked ? "block" : isWarning ? "timer" : "verified-user"
           }
           size={20}
-          color={
-            isConfirmedLocked
-              ? colors.red[500]
-              : isWarning
-                ? colors.peach[500]
-                : colors.tea[400]
-          }
+          color={isConfirmedLocked ? partyColors.danger : partyColors.ink}
         />
         <Text
           style={[
@@ -1692,19 +1689,35 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
     };
   }, []);
 
+  const renderScreen = (content: React.ReactNode) => (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 16 : 0}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
+        {content}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+
   if (!currentQuestion) {
-    return (
-      <View style={styles.container}>
-        <AppCard style={styles.waitingCard}>
-          <MaterialIcons
-            name="sports-esports"
-            size={48}
-            color={colors.tea[500]}
-          />
-          <Text style={styles.waitingText}>Get ready to buzz in!</Text>
-          <Text style={styles.sessionCode}>Session: {sessionCode}</Text>
-        </AppCard>
-      </View>
+    return renderScreen(
+      <View style={styles.waitingCard} accessibilityLiveRegion="polite">
+        <View style={styles.waitingIcon}>
+          <MaterialIcons name="touch-app" size={38} color={partyColors.ink} />
+        </View>
+        <Text accessibilityRole="header" style={styles.waitingText}>Ready, set, buzz.</Text>
+        <Text style={styles.waitingDetail}>
+          Keep this screen open. Your buzzer will light up when the question starts.
+        </Text>
+        <Text style={styles.sessionCode}>Room {sessionCode}</Text>
+      </View>,
     );
   }
 
@@ -1727,389 +1740,276 @@ export const BuzzerGame: React.FC<BuzzerGameProps> = ({
   const visibleAnswerOptions = isTextInputAnswerMode ? [] : answerOptions;
 
   if (isWaitingForNextQuestion) {
-    return (
-      <View style={styles.container}>
-        <AppCard style={styles.waitingCard}>
+    return renderScreen(
+      <View style={styles.waitingCard} accessibilityLiveRegion="polite">
+        <View style={styles.waitingIcon}>
           <MaterialIcons
-            name="hourglass-empty"
-            size={48}
-            color={colors.tea[500]}
+            name={isSubmittedAnswerWaiting ? "check" : "hourglass-empty"}
+            size={36}
+            color={partyColors.ink}
           />
-          <Text style={styles.waitingText}>Waiting for next question...</Text>
-          <Text style={styles.sessionCode}>Session: {sessionCode}</Text>
-        </AppCard>
-      </View>
+        </View>
+        <Text accessibilityRole="header" style={styles.waitingText}>
+          {isSubmittedAnswerWaiting ? "Answer submitted!" : "Next question, coming up."}
+        </Text>
+        <Text style={styles.waitingDetail}>
+          {isSubmittedAnswerWaiting
+            ? "Look up at the big screen. Your host will reveal what happens next."
+            : "Stay here. Your host is moving the game along."}
+        </Text>
+        <Text style={styles.sessionCode}>Room {sessionCode}</Text>
+      </View>,
     );
   }
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 16 : 0}
-    >
-      <View style={styles.gameContent}>
-        <AppCard style={styles.questionCard}>
-          <Text style={styles.questionText}>{currentQuestion.question}</Text>
-        </AppCard>
-        {renderFairPlayStatus()}
+  const useSingleColumn =
+    width < 360 || fontScale >= 1.25 ||
+    visibleAnswerOptions.some((option) => option.length > 54);
+  const isBuzzerDisabled =
+    isFairPlayLocked ||
+    buzzerState.buttonState === "waiting" ||
+    buzzerState.buttonState === "locked" ||
+    buzzerState.buttonState === "frozen" ||
+    buzzerState.buttonState === "answer_mode";
+  const buzzerLabel =
+    isFairPlayLocked || buzzerState.buttonState === "frozen"
+      ? "Frozen"
+      : buzzerState.buttonState === "answer_mode"
+        ? "Answer"
+        : buzzerState.buttonState === "waiting" || buzzerState.buttonState === "locked"
+          ? "Wait..."
+          : "BUZZ!";
 
-        {buzzerState.winner && (
-          <Animated.View
-            style={[
-              styles.winnerCard,
-              {
-                opacity: winnerAnimation,
-                transform: [{ scale: winnerAnimation }],
-              },
-            ]}
-          >
-            <AppCard style={styles.winnerCardContent}>
-              <MaterialIcons
-                name="emoji-events"
-                size={48}
-                color={colors.peach[500]}
-              />
-              <Text style={styles.winnerText}>
-                {buzzerState.winner} buzzed first!
-              </Text>
-            </AppCard>
-          </Animated.View>
-        )}
+  return renderScreen(
+    <View style={styles.gameContent}>
+      <View style={styles.questionCard}>
+        <View style={styles.questionMode}>
+          <MaterialIcons name="bolt" size={19} color={partyColors.lime} />
+          <Text style={styles.questionModeText}>Buzzer round</Text>
+        </View>
+        <Text accessibilityRole="header" style={styles.questionText}>
+          {currentQuestion.question}
+        </Text>
+      </View>
+      {renderFairPlayStatus()}
 
-        {buzzerState.canAnswer &&
-        !isFairPlayLocked &&
-        (visibleAnswerOptions.length > 0 || isTextInputAnswerMode) ? (
-          <View style={styles.answerContainer}>
-            {visibleAnswerOptions.length > 0 ? (
-              visibleAnswerOptions.map((option, index) => (
+      {buzzerState.winner && (
+        <Animated.View
+          accessibilityLiveRegion="polite"
+          style={[
+            styles.winnerCard,
+            { opacity: winnerAnimation, transform: [{ scale: winnerAnimation }] },
+          ]}
+        >
+          <MaterialIcons name="emoji-events" size={32} color={partyColors.ink} />
+          <Text style={styles.winnerText}>{buzzerState.winner} buzzed first!</Text>
+        </Animated.View>
+      )}
+
+      {buzzerState.canAnswer &&
+      !isFairPlayLocked &&
+      (visibleAnswerOptions.length > 0 || isTextInputAnswerMode) ? (
+        <View style={styles.answerContainer}>
+          <Text style={styles.answerHint}>
+            {visibleAnswerOptions.length > 0
+              ? "Your turn. Tap an answer to submit it."
+              : "Your turn. Type your answer, then submit it."}
+          </Text>
+          {visibleAnswerOptions.length > 0 ? (
+            <View style={styles.optionsGrid}>
+              {visibleAnswerOptions.map((option, index) => (
                 <TouchableOpacity
                   key={`${option}-${index}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Submit answer ${String.fromCharCode(65 + index)}: ${option}`}
+                  accessibilityHint="Submits this answer immediately."
+                  accessibilityState={{ disabled: hasSubmittedAnswer || isFairPlayLocked }}
                   style={[
                     styles.optionButton,
-                    (hasSubmittedAnswer || isFairPlayLocked) &&
-                      styles.optionButtonDisabled,
+                    useSingleColumn && styles.optionButtonFullWidth,
+                    (hasSubmittedAnswer || isFairPlayLocked) && styles.optionButtonDisabled,
                   ]}
                   onPress={() => submitBuzzerAnswer(option)}
                   disabled={hasSubmittedAnswer || isFairPlayLocked}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.optionText}>
-                    {String.fromCharCode(65 + index)}. {option}
-                  </Text>
+                  <View style={styles.optionTopRow}>
+                    <Text style={styles.optionLetter}>{String.fromCharCode(65 + index)}</Text>
+                    <MaterialIcons name="arrow-forward" size={18} color={partyColors.ink} />
+                  </View>
+                  <Text style={styles.optionText}>{option}</Text>
                 </TouchableOpacity>
-              ))
-            ) : (
-              <>
-                <TextInput
-                  style={styles.answerInput}
-                  value={answerText}
-                  onChangeText={setAnswerText}
-                  placeholder="Type your answer"
-                  placeholderTextColor={colors.stone[400]}
-                  editable={!hasSubmittedAnswer && !isFairPlayLocked}
-                  autoCapitalize="none"
-                  autoCorrect
-                  returnKeyType="done"
-                  onSubmitEditing={() => {
-                    const trimmedAnswer = answerText.trim();
-                    if (
-                      trimmedAnswer &&
-                      !hasSubmittedAnswer &&
-                      !isFairPlayLocked
-                    ) {
-                      submitBuzzerAnswer(trimmedAnswer);
-                    }
-                  }}
+              ))}
+            </View>
+          ) : (
+            <>
+              <Text style={styles.inputLabel}>Your answer</Text>
+              <TextInput
+                accessibilityLabel="Your answer"
+                accessibilityHint="Type your answer, then choose Submit answer."
+                style={styles.answerInput}
+                value={answerText}
+                onChangeText={setAnswerText}
+                placeholder="Type your answer"
+                placeholderTextColor={partyColors.muted}
+                editable={!hasSubmittedAnswer && !isFairPlayLocked}
+                autoCapitalize="none"
+                autoCorrect
+                returnKeyType="done"
+                onSubmitEditing={() => {
+                  const trimmedAnswer = answerText.trim();
+                  if (trimmedAnswer && !hasSubmittedAnswer && !isFairPlayLocked) {
+                    submitBuzzerAnswer(trimmedAnswer);
+                  }
+                }}
+              />
+              {!!answerText.trim() && !hasSubmittedAnswer && !isFairPlayLocked && (
+                <PartyButton
+                  title="Submit answer"
+                  onPress={() => submitBuzzerAnswer(answerText.trim())}
+                  icon={<MaterialIcons name="arrow-forward" size={21} color={partyColors.ink} />}
                 />
-                {!!answerText.trim() &&
-                  !hasSubmittedAnswer &&
-                  !isFairPlayLocked && (
-                    <TouchableOpacity
-                      style={styles.submitAnswerButton}
-                      onPress={() => submitBuzzerAnswer(answerText.trim())}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.submitAnswerText}>Submit Answer</Text>
-                    </TouchableOpacity>
-                  )}
-              </>
-            )}
-          </View>
-        ) : (
-          <View style={styles.buzzerContainer}>
-            <Animated.View
-              style={[
-                getBuzzerGlowStyle(),
-                { transform: [{ scale: scaleAnimation }] },
-              ]}
-            >
-              <TouchableOpacity
-                style={getBuzzerButtonStyle()}
-                onPress={handleBuzzerPress}
-                disabled={
-                  isFairPlayLocked ||
-                  buzzerState.buttonState === "waiting" ||
-                  buzzerState.buttonState === "locked" ||
-                  buzzerState.buttonState === "frozen" ||
-                  buzzerState.buttonState === "answer_mode"
-                }
-                activeOpacity={0.8}
-              >
-                <View style={styles.buzzerButtonContent}>
-                  <MaterialIcons
-                    name={
-                      isFairPlayLocked || buzzerState.buttonState === "frozen"
-                        ? "block"
-                        : buzzerState.buttonState === "answer_mode"
-                          ? "edit"
-                          : buzzerState.buttonState === "waiting" ||
-                              buzzerState.buttonState === "locked"
-                            ? "hourglass-empty"
-                            : "touch-app"
-                    }
-                    size={64}
-                    color={colors.white}
-                  />
-
-                  <Text style={styles.buzzerButtonText}>
-                    {isFairPlayLocked || buzzerState.buttonState === "frozen"
-                      ? "Frozen"
-                      : buzzerState.buttonState === "answer_mode"
-                        ? "Answer"
-                        : buzzerState.buttonState === "waiting" ||
-                            buzzerState.buttonState === "locked"
-                          ? "Wait..."
-                          : "BUZZ!"}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            </Animated.View>
-
-            <Text style={styles.instructionText}>{buzzerState.statusText}</Text>
-          </View>
-        )}
-
-        <View style={styles.statusContainer}>
-          <MaterialIcons name="timer" size={20} color={colors.stone[400]} />
-          <Text style={styles.statusText}>
-            {isFairPlayLocked
-              ? "Fair Play freeze. Wait for the next question."
-              : buzzerState.isActive
-                ? "Buzzer is LIVE!"
-                : buzzerState.statusText}
-          </Text>
+              )}
+            </>
+          )}
         </View>
+      ) : (
+        <View style={styles.buzzerContainer}>
+          <Animated.View
+            style={[
+              getBuzzerGlowStyle(),
+              { borderRadius: buzzerSize / 2, transform: [{ scale: scaleAnimation }] },
+            ]}
+          >
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={buzzerLabel === "BUZZ!" ? "Buzz in" : buzzerLabel}
+              accessibilityHint={isBuzzerDisabled ? buzzerState.statusText : "Buzz to get a chance to answer."}
+              accessibilityState={{ disabled: isBuzzerDisabled }}
+              style={[
+                getBuzzerButtonStyle(),
+                { width: buzzerSize, minHeight: buzzerSize, borderRadius: buzzerSize / 2 },
+              ]}
+              onPress={handleBuzzerPress}
+              disabled={isBuzzerDisabled}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons
+                name={
+                  isFairPlayLocked || buzzerState.buttonState === "frozen"
+                    ? "block"
+                    : buzzerState.buttonState === "answer_mode"
+                      ? "edit"
+                      : buzzerState.buttonState === "waiting" || buzzerState.buttonState === "locked"
+                        ? "hourglass-empty"
+                        : "touch-app"
+                }
+                size={58}
+                color={partyColors.ink}
+              />
+              <Text style={styles.buzzerButtonText}>{buzzerLabel}</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      )}
+
+      <View style={styles.statusContainer} accessibilityLiveRegion="polite">
+        <MaterialIcons
+          name={isFairPlayLocked ? "lock" : buzzerState.isActive ? "bolt" : "hourglass-empty"}
+          size={22}
+          color={partyColors.ink}
+        />
+        <Text style={styles.statusText}>
+          {isFairPlayLocked
+            ? "Fair Play freeze. Wait for the next question."
+            : buzzerState.isActive
+              ? "Buzzer is live. First to buzz gets the answer!"
+              : buzzerState.statusText}
+        </Text>
       </View>
-    </KeyboardAvoidingView>
+    </View>,
   );
 };
 
-const { width } = Dimensions.get("window");
-const buzzerSize = Math.min(width * 0.6, 250);
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.ink[900],
-    padding: 16,
+  container: { flex: 1, backgroundColor: partyColors.cream },
+  scrollContent: {
+    flexGrow: 1, width: "100%", maxWidth: 760, alignSelf: "center",
+    padding: 16, paddingBottom: 32,
   },
   waitingCard: {
-    alignItems: "center",
-    padding: 32,
-    marginTop: 100,
+    alignItems: "center", gap: 16, marginVertical: 24, padding: 24,
+    backgroundColor: partyColors.lavender, borderColor: partyColors.border,
+    borderWidth: 2, borderBottomWidth: 5, borderRadius: 24,
+  },
+  waitingIcon: {
+    alignItems: "center", justifyContent: "center", width: 76, height: 76,
+    borderRadius: 38, borderWidth: 2, borderColor: partyColors.border,
+    backgroundColor: partyColors.lime,
   },
   waitingText: {
-    ...typography.h3,
-    color: colors.stone[100],
-    marginTop: 16,
-    textAlign: "center",
+    fontFamily: partyFonts.display, fontSize: 25, lineHeight: 33,
+    color: partyColors.ink, textAlign: "center",
   },
-  sessionCode: {
-    ...typography.body,
-    color: colors.stone[400],
-    marginTop: 8,
-  },
-  gameContent: {
-    flex: 1,
-  },
-  questionCard: {
-    padding: 24,
-    marginBottom: 24,
-  },
-  questionText: {
-    ...typography.h2,
-    color: colors.stone[100],
-    textAlign: "center",
-    lineHeight: 28,
-  },
+  waitingDetail: { fontSize: 16, lineHeight: 24, color: partyColors.ink, textAlign: "center" },
+  sessionCode: { fontSize: 14, fontWeight: "700", color: partyColors.muted },
+  gameContent: { gap: 16 },
+  questionCard: { backgroundColor: partyColors.purple, borderRadius: 22, padding: 20, gap: 20 },
+  questionMode: { flexDirection: "row", alignItems: "center", gap: 6 },
+  questionModeText: { fontSize: 13, fontWeight: "800", color: partyColors.lime },
+  questionText: { fontFamily: partyFonts.display, fontSize: 27, lineHeight: 35, color: partyColors.white },
   winnerCard: {
-    marginBottom: 20,
+    flexDirection: "row", alignItems: "center", gap: 12, padding: 16,
+    borderColor: partyColors.border, borderWidth: 2, borderBottomWidth: 4,
+    borderRadius: 16, backgroundColor: partyColors.pink,
   },
-  winnerCardContent: {
-    alignItems: "center",
-    padding: 20,
-    backgroundColor: colors.peach[500] + "20",
-    borderColor: colors.peach[500],
-    borderWidth: 2,
-  },
-  winnerText: {
-    ...typography.h3,
-    color: colors.peach[500],
-    marginTop: 12,
-    textAlign: "center",
-    fontWeight: "bold",
-  },
+  winnerText: { flex: 1, fontSize: 18, lineHeight: 25, fontWeight: "800", color: partyColors.ink },
   fairPlayBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: colors.ink[800],
-    borderColor: colors.tea[500],
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: partyColors.lavender, borderColor: partyColors.border,
+    borderWidth: 1, borderRadius: 12, padding: 12,
   },
-  fairPlayBannerWarning: {
-    borderColor: colors.red[500],
-    backgroundColor: colors.red[500] + "14",
-  },
-  fairPlayBannerGrace: {
-    borderColor: colors.peach[500],
-    backgroundColor: colors.peach[500] + "14",
-  },
-  fairPlayText: {
-    ...typography.body,
-    color: colors.stone[300],
-    flex: 1,
-    fontWeight: "600",
-  },
-  fairPlayTextGrace: {
-    color: colors.stone[100],
-  },
-  fairPlayTextWarning: {
-    color: colors.stone[100],
-  },
-  buzzerContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 40,
-  },
+  fairPlayBannerWarning: { borderColor: partyColors.danger, backgroundColor: partyColors.dangerSoft },
+  fairPlayBannerGrace: { backgroundColor: partyColors.lime },
+  fairPlayText: { flex: 1, fontSize: 14, lineHeight: 21, fontWeight: "600", color: partyColors.ink },
+  fairPlayTextGrace: { color: partyColors.ink },
+  fairPlayTextWarning: { color: partyColors.ink },
+  buzzerContainer: { alignItems: "center", paddingVertical: 12 },
   buzzerButton: {
-    width: buzzerSize,
-    height: buzzerSize,
-    borderRadius: buzzerSize / 2,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-    borderWidth: 4,
-    borderColor: colors.ink[700],
+    alignItems: "center", justifyContent: "center", gap: 10, padding: 24,
+    borderWidth: 3, borderBottomWidth: 8, borderColor: partyColors.border,
   },
-  buzzerButtonActive: {
-    backgroundColor: colors.tea[500],
-    borderColor: colors.tea[300],
-  },
-  buzzerButtonPressed: {
-    backgroundColor: colors.stone[400],
-    borderColor: colors.stone[300],
-  },
-  buzzerButtonWinner: {
-    backgroundColor: colors.peach[500],
-    borderColor: colors.peach[300],
-  },
-  buzzerButtonFrozen: {
-    backgroundColor: colors.red[500],
-    borderColor: colors.red[600],
-  },
-  buzzerButtonInactive: {
-    backgroundColor: colors.ink[800],
-    borderColor: colors.ink[700],
-  },
-  buzzerButtonContent: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  buzzerButtonActive: { backgroundColor: partyColors.lime },
+  buzzerButtonPressed: { backgroundColor: partyColors.lavender },
+  buzzerButtonFrozen: { backgroundColor: partyColors.dangerSoft },
+  buzzerButtonInactive: { backgroundColor: partyColors.white },
   buzzerButtonText: {
-    ...typography.h2,
-    color: colors.white,
-    fontWeight: "bold",
-    marginTop: 8,
-    textAlign: "center",
-  },
-  instructionText: {
-    ...typography.body,
-    color: colors.stone[300],
-    textAlign: "center",
-    fontSize: 18,
-    fontWeight: "600",
+    fontFamily: partyFonts.display, fontSize: 30, lineHeight: 38,
+    color: partyColors.ink, textAlign: "center",
   },
   statusContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 20,
-    marginTop: 20,
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: partyColors.lavender, borderRadius: 12, padding: 14,
   },
-  answerContainer: {
-    flex: 1,
-    justifyContent: "center",
-    gap: 12,
-  },
+  statusText: { flex: 1, fontSize: 15, lineHeight: 22, fontWeight: "600", color: partyColors.ink },
+  answerContainer: { gap: 12 },
+  answerHint: { fontSize: 15, lineHeight: 22, color: partyColors.muted },
+  optionsGrid: { flexDirection: "row", flexWrap: "wrap", alignItems: "stretch", gap: 12 },
   optionButton: {
-    backgroundColor: colors.ink[800],
-    borderColor: colors.tea[500],
-    borderWidth: 2,
-    borderRadius: 12,
-    padding: 16,
-    minHeight: 56,
-    justifyContent: "center",
+    flexBasis: "46%", flexGrow: 1, minWidth: 0, minHeight: 104, gap: 12,
+    backgroundColor: partyColors.white, borderColor: partyColors.border,
+    borderWidth: 2, borderBottomWidth: 5, borderRadius: 12, padding: 12,
   },
-  optionButtonDisabled: {
-    opacity: 0.55,
-  },
-  optionText: {
-    ...typography.body,
-    color: colors.stone[100],
-    fontSize: 16,
-    fontWeight: "600",
-  },
+  optionButtonFullWidth: { flexBasis: "100%" },
+  optionButtonDisabled: { opacity: 0.6 },
+  optionTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  optionLetter: { color: partyColors.ink, fontSize: 13, fontWeight: "800" },
+  optionText: { color: partyColors.ink, fontSize: 17, lineHeight: 24, fontWeight: "800" },
+  inputLabel: { color: partyColors.ink, fontSize: 14, fontWeight: "700" },
   answerInput: {
-    ...typography.body,
-    backgroundColor: colors.ink[800],
-    borderColor: colors.ink[700],
-    borderWidth: 2,
-    borderRadius: 12,
-    color: colors.stone[100],
-    padding: 16,
-    minHeight: 56,
-  },
-  submitAnswerButton: {
-    backgroundColor: colors.tea[500],
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-  },
-  submitAnswerText: {
-    ...typography.body,
-    color: colors.ink[900],
-    fontWeight: "bold",
-  },
-  statusText: {
-    ...typography.body,
-    color: colors.stone[400],
-    marginLeft: 12,
-    textAlign: "center",
-    fontSize: 16,
-  },
-  actionButtons: {
-    marginTop: 24,
-    gap: 12,
-  },
-  actionButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    backgroundColor: partyColors.white, borderColor: partyColors.border,
+    borderWidth: 2, borderBottomWidth: 4, borderRadius: 12,
+    color: partyColors.ink, fontSize: 18, padding: 16, minHeight: 60,
   },
 });
 

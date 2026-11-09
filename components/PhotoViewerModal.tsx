@@ -1,14 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
+import { partyColors } from "@/assets/theme/party";
 import React from "react";
 import {
-  Dimensions,
   Modal,
-  StatusBar,
   StyleSheet,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { AuthenticatedImage } from "./AuthenticatedImage";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface PhotoViewerModalProps {
   visible: boolean;
@@ -16,13 +17,14 @@ interface PhotoViewerModalProps {
   onClose: () => void;
 }
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
-
 const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
   visible,
   photoUri,
   onClose,
 }) => {
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const photoSize = Math.min(width - 40, height - insets.top - insets.bottom - 120, 600);
   return (
     <Modal
       visible={visible}
@@ -30,18 +32,17 @@ const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <StatusBar backgroundColor="rgba(0,0,0,0.9)" barStyle="light-content" />
       <View style={styles.modalContainer}>
         {/* Close button */}
-        <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-          <Ionicons name="close" size={30} color="white" />
+        <TouchableOpacity style={[styles.closeButton, { top: insets.top + 16 }]} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close profile photo">
+          <Ionicons name="close" size={26} color={partyColors.ink} />
         </TouchableOpacity>
 
         {/* Photo */}
         <View style={styles.photoContainer}>
           <AuthenticatedImage
             photoUrl={photoUri}
-            style={styles.photo}
+            style={[styles.photo, { width: photoSize, height: photoSize }]}
             resizeMode="contain"
           />
         </View>
@@ -60,7 +61,7 @@ const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
 const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    backgroundColor: partyColors.cream,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -74,22 +75,22 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: "absolute",
-    top: 50,
     right: 20,
     zIndex: 3,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    borderRadius: 20,
-    padding: 8,
+    backgroundColor: partyColors.lime,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: partyColors.border,
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
   },
   photoContainer: {
     zIndex: 2,
-    maxWidth: screenWidth * 0.9,
-    maxHeight: screenHeight * 0.8,
   },
   photo: {
-    width: screenWidth * 0.8,
-    height: screenWidth * 0.8, // Square aspect ratio
-    borderRadius: (screenWidth * 0.8) / 2, // Make it circular
+    borderRadius: 24,
   },
 });
 

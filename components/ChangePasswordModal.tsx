@@ -1,7 +1,9 @@
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { partyColors, partyFonts } from "@/assets/theme/party";
 import { UserContext } from "@/assets/authentication-storage/authContext";
 import { changePassword } from "@/assets/authentication-storage/authenticationLogic";
 import { AppButton, AppCard, AppInput, useToast } from "@/assets/components";
-import { colors, layoutStyles, typography } from "@/assets/theme";
+import { layoutStyles, typography } from "@/assets/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useContext, useState } from "react";
 import {
@@ -26,6 +28,7 @@ export default function ChangePasswordModal({
   visible,
   onClose,
 }: ChangePasswordModalProps) {
+  const insets = useSafeAreaInsets();
   const { user, setUser } = useContext(UserContext)!;
   const { showToast } = useToast();
   const [currentPassword, setCurrentPassword] = useState("");
@@ -82,7 +85,7 @@ export default function ChangePasswordModal({
       } else {
         showToast(result.message, "error");
       }
-    } catch (error) {
+    } catch {
       showToast("Failed to change password. Please try again.", "error");
     } finally {
       setLoading(false);
@@ -103,13 +106,13 @@ export default function ChangePasswordModal({
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
-      <View style={[layoutStyles.screen, layoutStyles.container]}>
+      <View style={[layoutStyles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom, paddingHorizontal: 20 }]}>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1 }}
         >
           <ScrollView
-            contentContainerStyle={{ flexGrow: 1 }}
+            contentContainerStyle={{ flexGrow: 1, width: "100%", maxWidth: 520, alignSelf: "center", paddingBottom: 24 }}
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.content}>
@@ -118,12 +121,14 @@ export default function ChangePasswordModal({
                 <View style={styles.headerRow}>
                   <TouchableOpacity
                     onPress={handleClose}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close change password"
                     style={styles.closeButton}
                   >
                     <MaterialIcons
                       name="close"
                       size={24}
-                      color={colors.stone[300]}
+                      color={partyColors.muted}
                     />
                   </TouchableOpacity>
                   <Text style={[typography.h2, styles.title]}>
@@ -135,7 +140,7 @@ export default function ChangePasswordModal({
                 <MaterialIcons
                   name="lock"
                   size={48}
-                  color={colors.tea[400]}
+                  color={partyColors.purple}
                   style={{ marginTop: 20 }}
                 />
 
@@ -151,6 +156,7 @@ export default function ChangePasswordModal({
                     Current Password
                   </Text>
                   <AppInput
+                    accessibilityLabel="Current password"
                     placeholder="Enter current password"
                     value={currentPassword}
                     onChangeText={setCurrentPassword}
@@ -165,6 +171,7 @@ export default function ChangePasswordModal({
                     New Password
                   </Text>
                   <AppInput
+                    accessibilityLabel="New password"
                     placeholder="Enter new password"
                     value={newPassword}
                     onChangeText={setNewPassword}
@@ -179,6 +186,7 @@ export default function ChangePasswordModal({
                     Confirm New Password
                   </Text>
                   <AppInput
+                    accessibilityLabel="Confirm new password"
                     placeholder="Confirm new password"
                     value={confirmPassword}
                     onChangeText={setConfirmPassword}
@@ -253,16 +261,24 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   closeButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: colors.ink[800],
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: partyColors.border,
+    borderRadius: 16,
+    backgroundColor: partyColors.white,
   },
   title: {
-    color: colors.stone[100],
+    flex: 1,
+    fontFamily: partyFonts.display,
+    fontWeight: "400",
+    color: partyColors.ink,
     textAlign: "center",
   },
   subtitle: {
-    color: colors.stone[300],
+    color: partyColors.muted,
     textAlign: "center",
     marginTop: 12,
     lineHeight: 20,
@@ -274,30 +290,30 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    color: colors.stone[300],
+    color: partyColors.muted,
     marginBottom: 8,
-    textTransform: "uppercase",
+    textTransform: "none",
     letterSpacing: 0.5,
     fontWeight: "600",
   },
   input: {
-    backgroundColor: colors.ink[700],
+    backgroundColor: partyColors.white,
   },
   requirements: {
     marginTop: 8,
     padding: 16,
-    backgroundColor: colors.ink[800],
+    backgroundColor: partyColors.lavender,
     borderRadius: 12,
     borderLeftWidth: 3,
-    borderLeftColor: colors.tea[400],
+    borderLeftColor: partyColors.purple,
   },
   requirementsTitle: {
-    color: colors.tea[400],
+    color: partyColors.purple,
     fontWeight: "600",
     marginBottom: 8,
   },
   requirement: {
-    color: colors.stone[400],
+    color: partyColors.muted,
     marginBottom: 4,
     lineHeight: 16,
   },

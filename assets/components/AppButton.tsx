@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  StyleProp,
   Text,
   TextStyle,
   TouchableOpacity,
@@ -13,8 +14,8 @@ interface AppButtonProps {
   onPress: () => void;
   variant?: "primary" | "secondary" | "accent" | "delete";
   disabled?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
 }
@@ -59,6 +60,9 @@ export const AppButton: React.FC<AppButtonProps> = ({
 
   return (
     <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled }}
       style={[getButtonStyle(), style]}
       onPress={onPress}
       disabled={disabled}
@@ -67,7 +71,7 @@ export const AppButton: React.FC<AppButtonProps> = ({
       {icon ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           {iconPosition === "left" && icon}
-          <Text style={[getTextStyle(), textStyle]}>{title}</Text>
+          <Text style={[getTextStyle(), { flexShrink: 1 }, textStyle]}>{title}</Text>
           {iconPosition === "right" && icon}
         </View>
       ) : (

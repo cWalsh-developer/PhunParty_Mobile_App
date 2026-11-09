@@ -7,10 +7,12 @@ import {
   Animated,
   AppState,
   BackHandler,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as APIGame from "../assets/api/API";
 import {
   ConnectionState,
@@ -23,9 +25,12 @@ import {
   gameWebSocket,
   PlayerInfo,
 } from "../assets/api/gameWebSocketService";
-import { AppButton } from "../assets/components/AppButton";
+import { PartyButton as AppButton } from "./party/party-button";
+import { PartyBrand, PartyMascot } from "./party/party-brand";
+import { PartyResults } from "./party/party-results";
+import { normalizePartyResults, PartyResult } from "../utils/party-results";
+import { partyColors, partyFonts } from "../assets/theme/party";
 import { AppCard } from "../assets/components/AppCard";
-import { colors } from "../assets/theme/colors";
 import { typography } from "../assets/theme/typography";
 import BeatTheClockGame from "./BeatTheClockGame";
 import BuzzerGame from "./BuzzerGame";
@@ -58,6 +63,9 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   playerInfo,
   onLeaveGame,
 }) => {
+  const insets = useSafeAreaInsets();
+  const screenStyle = [styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }];
+  const [finalResults, setFinalResults] = useState<PartyResult[]>([]);
   const [isConnecting, setIsConnecting] = useState(true);
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("connecting");
@@ -1092,6 +1100,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     };
 
     gameWebSocket.onGameStateUpdate = (state: GameState) => {
+      const suppliedResults = (state as GameState & { final_results?: unknown }).final_results;
+      if (Array.isArray(suppliedResults)) {
+        setFinalResults(normalizePartyResults(suppliedResults));
+      }
       const sanitizedState = sanitizeGameStateUpdate(state);
       const action =
         (state as any)?.action ?? (state as any)?.game_state?.action;
@@ -1124,6 +1136,13 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     };
 
     gameWebSocket.onPhaseChange = (phase: GamePhase, data?: any) => {
+      const startingAnotherRound = gamePhaseRef.current === "ended" && phase !== "ended";
+      gamePhaseRef.current = phase;
+      if (startingAnotherRound || phase === "lobby" || phase === "waiting") {
+        setFinalResults([]);
+      } else if (Array.isArray(data?.final_results)) {
+        setFinalResults(normalizePartyResults(data.final_results));
+      }
       setGamePhase(phase);
 
       if (phase === "lobby" || phase === "waiting") {
@@ -1423,7 +1442,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
     return (
       <View style={styles.fairPlayNotice}>
-        <MaterialIcons name="verified-user" size={18} color={colors.tea[400]} />
+        <MaterialIcons name="verified-user" size={18} color={partyColors.purple} />
         <Text style={styles.fairPlayNoticeText}>
           Fair Play Mode active
           {fairPlayMaxStrikes > 0
@@ -1441,12 +1460,12 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     // Show lobby screen if game hasn't started yet
     if (!isGameStarted) {
       return (
-        <View style={styles.centerContainer}>
+        <ScrollView contentContainerStyle={styles.centerContainer}>
           <AppCard style={styles.lobbyCard}>
-            <MaterialIcons name="people" size={64} color={colors.tea[500]} />
-            <Text style={styles.lobbyTitle}>Game Lobby</Text>
+            <PartyMascot size={104} />
+            <Text style={styles.lobbyTitle}>You&apos;re in!</Text>
             <Text style={styles.lobbyText}>
-              Waiting for host to start the game...
+              The gang&apos;s getting together. Your host will start the game.
             </Text>
             <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
             <Text style={styles.playerInfo}>
@@ -1464,7 +1483,9 @@ export const GameContainer: React.FC<GameContainerProps> = ({
               <Animated.View
                 style={[styles.pulsingDot, { opacity: pulseAnimation }]}
               />
-              <Text style={styles.statusText}>Connected & Ready</Text>
+              <Text style={styles.statusText}>
+                {connectionState === "connected" ? "Connected and ready" : "Connecting to your room"}
+              </Text>
             </View>
 
             <View style={styles.actionButtons}>
@@ -1476,7 +1497,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
               />
             </View>
           </AppCard>
-        </View>
+        </ScrollView>
       );
     }
 
@@ -1491,9 +1512,9 @@ export const GameContainer: React.FC<GameContainerProps> = ({
           : "The host is explaining the rules...";
 
       return (
-        <View style={styles.centerContainer}>
+        <ScrollView contentContainerStyle={styles.centerContainer}>
           <AppCard style={styles.loadingCard}>
-            <MaterialIcons name="campaign" size={64} color={colors.tea[500]} />
+            <MaterialIcons name="campaign" size={64} color={partyColors.purple} />
             <Text style={styles.loadingTitle}>{waitingText}</Text>
             <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
             {renderFairPlayNotice()}
@@ -1504,7 +1525,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
               <Text style={styles.statusText}>Waiting for host</Text>
             </View>
           </AppCard>
-        </View>
+        </ScrollView>
       );
     }
 
@@ -1516,15 +1537,15 @@ export const GameContainer: React.FC<GameContainerProps> = ({
           : 0;
 
       return (
-        <View style={styles.centerContainer}>
+        <ScrollView contentContainerStyle={styles.centerContainer}>
           <AppCard style={styles.loadingCard}>
-            <MaterialIcons name="timer" size={64} color={colors.tea[500]} />
+            <MaterialIcons name="timer" size={64} color={partyColors.purple} />
             <Text style={styles.countdownNumber}>{displaySeconds}</Text>
             <Text style={styles.loadingTitle}>Get ready...</Text>
             <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
             {renderFairPlayNotice()}
           </AppCard>
-        </View>
+        </ScrollView>
       );
     }
 
@@ -1535,12 +1556,12 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       // This state is only used for explicit API polling scenarios
       // In normal flow, we go straight to rendering the game component
       return (
-        <View style={styles.centerContainer}>
+        <ScrollView contentContainerStyle={styles.centerContainer}>
           <AppCard style={styles.loadingCard}>
             <MaterialIcons
               name="hourglass-empty"
               size={64}
-              color={colors.tea[500]}
+              color={partyColors.purple}
             />
             <Text style={styles.loadingTitle}>
               Waiting for next question...
@@ -1553,7 +1574,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
               <Text style={styles.statusText}>Syncing</Text>
             </View>
           </AppCard>
-        </View>
+        </ScrollView>
       );
     }
 
@@ -1628,11 +1649,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
   if (isKickedByFairPlay) {
     return (
-      <View style={styles.container}>
-        <StatusBar style="light" />
-        <View style={styles.centerContainer}>
+      <View style={screenStyle}>
+        <StatusBar style="dark" />
+        <ScrollView contentContainerStyle={styles.centerContainer}>
           <AppCard style={styles.errorCard}>
-            <MaterialIcons name="gpp-bad" size={48} color={colors.red[500]} />
+            <MaterialIcons name="gpp-bad" size={48} color={partyColors.danger} />
             <Text style={styles.errorTitle}>Removed From Session</Text>
             <Text style={styles.errorText}>
               {fairPlayStatus?.message ||
@@ -1652,45 +1673,31 @@ export const GameContainer: React.FC<GameContainerProps> = ({
               />
             </View>
           </AppCard>
-        </View>
+        </ScrollView>
       </View>
     );
   }
 
   if (isTerminalGameState) {
     return (
-      <View style={styles.container}>
-        <StatusBar style="light" />
-        <View style={styles.centerContainer}>
-          <AppCard style={styles.statusCard}>
-            <MaterialIcons
-              name="emoji-events"
-              size={48}
-              color={colors.tea[500]}
-            />
-            <Text style={styles.statusTitle}>Game Ended</Text>
-            <Text style={styles.statusText}>
-              Thanks for playing. Hope you enjoyed the game!
-            </Text>
-            <View style={styles.actionButtons}>
-              <AppButton
-                title="Leave Game"
-                onPress={handleLeaveGame}
-                variant="primary"
-                style={styles.actionButton}
-              />
-            </View>
-          </AppCard>
-        </View>
+      <View style={screenStyle}>
+        <StatusBar style="dark" />
+        <PartyResults
+          results={finalResults}
+          currentPlayerId={playerInfo.player_id}
+          currentRosterPlayerId={gameWebSocket.getConnectionDiagnostics().rosterPlayerId}
+          sessionCode={sessionCode}
+          onLeave={handleLeaveGame}
+        />
       </View>
     );
   }
 
   if (isCheckingFinalFairPlayStatus) {
     return (
-      <View style={styles.container}>
+      <View style={screenStyle}>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.tea[500]} />
+          <ActivityIndicator size="large" color={partyColors.purple} />
           <Text style={styles.loadingText}>Checking session status...</Text>
         </View>
       </View>
@@ -1699,14 +1706,14 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
   if (isConnecting) {
     return (
-      <View style={styles.container}>
-        <StatusBar style="light" />
-        <View style={styles.centerContainer}>
+      <View style={screenStyle}>
+        <StatusBar style="dark" />
+        <ScrollView contentContainerStyle={styles.centerContainer}>
           <AppCard style={styles.statusCard}>
             <MaterialIcons
               name="wifi-tethering"
               size={48}
-              color={colors.tea[500]}
+              color={partyColors.purple}
             />
             <Text style={styles.statusTitle}>Connecting to Game</Text>
             <Text style={styles.statusText}>
@@ -1714,21 +1721,21 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             </Text>
             <Text style={styles.sessionInfo}>Session: {sessionCode}</Text>
           </AppCard>
-        </View>
+        </ScrollView>
       </View>
     );
   }
 
   if (connectionError) {
     return (
-      <View style={styles.container}>
-        <StatusBar style="light" />
-        <View style={styles.centerContainer}>
+      <View style={screenStyle}>
+        <StatusBar style="dark" />
+        <ScrollView contentContainerStyle={styles.centerContainer}>
           <AppCard style={styles.errorCard}>
             <MaterialIcons
               name="error-outline"
               size={48}
-              color={colors.red[500]}
+              color={partyColors.danger}
             />
             <Text style={styles.errorTitle}>Connection Error</Text>
             <Text style={styles.errorText}>{connectionError}</Text>
@@ -1747,7 +1754,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
               />
             </View>
           </AppCard>
-        </View>
+        </ScrollView>
       </View>
     );
   }
@@ -1757,8 +1764,8 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   );
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="light" />
+    <View style={screenStyle}>
+      <StatusBar style="dark" />
 
       {/* Connection status banner */}
       {connectionState === "reconnecting" && !shouldHideConnectionBanners && (
@@ -1780,11 +1787,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
       {/* Header with session info and leave button */}
       <View style={styles.header}>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>PhunParty</Text>
+          <PartyBrand compact />
           <Text style={styles.headerSubtitle}>
             {headerGameType
-              ? `${formatGameTypeLabel(headerGameType)} Game`
-              : "Game Session"}
+              ? `${formatGameTypeLabel(headerGameType)} · ${sessionCode}`
+              : `Room ${sessionCode}`}
           </Text>
         </View>
         <AppButton
@@ -1804,28 +1811,28 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.ink[900],
+    backgroundColor: partyColors.cream,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     padding: 16,
-    paddingTop: 50,
+    gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: colors.ink[800],
+    borderBottomColor: partyColors.lavender,
   },
   headerInfo: {
     flex: 1,
   },
   headerTitle: {
     ...typography.h3,
-    color: colors.stone[100],
+    color: partyColors.ink,
     fontWeight: "bold",
   },
   headerSubtitle: {
-    ...typography.body,
-    color: colors.stone[400],
+    ...typography.small,
+    color: partyColors.muted,
     marginTop: 2,
   },
   leaveButton: {
@@ -1836,112 +1843,128 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   centerContainer: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 16,
   },
   statusCard: {
+    backgroundColor: partyColors.white,
+    borderRadius: 20,
+    width: "100%",
     alignItems: "center",
     padding: 32,
     maxWidth: 350,
   },
   lobbyCard: {
+    backgroundColor: partyColors.lavender,
+    borderRadius: 20,
+    width: "100%",
     alignItems: "center",
-    padding: 40,
+    padding: 24,
     maxWidth: 380,
-    borderColor: colors.tea[500],
+    borderColor: partyColors.purple,
     borderWidth: 1,
   },
   loadingCard: {
+    backgroundColor: partyColors.white,
+    borderRadius: 20,
+    width: "100%",
     alignItems: "center",
-    padding: 40,
+    padding: 24,
     maxWidth: 380,
-    borderColor: colors.tea[500],
+    borderColor: partyColors.purple,
     borderWidth: 1,
   },
   errorCard: {
+    backgroundColor: partyColors.white,
+    borderRadius: 20,
+    width: "100%",
     alignItems: "center",
     padding: 32,
     maxWidth: 350,
-    borderColor: colors.red[500],
+    borderColor: partyColors.danger,
     borderWidth: 1,
   },
   statusTitle: {
     ...typography.h3,
-    color: colors.stone[100],
+    color: partyColors.ink,
     marginTop: 16,
     textAlign: "center",
   },
   lobbyTitle: {
     ...typography.h2,
-    color: colors.tea[400],
+    fontFamily: partyFonts.display,
+    color: partyColors.purple,
     marginTop: 16,
     textAlign: "center",
-    fontWeight: "bold",
+    fontWeight: "400",
   },
   loadingTitle: {
     ...typography.h2,
-    color: colors.tea[400],
+    color: partyColors.purple,
     marginTop: 16,
     textAlign: "center",
     fontWeight: "bold",
   },
   countdownNumber: {
     ...typography.h1,
-    color: colors.tea[400],
+    fontFamily: partyFonts.display,
+    fontSize: 72,
+    lineHeight: 84,
+    color: partyColors.purple,
     marginTop: 16,
     textAlign: "center",
-    fontWeight: "bold",
+    fontWeight: "400",
   },
   errorTitle: {
     ...typography.h3,
-    color: colors.red[500],
+    color: partyColors.danger,
     marginTop: 16,
     textAlign: "center",
   },
   statusText: {
     ...typography.body,
-    color: colors.stone[300],
+    color: partyColors.muted,
     marginTop: 12,
     textAlign: "center",
     lineHeight: 22,
   },
   lobbyText: {
     ...typography.h3,
-    color: colors.stone[300],
+    color: partyColors.muted,
     marginTop: 12,
     textAlign: "center",
     lineHeight: 24,
   },
   loadingText: {
     ...typography.h3,
-    color: colors.stone[300],
+    color: partyColors.muted,
     marginTop: 12,
     textAlign: "center",
     lineHeight: 24,
   },
   errorText: {
     ...typography.body,
-    color: colors.stone[300],
+    color: partyColors.muted,
     marginTop: 12,
     textAlign: "center",
     lineHeight: 22,
   },
   sessionInfo: {
     ...typography.body,
-    color: colors.tea[500],
+    color: partyColors.purple,
     marginTop: 16,
     fontWeight: "bold",
   },
   playerInfo: {
     ...typography.body,
-    color: colors.stone[400],
+    color: partyColors.muted,
     marginTop: 4,
   },
   gameTypeInfo: {
     ...typography.body,
-    color: colors.tea[400],
+    color: partyColors.purple,
     marginTop: 8,
     fontStyle: "italic",
   },
@@ -1954,13 +1977,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: colors.ink[800],
-    borderColor: colors.tea[500],
+    backgroundColor: partyColors.lavender,
+    borderColor: partyColors.purple,
     borderWidth: 1,
   },
   fairPlayNoticeText: {
     ...typography.body,
-    color: colors.stone[300],
+    color: partyColors.muted,
     fontWeight: "600",
     textAlign: "center",
   },
@@ -1974,7 +1997,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: colors.tea[500],
+    backgroundColor: partyColors.purple,
     marginRight: 8,
   },
   actionButtons: {
@@ -1985,7 +2008,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   reconnectingBanner: {
-    backgroundColor: colors.tea[500],
+    backgroundColor: partyColors.purple,
     padding: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -1994,11 +2017,11 @@ const styles = StyleSheet.create({
   },
   reconnectingText: {
     ...typography.body,
-    color: colors.ink[900],
+    color: partyColors.cream,
     fontWeight: "600",
   },
   disconnectedBanner: {
-    backgroundColor: colors.red[500],
+    backgroundColor: partyColors.danger,
     padding: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -2007,7 +2030,7 @@ const styles = StyleSheet.create({
   },
   disconnectedText: {
     ...typography.body,
-    color: colors.stone[100],
+    color: partyColors.white,
     fontWeight: "600",
   },
 });
