@@ -1345,6 +1345,7 @@ function SegmentButton({
   return (
     <TouchableOpacity
       accessibilityRole="tab"
+      accessibilityLabel={label}
       accessibilityState={{ selected: active }}
       style={[styles.segmentButton, active && styles.segmentButtonActive]}
       onPress={onPress}

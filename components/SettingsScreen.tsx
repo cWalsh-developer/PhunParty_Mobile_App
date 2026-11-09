@@ -43,7 +43,7 @@ function SettingsRow({ title, description, icon, onPress }: {
   onPress: () => void;
 }) {
   return (
-    <TouchableOpacity accessibilityRole="button" onPress={onPress} style={styles.row} activeOpacity={0.8}>
+    <TouchableOpacity accessibilityRole="button" accessibilityLabel={title} accessibilityHint={description} onPress={onPress} style={styles.row} activeOpacity={0.8}>
       <View style={styles.icon}><MaterialIcons name={icon} size={23} color={partyColors.ink} /></View>
       <View style={styles.rowBody}>
         <Text style={styles.rowTitle}>{title}</Text>

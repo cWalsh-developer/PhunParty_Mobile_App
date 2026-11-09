@@ -127,7 +127,7 @@ export default function ProfileScreen({
           {user.profile_photo_url ? <AuthenticatedImage photoUrl={user.profile_photo_url} style={styles.photoImage} resizeMode="cover" /> : <MaterialIcons name="person-outline" size={70} color={partyColors.ink} />}
         </TouchableOpacity>
         <Text style={styles.playerName}>{user.player_name || "Your profile"}</Text>
-        <TouchableOpacity onPress={() => setIsPhotoSheetVisible(true)} accessibilityRole="button" disabled={isDeletingPhoto} style={styles.photoButton}>
+        <TouchableOpacity onPress={() => setIsPhotoSheetVisible(true)} accessibilityRole="button" accessibilityLabel={isDeletingPhoto ? "Removing photo" : "Change photo"} disabled={isDeletingPhoto} style={styles.photoButton}>
           <MaterialIcons name="add-a-photo" size={20} color={partyColors.ink} />
           <Text style={styles.photoButtonText}>{isDeletingPhoto ? "Removing photo..." : "Change photo"}</Text>
         </TouchableOpacity>
